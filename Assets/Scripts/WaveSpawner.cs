@@ -2,7 +2,8 @@
 // ---------------------------------------------------------------------------
 // Runs the level, Typing of the Dead style. For every Encounter of the Level
 // (the 5 fights listed at the top of Level.cs), in order:
-//   1. RIDE: the player rides the encounter's route, then stops and turns to
+//   1. RIDE: the player rides the encounter's route (on a long run a few
+//      AMBUSH zombies jump into the road ahead, see RideAmbush), then stops and turns to
 //      face the fight.
 //   2. FIGHT: a "Wave N" banner, then the area's barrels and supply crates get
 //      words (they can be typed now) and a wave of zombies comes out of the
@@ -536,12 +537,20 @@ public class WaveSpawner : MonoBehaviour
             CurrentWave = wave;
             hud.SetWave(wave, count);
 
-            // 1. Ride to the fight.
+            // 1. Ride to the fight. On a long run, a few zombies jump into the
+            //    road (not before the first fight: the player has not been
+            //    shown how to type yet).
             rail.RideAlong(encounter.Route, encounter.Facing);
+            Coroutine ambush = index > 0 ? StartCoroutine(RideAmbush(wave)) : null;
             while (!rail.IsStopped)
             {
                 yield return null;
             }
+            if (ambush != null)
+            {
+                StopCoroutine(ambush);
+            }
+            ClearAmbush();
 
             // 2. Fight.
             hud.ShowBanner(encounter.IsBossFight ? "BOSS FIGHT" : "Wave " + wave);
@@ -570,6 +579,190 @@ public class WaveSpawner : MonoBehaviour
         }
 
         GameManager.Instance.WinGame();
+    }
+
+    // ---- Ambush on the run ----
+    // A long run between two fights is not just a ride: a few zombies are
+    // waiting along the road. They NEVER pop up in view:
+    //   - they are all placed when the run starts, each on the route (so never
+    //     inside a wall) at a spot the camera cannot see at that moment (off
+    //     screen, or hidden behind a building; if the planned spot can be seen,
+    //     the next hidden spot further along the road is used);
+    //   - a placed zombie LURKS (Zombie.IsLurking): it stands still, has no word
+    //     and cannot be typed. The moment the player sees it, it wakes up: it
+    //     gets a short word and walks at the player, so a zombie waiting round
+    //     a corner steps out from behind the building.
+    // While a woken one is in the road ahead (within AmbushSlowDistance), the
+    // run slows to AmbushRideSpeed so there is time to type its word. Shoot it
+    // and the run goes on at full speed; miss it and it bites once. One the
+    // player rides past disappears quietly (no score, no bite).
+
+    private const float AmbushRideSpeed = 3.8f;   // metres per second while a woken ambush zombie is in the road ahead
+    private const float AmbushSlowDistance = 35f; // ...within this many metres
+    private const float AmbushStartGap = 30f;     // the first one waits at least this far along the run
+    private const float AmbushEndGap = 12f;       // none closer than this to the stop (the fight is about to start)
+    private const float AmbushSpacing = 30f;      // metres of run per ambush zombie (a 179 m run: about 3)
+    private const float AmbushMinApart = 18f;     // metres between two of them along the road
+    private const float AmbushSearchStep = 2f;    // looking for a hidden spot: try every 2 m further along
+    private const int AmbushMax = 3;
+
+    private readonly List<Zombie> ambushers = new List<Zombie>();
+    private readonly Dictionary<Zombie, float> ambushAlong = new Dictionary<Zombie, float>(); // where each one waits: metres along the run (RailMover.Travelled)
+    private const float AmbushPassedBy = 1.5f;   // ridden this far past where it waited: it is behind the player, it goes
+
+    private IEnumerator RideAmbush(int wave)
+    {
+        yield return null; // the run has just been set up: let it start
+        float runLength = rail.RemainingDistance;
+        float speed = zombieSpeed + zombieSpeedPerWave * (wave - 1);
+
+        // 1. Place them now, before the camera can see them: evenly along the
+        //    run, each moved further along until the camera cannot see it.
+        int count = Mathf.Clamp(Mathf.FloorToInt((runLength - AmbushStartGap - AmbushEndGap) / AmbushSpacing) + 1, 0, AmbushMax);
+        float lastPlaced = -AmbushMinApart;
+        for (int i = 0; i < count; i++)
+        {
+            float planned = Mathf.Lerp(AmbushStartGap, runLength - AmbushEndGap, count == 1 ? 0.5f : (float)i / (count - 1));
+            float along = Mathf.Max(planned, lastPlaced + AmbushMinApart);
+            while (along <= runLength - AmbushEndGap && CanBeSeen(AmbushSpot(along, i)))
+            {
+                along += AmbushSearchStep;
+            }
+            if (along > runLength - AmbushEndGap)
+            {
+                continue; // no hidden spot left on this run
+            }
+            PlaceAmbusher(AmbushSpot(along, i), speed, rail.Travelled + along);
+            lastPlaced = along;
+        }
+
+        // 2. While riding: wake the ones the player can see, drop the ones
+        //    ridden past, and slow down while a woken one is in the road ahead.
+        while (rail.IsRiding)
+        {
+            bool slow = false;
+            for (int i = ambushers.Count - 1; i >= 0; i--)
+            {
+                Zombie zombie = ambushers[i];
+                if (zombie == null || !zombie.IsAlive)
+                {
+                    ambushers.RemoveAt(i);
+                    continue;
+                }
+                Vector3 fromPlayer = zombie.Position - player.position;
+                fromPlayer.y = 0f;
+                // Ridden past: measured along the road (not by the way the player
+                // faces, which swings round in a corner).
+                if (rail.Travelled > ambushAlong[zombie] + AmbushPassedBy)
+                {
+                    zombie.Despawn(); // ridden past
+                    ambushers.RemoveAt(i);
+                    continue;
+                }
+                if (zombie.IsLurking && CanBeSeen(zombie.Position))
+                {
+                    WakeAmbusher(zombie);
+                }
+                if (!zombie.IsLurking && fromPlayer.magnitude < AmbushSlowDistance && Vector3.Dot(fromPlayer, rail.Heading) > 0f)
+                {
+                    slow = true;
+                }
+            }
+            rail.SpeedCap = slow ? AmbushRideSpeed : float.MaxValue;
+            yield return null;
+        }
+    }
+
+    // A spot 'along' metres along the run from where it started (the run has
+    // only just begun), a little to the left or right of the middle of the road.
+    private Vector3 AmbushSpot(float along, int number)
+    {
+        Vector3 at = rail.PointAhead(along);
+        Vector3 ahead = rail.PointAhead(along + 0.5f) - at;
+        ahead.y = 0f;
+        if (ahead.sqrMagnitude < 0.0001f)
+        {
+            ahead = rail.Heading;
+        }
+        ahead.Normalize();
+        Vector3 side = new Vector3(ahead.z, 0f, -ahead.x) * (number % 2 == 0 ? 0.8f : -0.8f);
+        return at + side;
+    }
+
+    // Can the camera see a zombie standing here? On screen (with a small margin)
+    // and nothing solid (a building) between the camera and its head or chest.
+    private static bool CanBeSeen(Vector3 groundPoint)
+    {
+        Camera cam = Camera.main;
+        if (cam == null)
+        {
+            return true; // cannot tell: treat as seen (never spawn blindly)
+        }
+        return CanSee(cam, groundPoint + Vector3.up * 1.9f) || CanSee(cam, groundPoint + Vector3.up * 1.0f);
+    }
+
+    private static bool CanSee(Camera cam, Vector3 point)
+    {
+        Vector3 viewport = cam.WorldToViewportPoint(point);
+        if (viewport.z <= 0f || viewport.x < -0.05f || viewport.x > 1.05f || viewport.y < -0.05f || viewport.y > 1.05f)
+        {
+            return false; // behind the camera or off screen
+        }
+        Vector3 from = cam.transform.position;
+        Vector3 toPoint = point - from;
+        float distance = toPoint.magnitude;
+        if (distance < 0.8f)
+        {
+            return true;
+        }
+        // Stop a little short, so the zombie's own body does not count as "in the way".
+        return !Physics.Raycast(from, toPoint / distance, distance - 0.7f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+    }
+
+    // A lurking zombie: in the scene, but not yet one of the zombies that can be
+    // typed, hit or seen on the HUD (it is out of the alive list until it wakes).
+    private void PlaceAmbusher(Vector3 at, float speed, float along)
+    {
+        Zombie zombie = SpawnZombieAt(at, at, 0.2f, ZombieKind.Normal, speed, "AMBUSH");
+        if (zombie == null)
+        {
+            return;
+        }
+        aliveZombies.Remove(zombie);
+        zombie.StartLurking();
+        ambushers.Add(zombie);
+        ambushAlong[zombie] = along;
+    }
+
+    // The player sees it: it gets a short word (quick to type on the move) and
+    // joins the alive zombies (word on screen, typeable, red arrow, blasts...).
+    private void WakeAmbusher(Zombie zombie)
+    {
+        zombie.Wake(WordBank.PickWord(UsedFirstLetters(), ZombieKind.Runner));
+        aliveZombies.Add(zombie);
+        if (Powers.IsFrenzy)
+        {
+            zombie.EnterFrenzy(WordBank.PickFrenzyWord(UsedFirstLetters())); // nothing happens if it already has a frenzy word
+        }
+        Tutorial.Once("ambush", "AMBUSH! Shoot the zombie in the road before you run into it.", 4f);
+    }
+
+    // The run is over and the speed limit is lifted. A woken ambush zombie
+    // still coming stays and joins the fight (taking it away in plain view
+    // would look like it vanished); one still lurking was never seen, so it
+    // quietly goes.
+    private void ClearAmbush()
+    {
+        foreach (Zombie zombie in ambushers)
+        {
+            if (zombie != null && zombie.IsLurking)
+            {
+                zombie.Despawn();
+            }
+        }
+        ambushers.Clear();
+        ambushAlong.Clear();
+        rail.SpeedCap = float.MaxValue;
     }
 
     // ---- A zombie wave ----

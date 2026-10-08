@@ -87,6 +87,10 @@ public class Level : MonoBehaviour
         Gizmos.color = Color.cyan;
         Gizmos.DrawLine(start.position + up, start.position + up + StartFacing * 4f);
 
+        // The run as the player really rides it: the corners rounded into arcs
+        // (RailMover.RoundCorners, with the Player's Corner Radius).
+        RailMover rail = FindFirstObjectByType<RailMover>();
+        float radius = rail != null ? rail.CornerRadius : 0f;
         Vector3 from = start.position;
         foreach (Encounter encounter in encounters)
         {
@@ -94,11 +98,27 @@ public class Level : MonoBehaviour
             {
                 continue;
             }
+            List<Vector3> corners = new List<Vector3> { Flat(from) };
             foreach (Vector3 point in encounter.Route)
             {
-                Gizmos.DrawLine(from + up, point + up);
-                from = point;
+                if (Vector3.Distance(corners[corners.Count - 1], Flat(point)) >= 0.05f)
+                {
+                    corners.Add(Flat(point));
+                }
             }
+            List<Vector3> run = radius > 0f ? RailMover.RoundCorners(corners, radius) : corners;
+            for (int i = 0; i + 1 < run.Count; i++)
+            {
+                Gizmos.DrawLine(run[i] + up, run[i + 1] + up);
+            }
+            from = corners[corners.Count - 1];
         }
+    }
+
+    // The point on the ground (y = 0).
+    private static Vector3 Flat(Vector3 point)
+    {
+        point.y = 0f;
+        return point;
     }
 }

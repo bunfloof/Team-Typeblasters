@@ -231,9 +231,49 @@ public class Zombie : MonoBehaviour, ITypingTarget
         }
     }
 
+    // ---- Lurking (an ambush on the run, see WaveSpawner.RideAmbush) ----
+    // A lurking zombie waits out of sight (behind a building or off screen):
+    // it stands still, has no word on screen and cannot be typed. When the
+    // player first sees it, WaveSpawner wakes it: it gets a word and walks out.
+
+    public bool IsLurking { get; private set; }
+
+    // A zombie met on the run between two fights (it started out lurking). Its
+    // bite only costs one step of combo, not the whole combo.
+    public bool IsAmbusher { get; private set; }
+
+    public void StartLurking()
+    {
+        IsLurking = true;
+        IsAmbusher = true;
+        Label.gameObject.SetActive(false);
+    }
+
+    // Wakes it with a new word (chosen now, so its first letter does not clash
+    // with the words that came on screen while it waited).
+    public void Wake(string word)
+    {
+        IsLurking = false;
+        if (realWord != null && !Powers.IsFrenzy)
+        {
+            ExitFrenzy(); // a frenzy started and ended while it waited
+        }
+        if (realWord != null)
+        {
+            realWord = word; // still in a frenzy: this is the real word for later
+        }
+        else
+        {
+            Word = word;
+            TypedCount = 0;
+        }
+        Label.gameObject.SetActive(true);
+        RefreshLabel();
+    }
+
     private void Update()
     {
-        if (!IsAlive || GameManager.Instance.State != GameState.Playing)
+        if (!IsAlive || IsLurking || GameManager.Instance.State != GameState.Playing)
         {
             return;
         }
@@ -519,7 +559,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
     // Reached the player: bites (damage) and is shoved away. No score.
     private void Attack()
     {
-        GameManager.Instance.TakeDamage(damagePerHit);
+        GameManager.Instance.TakeDamage(damagePerHit, IsAmbusher); // an ambusher only costs one step of combo
 
         Vector3 away = transform.position - player.position;
         away.y = 0f;
@@ -531,6 +571,16 @@ public class Zombie : MonoBehaviour, ITypingTarget
     private void KnockOver(Vector3 velocity)
     {
         Corpse.Launch(body.gameObject, velocity, Random.insideUnitSphere * 6f, 2f);
+    }
+
+    // Quietly takes it out of the game, no score and no bite: an ambush zombie
+    // the player rode past (WaveSpawner).
+    public void Despawn()
+    {
+        if (IsAlive)
+        {
+            Remove();
+        }
     }
 
     // Takes this zombie out of the game. No score here: also used when it reaches the player.

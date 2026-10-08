@@ -9,7 +9,8 @@
 //     Time.timeScale is 0, so everything that uses game time (movement, spawn
 //     timers, boss attacks) freezes; the countdown uses real time.
 //
-// THE COMBO: +1 for every kill, -1 on a wrong key, back to 1 when you get hurt.
+// THE COMBO: +1 for every kill, -1 on a wrong key, back to 1 when you get hurt
+// (only -1 for a bite from a zombie met on the run between two fights).
 // Each kill is worth 10 x combo points, and the combo buys the combo weapons
 // (FRENZY and RPG, see Powers). So clean typing pays twice.
 //
@@ -230,9 +231,11 @@ public class GameManager : MonoBehaviour
             + "turns into a TINY red word (1 to 4 letters - even a single letter!).\n"
             + "<color=#FF8C1A>[4] RPG</color> - costs " + Powers.RocketCost + " combo: your next finished word fires a rocket\n"
             + "that blows up everything around its target (it hurts the boss too).\n\n"
-            + "Press 3 / 4 to GET a weapon: it is kept bottom-left (2 slots each) until you want it.\n"
-            + "Press the key again (or click its slot) to USE it. Weaker against the boss!\n"
-            + "One weapon per wave. A wrong key costs 1 combo; a bite resets it.\n"
+            + "HOLD 3 / 4 to GET a weapon (a bar fills under its slots): it is kept bottom-left,\n"
+            + "2 slots each, until you want it. TAP 3 / 4 (or click its slot) to USE one.\n"
+            + "Weaker against the boss!\n"
+            + "One weapon per wave. A wrong key costs 1 combo; a bite resets it\n"
+            + "(a bite on the run between two fights only costs 1).\n"
             + "Lure bombs [1] and freezes [2] come from supply crates.",
             Palette.BlastOrange);
     }
@@ -463,7 +466,10 @@ public class GameManager : MonoBehaviour
     }
 
     // Called by a zombie that reached the player, and by a boss orb that hit.
-    public void TakeDamage(int amount)
+    // lightHit: a bite from a zombie met on the run between two fights (an
+    // ambush, see WaveSpawner.RideAmbush) only costs one step of combo; any
+    // other hit resets the combo.
+    public void TakeDamage(int amount, bool lightHit = false)
     {
         if (State != GameState.Playing)
         {
@@ -478,7 +484,14 @@ public class GameManager : MonoBehaviour
         hud.SetHealth(Health, startingHealth);
         hud.FlashRed();
         CameraDirector.Shake(0.45f);
-        ResetCombo();
+        if (lightHit)
+        {
+            LoseComboStep();
+        }
+        else
+        {
+            ResetCombo();
+        }
 
         if (Health <= 0)
         {

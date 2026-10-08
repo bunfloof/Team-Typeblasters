@@ -29,7 +29,8 @@
 //   - 1: TAP to throw a lure bomb, HOLD to aim it (a dashed arc) and release
 //     to throw (see Powers); while aiming, the ARROW keys steer the throw.
 //     1 is read as a key going down / up, not as a typed character.
-//     2 uses the freeze power; 3 buys a FRENZY and 4 an RPG (combo weapons,
+//     2 uses the freeze power; 3 / 4 are the combo weapons (TAP = use a kept
+//     FRENZY / RPG, HOLD = buy one;
 //     see Powers). No word contains the keys 1-4, and arrow
 //     keys type nothing, so they never clash with typing.
 //   - Backspace drops the current target so the player can retarget.
@@ -124,6 +125,8 @@ public class TypingController : MonoBehaviour
         bool pausePressed; // Escape
         bool lureDown;     // 1 went down this frame (start aiming)...
         bool lureUp;       // ...and came up (throw)
+        bool frenzyDown, frenzyUp; // 3 went down / came up: TAP = use a FRENZY, HOLD = buy one (see Powers)
+        bool rocketDown, rocketUp; // 4, the same for the RPG
         Vector2 arrows;    // arrow keys held: x = Right - Left, y = Up - Down (steer the lure bomb)
 
 #if ENABLE_INPUT_SYSTEM
@@ -149,6 +152,10 @@ public class TypingController : MonoBehaviour
         pausePressed = keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
         lureDown = keyboard != null && (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame);
         lureUp = keyboard != null && (keyboard.digit1Key.wasReleasedThisFrame || keyboard.numpad1Key.wasReleasedThisFrame);
+        frenzyDown = keyboard != null && (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame);
+        frenzyUp = keyboard != null && (keyboard.digit3Key.wasReleasedThisFrame || keyboard.numpad3Key.wasReleasedThisFrame);
+        rocketDown = keyboard != null && (keyboard.digit4Key.wasPressedThisFrame || keyboard.numpad4Key.wasPressedThisFrame);
+        rocketUp = keyboard != null && (keyboard.digit4Key.wasReleasedThisFrame || keyboard.numpad4Key.wasReleasedThisFrame);
         arrows = Vector2.zero;
         if (keyboard != null)
         {
@@ -162,6 +169,10 @@ public class TypingController : MonoBehaviour
         pausePressed = Input.GetKeyDown(KeyCode.Escape);
         lureDown = Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1);
         lureUp = Input.GetKeyUp(KeyCode.Alpha1) || Input.GetKeyUp(KeyCode.Keypad1);
+        frenzyDown = Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3);
+        frenzyUp = Input.GetKeyUp(KeyCode.Alpha3) || Input.GetKeyUp(KeyCode.Keypad3);
+        rocketDown = Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4);
+        rocketUp = Input.GetKeyUp(KeyCode.Alpha4) || Input.GetKeyUp(KeyCode.Keypad4);
         arrows = new Vector2(
             (Input.GetKey(KeyCode.RightArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.LeftArrow) ? 1f : 0f),
             (Input.GetKey(KeyCode.UpArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.DownArrow) ? 1f : 0f));
@@ -216,6 +227,24 @@ public class TypingController : MonoBehaviour
             GameManager.Instance.Powers.ReleaseLureAim();
         }
 
+        // ---- 5c. 3 / 4: TAP to use a kept combo weapon, HOLD to buy one (Powers) ----
+        if (frenzyDown)
+        {
+            GameManager.Instance.Powers.WeaponKeyDown(false);
+        }
+        if (frenzyUp)
+        {
+            GameManager.Instance.Powers.WeaponKeyUp(false);
+        }
+        if (rocketDown)
+        {
+            GameManager.Instance.Powers.WeaponKeyDown(true);
+        }
+        if (rocketUp)
+        {
+            GameManager.Instance.Powers.WeaponKeyUp(true);
+        }
+
         // ---- 6. Handle every character typed this frame ----
         foreach (char character in typedText)
         {
@@ -224,25 +253,15 @@ public class TypingController : MonoBehaviour
                 continue; // Enter, Backspace, space, ...: never part of a word
             }
 
-            // The power keys. 1 is handled above as a key held down; its typed
-            // character (repeated while the key is held) is skipped here.
-            if (character == LureKey)
+            // The power keys. 1, 3 and 4 are handled above as keys held down;
+            // their typed characters (repeated while a key is held) are skipped here.
+            if (character == LureKey || character == FrenzyKey || character == RocketKey)
             {
                 continue;
             }
             if (character == FreezeKey)
             {
                 GameManager.Instance.Powers.TryUseFreeze();
-                continue;
-            }
-            if (character == FrenzyKey)
-            {
-                GameManager.Instance.Powers.WeaponKey(false); // buy a FRENZY, or use the one kept
-                continue;
-            }
-            if (character == RocketKey)
-            {
-                GameManager.Instance.Powers.WeaponKey(true);  // buy an RPG, or use the one kept
                 continue;
             }
 

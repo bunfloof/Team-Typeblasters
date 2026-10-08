@@ -15,9 +15,13 @@
 // Charges (max maxCharges of each) come ONLY from supply crates in the level.
 //
 // COMBO WEAPONS: the combo (kills in a row without a mistake) buys them.
-// Pressing the key BUYS the weapon when the combo is high enough: the combo is
-// spent and the weapon is KEPT in a slot (bottom-left, a lit square) until the
-// player wants it. Otherwise the key (or a click on the slot) USES a kept one:
+// One key per weapon, two actions:
+//   HOLD the key (BuyHoldSeconds, a bar fills under its slots) to BUY one:
+//     the combo is spent and the weapon is KEPT in a slot (bottom-left, a lit
+//     square) until the player wants it;
+//   TAP the key (or click its slot) to USE a kept one.
+// So holding a FRENZY and reaching 10 combo is never a clash: tap uses the
+// one you have, hold buys another.
 //   [3] FRENZY - costs FrenzyCost combo: for frenzySeconds every enemy word
 //       becomes a TINY word (1 to 4 letters, random) in a vivid colour, drawn bigger;
 //       the real words come back when it ends.
@@ -28,7 +32,7 @@
 //   combo can buy.
 //
 // Lives on the GameManager object. TypingController calls BeginLureAim (1 down),
-// ReleaseLureAim (1 up), TryUseFreeze and WeaponKey (3 / 4); the HUD calls
+// ReleaseLureAim (1 up), TryUseFreeze, WeaponKeyDown and WeaponKeyUp (3 / 4); the HUD calls
 // UseWeapon when a weapon slot is clicked; GameManager calls OnComboChanged
 // every time the combo changes, WaveSpawner OnWaveStart.
 // ---------------------------------------------------------------------------
@@ -133,6 +137,7 @@ public class Powers : MonoBehaviour
     private void Update()
     {
         UpdateAim();
+        UpdateWeaponHolds();
 
         if (GameManager.Instance.State == GameState.Playing && frenzyTimeLeft > 0f)
         {
@@ -229,20 +234,78 @@ public class Powers : MonoBehaviour
 
     // ---- Combo weapons (called by TypingController) ----
 
-    // Key 3 (rocket = false) or key 4 (rocket = true): BUYS a weapon when one
-    // can be bought right now (enough combo, none bought this wave, a free
-    // slot); otherwise USES a kept one. (A click on the slot always uses.)
-    public void WeaponKey(bool rocket)
+    // Key 3 (rocket = false) or key 4 (rocket = true), one key for two actions:
+    //   TAP  (released within TapMaxSeconds)  -> USE a kept weapon
+    //   HOLD (kept down for BuyHoldSeconds)   -> BUY one with the combo
+    // While it is held, a bar under the weapon's slots fills up (HUD); let go
+    // before it is full (and after a tap) and nothing happens. A click on a
+    // slot always uses.
+    public const float BuyHoldSeconds = 0.6f;
+    private const float TapMaxSeconds = 0.3f;
+    private const float HoldBarDelay = 0.1f;    // the bar only shows after this (a tap never flashes it)
+
+    private readonly float[] weaponHold = { -1f, -1f }; // seconds held: [0] = 3 FRENZY, [1] = 4 RPG; -1 = not held
+
+    public void WeaponKeyDown(bool rocket)
     {
-        int cost = rocket ? RocketCost : FrenzyCost;
-        bool canBuy = combo >= cost && !(oneWeaponPerWave && weaponBoughtThisWave) && Kept(rocket) < MaxKept;
-        if (canBuy || Kept(rocket) == 0)
+        weaponHold[rocket ? 1 : 0] = 0f;
+    }
+
+    public void WeaponKeyUp(bool rocket)
+    {
+        int index = rocket ? 1 : 0;
+        float held = weaponHold[index];
+        weaponHold[index] = -1f;
+        hud.SetWeaponHold(rocket, 0f);
+        if (held >= 0f && held <= TapMaxSeconds)
         {
-            BuyWeapon(rocket); // (explains why not when it cannot)
+            TapWeapon(rocket);
         }
-        else
+    }
+
+    // Every frame: count the keys held down; a full hold buys.
+    private void UpdateWeaponHolds()
+    {
+        for (int index = 0; index < 2; index++)
+        {
+            if (weaponHold[index] < 0f)
+            {
+                continue;
+            }
+            bool rocket = index == 1;
+            if (GameManager.Instance.State != GameState.Playing)
+            {
+                weaponHold[index] = -1f; // paused or game over: the hold is cancelled
+                hud.SetWeaponHold(rocket, 0f);
+                continue;
+            }
+
+            weaponHold[index] += Time.deltaTime;
+            float shown = weaponHold[index] < HoldBarDelay ? 0f : weaponHold[index] / BuyHoldSeconds;
+            hud.SetWeaponHold(rocket, Mathf.Clamp01(shown));
+            if (weaponHold[index] >= BuyHoldSeconds)
+            {
+                weaponHold[index] = -1f; // done: letting go of the key now does nothing
+                hud.SetWeaponHold(rocket, 0f);
+                BuyWeapon(rocket);
+            }
+        }
+    }
+
+    // A tap: use a kept weapon, or say how to get one.
+    private void TapWeapon(bool rocket)
+    {
+        if (Kept(rocket) > 0)
         {
             UseWeapon(rocket);
+            return;
+        }
+        int cost = rocket ? RocketCost : FrenzyCost;
+        string weaponName = rocket ? "RPG" : "FRENZY";
+        if (CanBuyWeapon(cost, weaponName)) // (if not, it shows why)
+        {
+            hud.ShowHint("HOLD " + (rocket ? "4" : "3") + " to get " + (rocket ? "an RPG" : "a FRENZY")
+                + " (tap = use one you have).", 2.5f);
         }
     }
 
@@ -279,7 +342,7 @@ public class Powers : MonoBehaviour
         hud.PulseWeapon(rocket);
         hud.ShowWeaponGain(rocket);
         hud.ShowBigMessage("GOT " + weaponName + "!",
-            "kept bottom-left - press " + (rocket ? "4" : "3") + " (or click it) when you want to use it");
+            "kept bottom-left - TAP " + (rocket ? "4" : "3") + " (or click it) when you want to use it");
         RefreshWeaponStatus();
     }
 
@@ -288,7 +351,7 @@ public class Powers : MonoBehaviour
     {
         if (Kept(rocket) <= 0)
         {
-            hud.ShowHint("No " + (rocket ? "RPG" : "FRENZY") + " kept. Press " + (rocket ? "4" : "3")
+            hud.ShowHint("No " + (rocket ? "RPG" : "FRENZY") + " kept. HOLD " + (rocket ? "4" : "3")
                 + " to buy one with your combo.", 2.5f);
             return;
         }
@@ -488,13 +551,13 @@ public class Powers : MonoBehaviour
         }
         else if (canBuyRocket && combo >= RocketCost)
         {
-            text = canBuyFrenzy ? "Press [3] FRENZY or [4] RPG to get it!" : "Press [4] to get an RPG!";
+            text = canBuyFrenzy ? "HOLD [3] FRENZY or [4] RPG to get one!" : "HOLD [4] to get an RPG!";
             progress = 1f;
             color = Palette.BlastOrange;
         }
         else if (canBuyFrenzy && combo >= FrenzyCost)
         {
-            text = "Press [3] to get a FRENZY!" + (canBuyRocket ? "   RPG in " + (RocketCost - combo) + " combo" : "");
+            text = "HOLD [3] to get a FRENZY!" + (canBuyRocket ? "   RPG in " + (RocketCost - combo) + " combo" : "");
             progress = canBuyRocket ? (float)combo / RocketCost : 1f;
             color = Palette.WeaponFrenzy;
         }

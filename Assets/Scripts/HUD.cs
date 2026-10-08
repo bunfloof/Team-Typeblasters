@@ -8,7 +8,8 @@
 //   - the powers (bottom-left, just above the height of the bottom word box so
 //     they never overlap it): "[1] LURE BOMB" and "[2] FREEZE" with their charges,
 //     and the combo weapons kept for later, "[3] FRENZY" and "[4] RPG": one
-//     square per slot, lit while a weapon is kept, clickable to use it
+//     square per slot, lit while a weapon is kept, clickable to use it; a bar
+//     under the slots fills while 3 / 4 is HELD to buy one
 //   - while 1 is held (aiming the lure bomb): an arrow-keys hint in a dark box
 //     (bottom-right); a "+1" next to a power whenever a charge is gained
 //   - the first-time tip box (the game waits until Enter / OK)
@@ -723,7 +724,8 @@ public class HUD : MonoBehaviour
     //   [3] FRENZY     [ ] [ ]
     //   [4] RPG        [ ] [ ]
     // one plain square per slot, filled in the weapon's colour while one is kept.
-    // These two rows can also be CLICKED to use the weapon (same as pressing its key).
+    // These two rows can also be CLICKED to use the weapon (same as tapping its key);
+    // a thin bar under the slots fills while the key is HELD to buy one.
 
     private const int PowerCount = 4;
     private const int FrenzyRow = 2;
@@ -997,6 +999,21 @@ public class HUD : MonoBehaviour
             weaponSquares[row, i] = square;
         }
 
+        // The HOLD bar just under the slots: fills while 3 / 4 is held to buy
+        // (Powers, SetWeaponHold). Hidden while the key is not held.
+        float barWidth = Powers.MaxKept * WeaponSlotSize + (Powers.MaxKept - 1) * PowerPipGap;
+        Image bar = CreateImage("HoldBar", rowRect, new Color(0f, 0f, 0f, 0.6f));
+        PlaceRect(bar.rectTransform, LeftMiddle, new Vector2(0f, 1f), new Vector2(PowerPipsX, -WeaponSlotSize * 0.5f - 2f),
+            new Vector2(barWidth, WeaponHoldBarHeight));
+        Image fill = CreateImage("Fill", bar.rectTransform, PowerColor(row));
+        fill.rectTransform.anchorMin = Vector2.zero;
+        fill.rectTransform.anchorMax = new Vector2(0f, 1f);
+        fill.rectTransform.offsetMin = Vector2.zero;
+        fill.rectTransform.offsetMax = Vector2.zero;
+        weaponHoldBars[row - FrenzyRow] = bar.rectTransform;
+        weaponHoldFills[row - FrenzyRow] = fill.rectTransform;
+        bar.gameObject.SetActive(false);
+
         // An invisible image over the row catches the mouse click.
         Image hitArea = rowRect.gameObject.AddComponent<Image>();
         hitArea.color = new Color(0f, 0f, 0f, 0f);
@@ -1007,6 +1024,27 @@ public class HUD : MonoBehaviour
         button.navigation = navigation;
         bool rocket = row == RocketRow;
         button.onClick.AddListener(() => OnWeaponClicked(rocket));
+    }
+
+    private const float WeaponHoldBarHeight = 6f;
+    private readonly RectTransform[] weaponHoldBars = new RectTransform[2];  // [0] FRENZY, [1] RPG
+    private readonly RectTransform[] weaponHoldFills = new RectTransform[2];
+
+    // How far 3 (FRENZY) or 4 (RPG) has been held toward buying one (0..1);
+    // 0 hides the bar.
+    public void SetWeaponHold(bool rocket, float progress)
+    {
+        if (powersPanel == null)
+        {
+            BuildPowers();
+        }
+        int index = rocket ? 1 : 0;
+        bool show = progress > 0f;
+        if (weaponHoldBars[index].gameObject.activeSelf != show)
+        {
+            weaponHoldBars[index].gameObject.SetActive(show);
+        }
+        weaponHoldFills[index].anchorMax = new Vector2(Mathf.Clamp01(progress), 1f);
     }
 
     private void OnWeaponClicked(bool rocket)
