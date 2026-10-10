@@ -36,7 +36,8 @@ public enum ZombieKind
     Normal,
     Runner,
     Armored,
-    Explosive
+    Explosive,
+    Shifter
 }
 
 public class Zombie : MonoBehaviour, ITypingTarget
@@ -92,6 +93,8 @@ public class Zombie : MonoBehaviour, ITypingTarget
     public TMP_Text Label { get; private set; }       // the word on the HUD
 
     private float speed;
+    private bool hardTyping;
+    private float wordChangeTimer;
     private Transform player;
     private WaveSpawner spawner;
     private Transform body;         // the capsule
@@ -115,7 +118,8 @@ public class Zombie : MonoBehaviour, ITypingTarget
     public void Setup(string word, float moveSpeed, Transform playerTransform, WaveSpawner owner,
         ZombieKind kind, Vector3 exit)
     {
-        Word = word;
+        hardTyping = HardLevel.Active != null;
+        Word = hardTyping ? HardLevel.ComplexWord(word) : word;
         player = playerTransform;
         spawner = owner;
         Kind = kind;
@@ -131,7 +135,12 @@ public class Zombie : MonoBehaviour, ITypingTarget
         body = transform.Find("Body");
         bodyRenderer = body.GetComponent<Renderer>();
         Vector3 size = Vector3.one;
-        speed = moveSpeed;
+        speed = moveSpeed * (hardTyping ? HardLevel.Active.enemySpeedMultiplier : 1f);
+        if (kind == ZombieKind.Shifter)
+        {
+            bodyRenderer.sharedMaterial = Palette.Lit(new Color(0.65f, 0.2f, 0.9f));
+            size = new Vector3(0.85f, 1.15f, 0.85f);
+        }
         if (kind == ZombieKind.Runner)
         {
             size = new Vector3(0.7f, 0.9f, 0.7f);
@@ -209,7 +218,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         }
         realWord = Word;
         realColor = Label.color;
-        Word = shortWord;
+        Word = hardTyping ? HardLevel.ComplexWord(shortWord) : shortWord;
         TypedCount = 0;
         Label.color = Palette.WordFrenzy;
         RefreshLabel();
@@ -253,6 +262,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
     // with the words that came on screen while it waited).
     public void Wake(string word)
     {
+        if (hardTyping) word = HardLevel.ComplexWord(word);
         IsLurking = false;
         if (realWord != null && !Powers.IsFrenzy)
         {
@@ -283,6 +293,21 @@ public class Zombie : MonoBehaviour, ITypingTarget
         if (Powers.IsFrozen)
         {
             return;
+        }
+
+        // Never replace a partially typed word or one with a killing shot in flight.
+        if (Kind == ZombieKind.Shifter && realWord == null && !IsWordComplete)
+        {
+            wordChangeTimer += Time.deltaTime;
+            if (wordChangeTimer >= HardLevel.Active.wordChangeSeconds && TypedCount == 0)
+            {
+                List<char> used = spawner.UsedFirstLetters();
+                used.Remove(char.ToUpperInvariant(Word[0]));
+                Word = HardLevel.ComplexWord(WordBank.PickWord(used, ZombieKind.Armored));
+                wordChangeTimer = 0f;
+                RefreshLabel();
+                spawner.Hud.ShowFloatingText(LabelAnchor, "WORD SHIFT!", new Color(0.8f, 0.4f, 1f));
+            }
         }
 
         // 1. Where to go: out of the doorway first, then to a lure bomb or the player.
@@ -423,7 +448,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
 
     public bool IsCaseSensitive
     {
-        get { return false; }
+        get { return hardTyping; }
     }
 
     // ---- Typing progress (used by TypingController) ----
@@ -539,8 +564,9 @@ public class Zombie : MonoBehaviour, ITypingTarget
 
         // A new word whose first letter is not in use (ignoring our own old word).
         List<char> used = spawner.UsedFirstLetters();
-        used.Remove(Word[0]);
+        used.Remove(char.ToUpperInvariant(Word[0]));
         Word = WordBank.PickWord(used, ZombieKind.Armored);
+        if (hardTyping) Word = HardLevel.ComplexWord(Word);
         TypedCount = 0;
         Label.color = Color.white;
 
@@ -551,6 +577,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
             realWord = Word;
             realColor = Color.white;
             Word = WordBank.PickFrenzyWord(used);
+            if (hardTyping) Word = HardLevel.ComplexWord(Word);
             Label.color = Palette.WordFrenzy;
         }
         RefreshLabel();
@@ -598,7 +625,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
     // Word is stored UPPERCASE (typing compares in uppercase) but SHOWN in lowercase.
     private void RefreshLabel()
     {
-        string shown = Word.ToLowerInvariant();
+        string shown = IsCaseSensitive ? Word : Word.ToLowerInvariant();
         string typedPart = shown.Substring(0, TypedCount);
         string remainingPart = shown.Substring(TypedCount);
         ColoredWord = TypedColorTag + typedPart + "</color>" + remainingPart;

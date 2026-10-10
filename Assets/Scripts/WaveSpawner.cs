@@ -953,6 +953,7 @@ public class WaveSpawner : MonoBehaviour
     // kills both. Returns false if no pair of words fits right now.
     private bool SpawnChainPair(SpawnPoint point, List<SpawnPoint> areaPoints, float speed)
     {
+        if (HardLevel.Active != null) return false;
         string[] words = WordBank.PickChainPair(UsedFirstLetters());
         if (words == null)
         {
@@ -1049,6 +1050,8 @@ public class WaveSpawner : MonoBehaviour
     // offset up to spread metres), walks to exitAt, then at the player.
     private Zombie SpawnZombieAt(Vector3 spawnAt, Vector3 exitAt, float spread, ZombieKind kind, float speed, string forcedWord = null)
     {
+        if (HardLevel.Active != null && kind == ZombieKind.Normal && HardLevel.Active.NextIsShifter())
+            kind = ZombieKind.Shifter;
         // A small random offset so a pack does not stand in one spot.
         Vector2 offset = Random.insideUnitCircle * spread;
         Vector3 side = new Vector3(offset.x, 0f, offset.y);
@@ -1059,7 +1062,8 @@ public class WaveSpawner : MonoBehaviour
         if (word == null)
         {
             List<char> used = UsedFirstLetters();
-            word = kind == ZombieKind.Armored ? WordBank.PickArmorWord(used) : WordBank.PickWord(used, kind);
+            word = kind == ZombieKind.Armored ? WordBank.PickArmorWord(used)
+                : WordBank.PickWord(used, HardLevel.Active != null && kind != ZombieKind.Runner ? ZombieKind.Explosive : kind);
         }
 
         Quaternion rotation = Quaternion.identity;
@@ -1081,7 +1085,11 @@ public class WaveSpawner : MonoBehaviour
         }
 
         // The first time each special kind shows up, say what it does.
-        if (kind == ZombieKind.Explosive)
+        if (kind == ZombieKind.Shifter)
+        {
+            Tutorial.Once("shifter", "PURPLE SHIFTER: its word changes while idle. Type exact case and punctuation!", 6f);
+        }
+        else if (kind == ZombieKind.Explosive)
         {
             Tutorial.Once("explosive", "RED ZOMBIE: finish its word to blow up EVERYTHING in its ring!", 6f);
         }

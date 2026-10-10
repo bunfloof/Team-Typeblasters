@@ -127,6 +127,7 @@ public class TypingController : MonoBehaviour
         bool lureUp;       // ...and came up (throw)
         bool frenzyDown, frenzyUp; // 3 went down / came up: TAP = use a FRENZY, HOLD = buy one (see Powers)
         bool rocketDown, rocketUp; // 4, the same for the RPG
+        bool textModifier;
         Vector2 arrows;    // arrow keys held: x = Right - Left, y = Up - Down (steer the lure bomb)
 
 #if ENABLE_INPUT_SYSTEM
@@ -146,6 +147,8 @@ public class TypingController : MonoBehaviour
         }
 
         typedText = pendingText;
+        textModifier = keyboard != null && (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed
+            || keyboard.leftAltKey.isPressed || keyboard.rightAltKey.isPressed);
         pendingText = "";
         enterPressed = keyboard != null && (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame);
         dropPressed = keyboard != null && keyboard.backspaceKey.wasPressedThisFrame;
@@ -164,6 +167,8 @@ public class TypingController : MonoBehaviour
         }
 #else
         typedText = Input.inputString;
+        textModifier = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)
+            || Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt);
         enterPressed = Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
         dropPressed = Input.GetKeyDown(KeyCode.Backspace);
         pausePressed = Input.GetKeyDown(KeyCode.Escape);
@@ -218,7 +223,7 @@ public class TypingController : MonoBehaviour
 
         // ---- 5b. 1: aim the lure bomb while held (arrow keys steer it), throw on release ----
         GameManager.Instance.Powers.SetAimInput(arrows);
-        if (lureDown)
+        if (lureDown && !textModifier)
         {
             GameManager.Instance.Powers.BeginLureAim();
         }
@@ -228,7 +233,7 @@ public class TypingController : MonoBehaviour
         }
 
         // ---- 5c. 3 / 4: TAP to use a kept combo weapon, HOLD to buy one (Powers) ----
-        if (frenzyDown)
+        if (frenzyDown && !textModifier)
         {
             GameManager.Instance.Powers.WeaponKeyDown(false);
         }
@@ -236,7 +241,7 @@ public class TypingController : MonoBehaviour
         {
             GameManager.Instance.Powers.WeaponKeyUp(false);
         }
-        if (rocketDown)
+        if (rocketDown && !textModifier)
         {
             GameManager.Instance.Powers.WeaponKeyDown(true);
         }
