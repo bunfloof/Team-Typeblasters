@@ -236,8 +236,32 @@ public class GameManager : MonoBehaviour
             + "Weaker against the boss!\n"
             + "One weapon per wave. A wrong key costs 1 combo; a bite resets it\n"
             + "(a bite on the run between two fights only costs 1).\n"
-            + "Lure bombs [1] and freezes [2] come from supply crates.",
+            + "Lure bombs [1] and freezes [2] come from supply crates.\n\n"
+            + "<color=#59F2D9>[TAB] SHIELD</color> - once per level: press Tab, then TYPE the shield word\n"
+            + "in time. No damage for a few seconds and every enemy slows down!",
             Palette.BlastOrange);
+    }
+
+    // ---- Typing difficulty (picked on the Start panel, see TypingSettings) ----
+
+    // Called by the difficulty buttons on the Start panel (HUD). Only before
+    // the run starts: every word is styled when its enemy appears.
+    public void SetTypingDifficulty(TypingDifficulty level)
+    {
+        if (State != GameState.Start)
+        {
+            return;
+        }
+        TypingSettings.Difficulty = level;
+        hud.RefreshDifficulty();
+    }
+
+    // Called by TypingController: LEFT / RIGHT arrows on the Start panel.
+    public void CycleTypingDifficulty(int step)
+    {
+        int count = TypingSettings.DifficultyCount;
+        int next = ((int)TypingSettings.Difficulty + step % count + count) % count;
+        SetTypingDifficulty((TypingDifficulty)next);
     }
 
     // Spends combo on a weapon (Powers): the combo goes down by 'amount' (never below 1).
@@ -473,6 +497,13 @@ public class GameManager : MonoBehaviour
     {
         if (State != GameState.Playing)
         {
+            return;
+        }
+
+        // The shield (Tab) blocks every hit while it is up.
+        if (Powers.IsShielded)
+        {
+            powers.OnShieldHit();
             return;
         }
 

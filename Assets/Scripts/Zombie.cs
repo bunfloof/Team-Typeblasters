@@ -12,11 +12,34 @@
 //               blastRadius = word length x radiusPerLetter. Finishing its word
 //               blows it up, and EVERYTHING inside the ring dies too (see
 //               Explosion). What you see (the ring) is what explodes.
+//   - SHIFTER   (purple, Hard and Extreme typing difficulty only): its word
+//               CHANGES every few seconds while nobody types it. Typing its
+//               first letter locks the word (see TypingSettings.ShifterSeconds).
+//   - SPLITTER  (teal, chunky): a word that breaks in two ("SUNSET" = "SUN" +
+//               "SET", see WordBank.PickSplitterWord). Shot dead, it SPLITS
+//               into two SPLITLINGS (small, quick, light teal, half a bite),
+//               each carrying a new word that HIDES one half, underlined
+//               ("SUNSHINE", "UPSET"). An explosion kills it whole, no split.
+//   - GHOST     (pale lavender, floats, VERY slow, half a bite): a LONG word
+//               shown only for a moment, then hidden as "_ _ _". It stays
+//               hidden while it is typed: the player types it from memory.
+//               If nobody is typing it, it flashes back now and then.
+//   - BRUTE     (huge, dark, slow): carries a PHRASE of 2-3 words, typed with
+//               the SPACES in between, like a typing test. Its bite hurts double.
+//   - SPITTER   (acid green): stops at a distance and SPITS acid globs at the
+//               player, each with its own short word (an EnergyOrb: type it to
+//               pop it, or it hurts). It keeps spitting until it is shot.
+//
+// Every kind's word is a light shade of its body colour (Palette.WordFor).
+// The word itself is styled for the TYPING DIFFICULTY (TypingSettings.Style):
+// lowercase on Easy, then mixed case, punctuation, digits and symbols.
 //
 // Where it walks: out of its doorway first (to the spawn point's exit), then
 // straight at the player. If a lure bomb is on the ground nearby, it walks to
 // the bomb instead and crowds around it. While the freeze power is on, it
-// stands still and turns icy blue. Every bullet that hits it pushes it back a
+// stands still and turns icy blue. While the SHIELD is up it moves slower and,
+// if it reaches the player, bounces off the shield instead of biting (it stays
+// alive, so it can still be shot). Every bullet that hits it pushes it back a
 // little. When it dies, the capsule is knocked over (see Corpse).
 //
 // THE WORD is not part of the 3D scene: it is a HUD text (HUD.CreateWordLabel)
@@ -37,7 +60,12 @@ public enum ZombieKind
     Runner,
     Armored,
     Explosive,
-    Shifter
+    Shifter,
+    Splitter,
+    Splitling,  // one of the two halves of a Splitter
+    Ghost,
+    Brute,
+    Spitter
 }
 
 public class Zombie : MonoBehaviour, ITypingTarget
@@ -93,8 +121,9 @@ public class Zombie : MonoBehaviour, ITypingTarget
     public TMP_Text Label { get; private set; }       // the word on the HUD
 
     private float speed;
-    private bool hardTyping;
-    private float wordChangeTimer;
+    private float baseSpeed;        // the wave's speed (a splitter's splitlings start from it)
+    private bool caseSensitive;     // false on Easy: the word is stored UPPERCASE and shown in lowercase
+    private float wordChangeTimer;  // shifters only: seconds since the word last changed
     private Transform player;
     private WaveSpawner spawner;
     private Transform body;         // the capsule
@@ -118,10 +147,10 @@ public class Zombie : MonoBehaviour, ITypingTarget
     public void Setup(string word, float moveSpeed, Transform playerTransform, WaveSpawner owner,
         ZombieKind kind, Vector3 exit)
     {
-        hardTyping = HardLevel.Active != null;
-        Word = hardTyping ? HardLevel.ComplexWord(word) : word;
         player = playerTransform;
         spawner = owner;
+        caseSensitive = TypingSettings.IsCaseSensitive;
+        Word = Styled(word);
         Kind = kind;
         exitPoint = exit;
 
@@ -135,10 +164,44 @@ public class Zombie : MonoBehaviour, ITypingTarget
         body = transform.Find("Body");
         bodyRenderer = body.GetComponent<Renderer>();
         Vector3 size = Vector3.one;
-        speed = moveSpeed * (hardTyping ? HardLevel.Active.enemySpeedMultiplier : 1f);
+        baseSpeed = moveSpeed;
+        speed = moveSpeed * (HardLevel.Active != null ? HardLevel.Active.enemySpeedMultiplier : 1f);
+        if (kind == ZombieKind.Splitter)
+        {
+            size = new Vector3(1.3f, 1.05f, 1.3f);
+            bodyRenderer.sharedMaterial = Palette.Lit(Palette.SplitterTeal);
+            speed *= 0.9f;
+            splitRaw = word;
+            splitAt = WordBank.SplitterSplit(word);
+        }
+        else if (kind == ZombieKind.Splitling)
+        {
+            size = new Vector3(0.6f, 0.65f, 0.6f);
+            bodyRenderer.sharedMaterial = Palette.Lit(Palette.SplitlingTeal);
+            speed *= 1.5f;
+        }
+        else if (kind == ZombieKind.Ghost)
+        {
+            size = new Vector3(0.85f, 1.05f, 0.85f);
+            bodyRenderer.sharedMaterial = Palette.Lit(Palette.GhostPale);
+            speed *= GhostSpeedMultiplier;
+            ghostFirstLook = GhostLookBase + GhostLookPerLetter * word.Length;
+            ghostRevealed = true;
+        }
+        else if (kind == ZombieKind.Brute)
+        {
+            size = new Vector3(1.6f, 1.35f, 1.6f);
+            bodyRenderer.sharedMaterial = Palette.Lit(Palette.BruteDark);
+            speed *= 0.6f;
+        }
+        else if (kind == ZombieKind.Spitter)
+        {
+            size = new Vector3(1f, 0.95f, 1f);
+            bodyRenderer.sharedMaterial = Palette.Lit(Palette.SpitterAcid);
+        }
         if (kind == ZombieKind.Shifter)
         {
-            bodyRenderer.sharedMaterial = Palette.Lit(new Color(0.65f, 0.2f, 0.9f));
+            bodyRenderer.sharedMaterial = Palette.Lit(Palette.ShifterPurple);
             size = new Vector3(0.85f, 1.15f, 0.85f);
         }
         if (kind == ZombieKind.Runner)
@@ -181,7 +244,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         // The word lives on the HUD; the prefab's old world-space label is not used.
         label.gameObject.SetActive(false);
         Label = spawner.Hud.CreateWordLabel(new Vector2(0.5f, 0f)); // centred, just above the head
-        Label.color = HasArmor ? Palette.WordArmor : Color.white;
+        Label.color = Palette.WordFor(kind); // a light shade of its body colour
         RefreshLabel();
     }
 
@@ -218,7 +281,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         }
         realWord = Word;
         realColor = Label.color;
-        Word = hardTyping ? HardLevel.ComplexWord(shortWord) : shortWord;
+        Word = TypingSettings.StyleShort(shortWord);
         TypedCount = 0;
         Label.color = Palette.WordFrenzy;
         RefreshLabel();
@@ -262,7 +325,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
     // with the words that came on screen while it waited).
     public void Wake(string word)
     {
-        if (hardTyping) word = HardLevel.ComplexWord(word);
+        word = Styled(word);
         IsLurking = false;
         if (realWord != null && !Powers.IsFrenzy)
         {
@@ -288,6 +351,12 @@ public class Zombie : MonoBehaviour, ITypingTarget
             return;
         }
 
+        // GHOST: its word fades in and out (also while frozen).
+        if (Kind == ZombieKind.Ghost)
+        {
+            UpdateGhost();
+        }
+
         // Freeze power: stand still, icy blue.
         SetFrozenLook(Powers.IsFrozen);
         if (Powers.IsFrozen)
@@ -295,18 +364,19 @@ public class Zombie : MonoBehaviour, ITypingTarget
             return;
         }
 
-        // Never replace a partially typed word or one with a killing shot in flight.
+        // SHIFTER: a new word every few seconds. Never replaces a partially typed
+        // word or one with a killing shot in flight (typing it locks it).
         if (Kind == ZombieKind.Shifter && realWord == null && !IsWordComplete)
         {
             wordChangeTimer += Time.deltaTime;
-            if (wordChangeTimer >= HardLevel.Active.wordChangeSeconds && TypedCount == 0)
+            if (wordChangeTimer >= TypingSettings.ShifterSeconds && TypedCount == 0)
             {
                 List<char> used = spawner.UsedFirstLetters();
                 used.Remove(char.ToUpperInvariant(Word[0]));
-                Word = HardLevel.ComplexWord(WordBank.PickWord(used, ZombieKind.Armored));
+                Word = TypingSettings.Style(WordBank.PickWord(used, ZombieKind.Armored), used);
                 wordChangeTimer = 0f;
                 RefreshLabel();
-                spawner.Hud.ShowFloatingText(LabelAnchor, "WORD SHIFT!", new Color(0.8f, 0.4f, 1f));
+                spawner.Hud.ShowFloatingText(LabelAnchor, "WORD SHIFT!", ShifterColor);
             }
         }
 
@@ -335,6 +405,10 @@ public class Zombie : MonoBehaviour, ITypingTarget
             {
                 goal = player.position;
                 chasingPlayer = true;
+                if (Kind == ZombieKind.Spitter)
+                {
+                    stopDistance = SpitRange; // it stops at a distance and spits from there
+                }
             }
         }
 
@@ -350,7 +424,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         direction.y = 0f;
         direction = Vector3.ClampMagnitude(direction, 1f);
 
-        float currentSpeed = speed;
+        float currentSpeed = speed * Powers.EnemySpeedFactor; // slower while the shield is up
         if (flinchTimer > 0f)
         {
             flinchTimer -= Time.deltaTime;
@@ -358,9 +432,21 @@ public class Zombie : MonoBehaviour, ITypingTarget
         }
         transform.position += direction * currentSpeed * Time.deltaTime;
 
-        // 3. Close enough to bite.
+        // SPITTER: in range of the player, it spits acid globs.
+        if (Kind == ZombieKind.Spitter && chasingPlayer
+            && FlatDistance(transform.position, player.position) <= SpitRange + 1f)
+        {
+            UpdateSpit();
+        }
+
+        // 3. Close enough to bite (or to bounce off the shield).
         if (chasingPlayer && FlatDistance(transform.position, player.position) <= attackDistance)
         {
+            if (Powers.IsShielded)
+            {
+                BounceOffShield();
+                return;
+            }
             Attack();
             return;
         }
@@ -448,7 +534,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
 
     public bool IsCaseSensitive
     {
-        get { return hardTyping; }
+        get { return caseSensitive; }
     }
 
     // ---- Typing progress (used by TypingController) ----
@@ -521,6 +607,17 @@ public class Zombie : MonoBehaviour, ITypingTarget
         int points = GameManager.Instance.AddKill();
         spawner.Hud.ShowFloatingText(LabelAnchor, "+" + points, Color.white);
 
+        // A SPLITTER splits in two (before it is removed, so the wave never looks empty):
+        // its word breaks into two halves, each hidden in a splitling's new word.
+        if (Kind == ZombieKind.Splitter && splitAt > 0)
+        {
+            string first = splitRaw.Substring(0, splitAt);
+            string second = splitRaw.Substring(splitAt);
+            spawner.SpawnSplitlings(transform.position, baseSpeed, splitRaw, first, second);
+            spawner.Hud.ShowFloatingText(LabelAnchor + Vector3.up * 0.5f,
+                "SPLIT!  " + first.ToLowerInvariant() + " + " + second.ToLowerInvariant(), Palette.WordSplitter);
+        }
+
         Vector3 away = transform.position - player.position;
         away.y = 0f;
         KnockOver(away.normalized * 4f + Vector3.up * 2f);
@@ -565,8 +662,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         // A new word whose first letter is not in use (ignoring our own old word).
         List<char> used = spawner.UsedFirstLetters();
         used.Remove(char.ToUpperInvariant(Word[0]));
-        Word = WordBank.PickWord(used, ZombieKind.Armored);
-        if (hardTyping) Word = HardLevel.ComplexWord(Word);
+        Word = TypingSettings.Style(WordBank.PickWord(used, ZombieKind.Armored), used);
         TypedCount = 0;
         Label.color = Color.white;
 
@@ -576,17 +672,144 @@ public class Zombie : MonoBehaviour, ITypingTarget
         {
             realWord = Word;
             realColor = Color.white;
-            Word = WordBank.PickFrenzyWord(used);
-            if (hardTyping) Word = HardLevel.ComplexWord(Word);
+            Word = TypingSettings.StyleShort(WordBank.PickFrenzyWord(used));
             Label.color = Palette.WordFrenzy;
         }
         RefreshLabel();
     }
 
+    // Reached the player while the SHIELD is up: no bite. It is thrown back a
+    // few metres and staggers, and stays alive (it can still be shot for points).
+    private void BounceOffShield()
+    {
+        Vector3 away = transform.position - player.position;
+        away.y = 0f;
+        if (away.sqrMagnitude < 0.01f)
+        {
+            away = -player.forward;
+        }
+        transform.position += away.normalized * ShieldBounceDistance;
+        flinchTimer = ShieldStaggerSeconds;
+        spawner.Hud.ShowFloatingText(LabelAnchor, "BLOCKED", Palette.Shield);
+        GameManager.Instance.Powers.OnShieldHit();
+    }
+
+    private const float ShieldBounceDistance = 3.5f;  // metres it is thrown back by the shield
+    private const float ShieldStaggerSeconds = 0.8f;  // then it moves slowly for this long
+
+    // ---- GHOST ----
+    // A long word, shown for ghostFirstLook seconds (longer for longer words),
+    // then hidden: every letter not typed yet is drawn as a dim "_", on the
+    // enemy AND in the bottom word box. It stays hidden while the player types
+    // it (the typed letters show): that is the challenge, typing from memory.
+    // Only while NOBODY is typing it does it flash back, for GhostFlash
+    // seconds at the end of every GhostCycle. To make up for it, a ghost is
+    // very slow and bites for half. It floats up and down a little.
+
+    private const float GhostSpeedMultiplier = 0.45f;
+    private const float GhostLookBase = 1f;          // seconds the word is shown at first...
+    private const float GhostLookPerLetter = 0.18f;  // ...plus this per letter
+    private const float GhostCycle = 7f;
+    private const float GhostFlash = 1f;
+    private const string GhostBlankColor = "<color=#FFFFFF66>"; // the "_" of a hidden letter
+    private float ghostTimer;
+    private float ghostFirstLook;
+    private bool ghostRevealed;  // true while the whole word is shown
+
+    // True while its word (the part not typed yet) is hidden as "_".
+    private bool GhostHidesWord
+    {
+        get { return Kind == ZombieKind.Ghost && !ghostRevealed && realWord == null; }
+    }
+
+    private void UpdateGhost()
+    {
+        ghostTimer += Time.deltaTime;
+        body.localPosition = new Vector3(0f, body.localScale.y + 0.15f + 0.12f * Mathf.Sin(ghostTimer * 2.5f), 0f);
+
+        bool revealed;
+        if (TypedCount > 0)
+        {
+            revealed = false; // being typed: from memory
+        }
+        else if (ghostTimer < ghostFirstLook)
+        {
+            revealed = true;  // the first look
+        }
+        else
+        {
+            revealed = (ghostTimer - ghostFirstLook) % GhostCycle >= GhostCycle - GhostFlash; // a flash at the end of each cycle
+        }
+        if (revealed != ghostRevealed)
+        {
+            ghostRevealed = revealed;
+            RefreshLabel();
+        }
+    }
+
+    // ---- SPLITTER / SPLITLING ----
+
+    private string splitRaw;      // a splitter's word (UPPERCASE, unstyled)...
+    private int splitAt;          // ...and where it breaks in two (0 = it does not)
+    private string fragment;      // a splitling: the half of the splitter's word hidden in its word (UPPERCASE)
+
+    // Called by WaveSpawner.SpawnSplitlings: this splitling's word hides
+    // 'half' (one half of the splitter's word), drawn underlined and bold.
+    public void MarkFragment(string half)
+    {
+        fragment = half;
+        RefreshLabel();
+    }
+
+    // ---- SPITTER ----
+    // Stops SpitRange metres from the player. Every SpitInterval seconds (the
+    // first one sooner) it spits an acid glob: an EnergyOrb in acid green with
+    // a short word, flying for SpitFlightSeconds. One glob in the air at a time.
+
+    private const float SpitRange = 11f;
+    private const float SpitInterval = 4.5f;
+    private const float SpitFirstDelay = 1.2f;
+    private const float SpitFlightSeconds = 6f;
+    private const int SpitDamage = 5;
+    private float spitTimer = SpitInterval - SpitFirstDelay;
+    private EnergyOrb lastGlob;
+
+    private void UpdateSpit()
+    {
+        if (lastGlob != null && lastGlob.IsAlive)
+        {
+            return; // wait until the last glob is popped or has hit
+        }
+        spitTimer += Time.deltaTime * Powers.EnemySpeedFactor;
+        if (spitTimer < SpitInterval)
+        {
+            return;
+        }
+        spitTimer = 0f;
+
+        string word = WordBank.PickOrbWord(spawner.UsedFirstLetters());
+        Vector3 mouth = transform.position + Vector3.up * (headHeight * 0.85f);
+        lastGlob = EnergyOrb.Launch(mouth, word, SpitFlightSeconds, SpitDamage, spawner.Hud, Palette.SpitterAcid);
+        spawner.AddStrayOrb(lastGlob);
+        Flinch(transform.position - player.position); // a little recoil
+    }
+
+    // Text colour of the "WORD SHIFT!" popup (the shifter's purple, lighter).
+    private static readonly Color ShifterColor = new Color(0.8f, 0.4f, 1f);
+
     // Reached the player: bites (damage) and is shoved away. No score.
     private void Attack()
     {
-        GameManager.Instance.TakeDamage(damagePerHit, IsAmbusher); // an ambusher only costs one step of combo
+        int damage = damagePerHit;
+        if (Kind == ZombieKind.Brute)
+        {
+            damage *= 2;
+        }
+        else if (Kind == ZombieKind.Splitling || Kind == ZombieKind.Ghost)
+        {
+            damage = Mathf.Max(1, damage / 2);
+        }
+        GameManager.Instance.TakeDamage(damage, IsAmbusher); // an ambusher only costs one step of combo
 
         Vector3 away = transform.position - player.position;
         away.y = 0f;
@@ -621,15 +844,58 @@ public class Zombie : MonoBehaviour, ITypingTarget
         Destroy(gameObject);
     }
 
-    // Rebuilds the rich text: typed letters in yellow, remaining letters in white.
-    // Word is stored UPPERCASE (typing compares in uppercase) but SHOWN in lowercase.
+    // A WordBank word styled for the typing difficulty. Its first character
+    // avoids the ones already on screen (this zombie's own word is not on the
+    // spawner's list yet, or is about to be replaced).
+    private string Styled(string word)
+    {
+        return TypingSettings.Style(word, spawner.UsedFirstLetters());
+    }
+
+    // Rebuilds the rich text: typed letters in yellow, the rest in the label's
+    // colour. On Easy the word is stored UPPERCASE (typing compares in uppercase)
+    // but SHOWN in lowercase; otherwise it is shown exactly as it must be typed.
+    // A hidden GHOST word shows "_" for every letter not typed yet; a
+    // SPLITLING underlines the half of the splitter's word it hides.
     private void RefreshLabel()
     {
-        string shown = IsCaseSensitive ? Word : Word.ToLowerInvariant();
+        string shown = TypingSettings.Shown(Word, caseSensitive);
         string typedPart = shown.Substring(0, TypedCount);
-        string remainingPart = shown.Substring(TypedCount);
+        string remainingPart;
+        if (GhostHidesWord)
+        {
+            remainingPart = GhostBlankColor + new string('_', shown.Length - TypedCount) + "</color>";
+        }
+        else
+        {
+            remainingPart = WithFragmentMarked(shown, TypedCount);
+        }
         ColoredWord = TypedColorTag + typedPart + "</color>" + remainingPart;
         Label.text = ColoredWord;
+    }
+
+    // shown from index 'from' on, with the splitling's fragment (if it has one
+    // and it is in this word, not a frenzy word) underlined and bold.
+    private string WithFragmentMarked(string shown, int from)
+    {
+        if (string.IsNullOrEmpty(fragment) || realWord != null)
+        {
+            return shown.Substring(from);
+        }
+        int start = Word.ToUpperInvariant().IndexOf(fragment, System.StringComparison.Ordinal);
+        if (start < 0)
+        {
+            return shown.Substring(from);
+        }
+        int end = start + fragment.Length;
+        int markFrom = Mathf.Max(start, from);
+        if (markFrom >= end)
+        {
+            return shown.Substring(from); // the fragment is already typed
+        }
+        return shown.Substring(from, markFrom - from)
+            + "<u><b>" + shown.Substring(markFrom, end - markFrom) + "</b></u>"
+            + shown.Substring(end);
     }
 
     private static float FlatDistance(Vector3 a, Vector3 b)

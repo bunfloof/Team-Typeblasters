@@ -11696,7 +11696,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'HARD FOREST: type EXACT case and punctuation. Follow the forest trail. Purple enemies change words while idle. Enemies move 30% faster.
+  m_text: 'HARD FOREST: follow the forest trail. Enemies move 30% faster and carry long words.
 
     Finish
     a RED zombie or a BARREL to blow up everything inside its ring.
@@ -11705,7 +11705,7 @@ MonoBehaviour:
     CRATES by typing their green words.
 
 
-    [1] Lure bomb     [2] Freeze     Backspace:
+    [1] Lure bomb     [2] Freeze     [Tab] Shield     Backspace:
     change target     Esc: pause
 
 

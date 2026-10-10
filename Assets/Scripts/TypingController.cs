@@ -20,10 +20,14 @@
 //   - EVERY correct letter fires a bullet at the nearest candidate (it makes a
 //     zombie stagger). A finishing letter fires the killing shot: when that
 //     bullet hits, it calls CompleteWord() (a zombie dies or explodes...).
-//   - Words are stored UPPERCASE, shown in lowercase, and typing them is
-//     case-insensitive. The boss's energy orb words (e.g. "Sp@rk") are
-//     case-sensitive and may contain digits and symbols, which must be typed
-//     exactly. Digits and symbols are ignored while no orb is around.
+//   - TYPING DIFFICULTY (TypingSettings, picked on the Start panel): on Easy
+//     words are stored UPPERCASE, shown in lowercase, and typing them is
+//     case-insensitive. On Medium, Hard and Extreme every word is
+//     case-sensitive and may contain punctuation (Hard) or digits and symbols
+//     (Extreme), which must be typed exactly. Digits and symbols are ignored
+//     while no case-sensitive word is on screen.
+//   - SPACE only counts when the word being typed expects one (a BRUTE's
+//     phrase, "cold dark night"); anywhere else it is ignored, never wrong.
 //   - A wrong key never resets progress. The screen flashes red and the
 //     combo drops by one.
 //   - 1: TAP to throw a lure bomb, HOLD to aim it (a dashed arc) and release
@@ -33,11 +37,16 @@
 //     FRENZY / RPG, HOLD = buy one;
 //     see Powers). No word contains the keys 1-4, and arrow
 //     keys type nothing, so they never clash with typing.
+//   - Tab brings up the SHIELD WORD (see Powers, ShieldWord): typing it
+//     raises the shield (no damage for a few seconds). It is typed like any
+//     word, but no bullets fly: it lives on the HUD, not in the world.
+//     Tab again closes it.
 //   - Backspace drops the current target so the player can retarget.
 //   - Escape pauses the game (and resumes it from the pause panel, see
 //     GameManager.OnPauseKey). Keys typed while paused are ignored.
 //   - Enter closes a first-time tip box, starts the game from the Start
 //     panel, and restarts it from the "You survived" / "You died" panels.
+//     On the Start panel, LEFT / RIGHT change the typing difficulty.
 //     A tip box never opens in the middle of a word (see GameManager.LateUpdate).
 //
 // INPUT BACKEND: this project uses Unity's Input System package
@@ -123,6 +132,8 @@ public class TypingController : MonoBehaviour
         bool enterPressed;
         bool dropPressed;  // Backspace
         bool pausePressed; // Escape
+        bool shieldPressed; // Tab
+        int difficultyStep; // LEFT (-1) / RIGHT (+1) went down this frame (Start panel)
         bool lureDown;     // 1 went down this frame (start aiming)...
         bool lureUp;       // ...and came up (throw)
         bool frenzyDown, frenzyUp; // 3 went down / came up: TAP = use a FRENZY, HOLD = buy one (see Powers)
@@ -153,6 +164,9 @@ public class TypingController : MonoBehaviour
         enterPressed = keyboard != null && (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame);
         dropPressed = keyboard != null && keyboard.backspaceKey.wasPressedThisFrame;
         pausePressed = keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
+        shieldPressed = keyboard != null && keyboard.tabKey.wasPressedThisFrame;
+        difficultyStep = keyboard == null ? 0
+            : (keyboard.rightArrowKey.wasPressedThisFrame ? 1 : 0) - (keyboard.leftArrowKey.wasPressedThisFrame ? 1 : 0);
         lureDown = keyboard != null && (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame);
         lureUp = keyboard != null && (keyboard.digit1Key.wasReleasedThisFrame || keyboard.numpad1Key.wasReleasedThisFrame);
         frenzyDown = keyboard != null && (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame);
@@ -172,6 +186,8 @@ public class TypingController : MonoBehaviour
         enterPressed = Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter);
         dropPressed = Input.GetKeyDown(KeyCode.Backspace);
         pausePressed = Input.GetKeyDown(KeyCode.Escape);
+        shieldPressed = Input.GetKeyDown(KeyCode.Tab);
+        difficultyStep = (Input.GetKeyDown(KeyCode.RightArrow) ? 1 : 0) - (Input.GetKeyDown(KeyCode.LeftArrow) ? 1 : 0);
         lureDown = Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1);
         lureUp = Input.GetKeyUp(KeyCode.Alpha1) || Input.GetKeyUp(KeyCode.Keypad1);
         frenzyDown = Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3);
@@ -189,9 +205,13 @@ public class TypingController : MonoBehaviour
             GameManager.Instance.OnPauseKey();
         }
 
-        // ---- 3. Outside of play, only Enter does something ----
+        // ---- 3. Outside of play, only Enter does something (and LEFT / RIGHT on the Start panel) ----
         if (GameManager.Instance.State != GameState.Playing)
         {
+            if (difficultyStep != 0 && GameManager.Instance.State == GameState.Start)
+            {
+                GameManager.Instance.CycleTypingDifficulty(difficultyStep);
+            }
             if (enterPressed)
             {
                 GameManager.Instance.StartOrRestart();
@@ -219,6 +239,12 @@ public class TypingController : MonoBehaviour
             candidates.Clear();
             lastTypingTime = Time.time;
             EndRun();
+        }
+
+        // ---- 5a. Tab: raise the shield ----
+        if (shieldPressed)
+        {
+            GameManager.Instance.Powers.TryUseShield();
         }
 
         // ---- 5b. 1: aim the lure bomb while held (arrow keys steer it), throw on release ----
@@ -253,9 +279,14 @@ public class TypingController : MonoBehaviour
         // ---- 6. Handle every character typed this frame ----
         foreach (char character in typedText)
         {
+            if (character == ' ' && NextIsSpace())
+            {
+                HandleCharacter(character); // the space inside a phrase
+                continue;
+            }
             if (char.IsControl(character) || char.IsWhiteSpace(character))
             {
-                continue; // Enter, Backspace, space, ...: never part of a word
+                continue; // Enter, Backspace, space, ...: not part of the word being typed
             }
 
             // The power keys. 1, 3 and 4 are handled above as keys held down;
@@ -270,8 +301,8 @@ public class TypingController : MonoBehaviour
                 continue;
             }
 
-            // Digits and symbols only matter while an energy orb (a case-sensitive
-            // word) is around; otherwise they are ignored.
+            // Digits and symbols only matter while a case-sensitive word (any word
+            // above Easy, or an energy orb) is around; otherwise they are ignored.
             char upper = char.ToUpperInvariant(character);
             bool isLetter = upper >= 'A' && upper <= 'Z';
             if (!isLetter && !SymbolsMatter())
@@ -318,6 +349,19 @@ public class TypingController : MonoBehaviour
             text.Append("   ...");
         }
         return text.ToString();
+    }
+
+    // True if a word being typed has a space as its next character (a phrase).
+    private bool NextIsSpace()
+    {
+        foreach (ITypingTarget candidate in candidates)
+        {
+            if (candidate.IsAlive && !candidate.IsWordComplete && candidate.NextLetter == ' ')
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Does the typed character match the expected one? Case-sensitive targets
@@ -439,6 +483,12 @@ public class TypingController : MonoBehaviour
         ITypingTarget lastFinished = null;
         foreach (ITypingTarget candidate in candidates)
         {
+            if (candidate.IsWordComplete && candidate is ShieldWord)
+            {
+                candidate.CompleteWord(); // raises the shield at once: no bullet, no kill
+                anyFinished = true;
+                continue;
+            }
             if (candidate.IsWordComplete)
             {
                 bool rocket = GameManager.Instance.Powers.ConsumeRocket();
@@ -459,7 +509,7 @@ public class TypingController : MonoBehaviour
 
         // Otherwise a normal shot at the nearest candidate (it staggers).
         ITypingTarget nearest = NearestCandidate();
-        if (!anyFinished && nearest != null)
+        if (!anyFinished && nearest != null && !(nearest is ShieldWord))
         {
             Bullet.Fire(nearest, false);
         }

@@ -7,12 +7,14 @@
 //     cancelled (and it counts as a kill for score and combo);
 //   - too slow -> the orb reaches the player and deals its damage.
 //
-// Orb words are short but tricky: case-sensitive, with digits and symbols
-// (WordBank.PickOrbWord), and drawn in pink like the orb (Palette.WordOrb),
-// flashing with every throb of the orb: the word to type first.
-// The freeze power stops it in mid-air, with an ice-blue outline.
-// IsCaseSensitive = true tells TypingController to compare every character
-// exactly. The orb itself is a pulsing pink sphere.
+// Orb words are short and follow the TYPING DIFFICULTY (WordBank.PickOrbWord):
+// plain lowercase on Easy, up to digits and symbols on Extreme. They are drawn
+// in pink like the orb (Palette.WordOrb), flashing with every throb of the
+// orb: the word to type first.
+// The freeze power stops it in mid-air, with an ice-blue outline; the shield
+// slows it down (Powers.EnemySpeedFactor) and blocks its damage.
+// IsCaseSensitive (every difficulty but Easy) tells TypingController to
+// compare every character exactly. The orb itself is a pulsing pink sphere.
 // ---------------------------------------------------------------------------
 using System.Collections;
 using TMPro;
@@ -36,6 +38,8 @@ public class EnergyOrb : MonoBehaviour, ITypingTarget
 
     private float speed;  // metres per second
     private int damage;
+    private bool caseSensitive; // false on Easy: the word is stored UPPERCASE and shown in lowercase
+    private Color wordColor = Palette.WordOrb; // the word's colour (it flashes toward WordOrbFlash)
     private HUD hud;
     private LineRenderer frozenOutline; // ice-blue ring around the orb while the freeze power is on
 
@@ -45,24 +49,29 @@ public class EnergyOrb : MonoBehaviour, ITypingTarget
 
     // Fires an orb from position at the player. It arrives after flightSeconds
     // unless the player types its word first.
-    public static EnergyOrb Launch(Vector3 position, string word, float flightSeconds, int damage, HUD hud)
+    //   color: the orb's colour (default: the boss's hot pink). A SPITTER's
+    //   acid globs pass their acid green; the word is a lighter shade of it.
+    public static EnergyOrb Launch(Vector3 position, string word, float flightSeconds, int damage, HUD hud,
+        Color? color = null)
     {
         GameObject orbObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         orbObject.name = "EnergyOrb";
         Destroy(orbObject.GetComponent<Collider>()); // hits by distance, not physics
         orbObject.transform.position = position;
         orbObject.transform.localScale = Vector3.one * Size;
-        orbObject.GetComponent<Renderer>().sharedMaterial = Palette.Lit(OrbColor);
+        orbObject.GetComponent<Renderer>().sharedMaterial = Palette.Lit(color ?? OrbColor);
 
         EnergyOrb orb = orbObject.AddComponent<EnergyOrb>();
         orb.Word = word;
+        orb.caseSensitive = TypingSettings.IsCaseSensitive;
         orb.damage = damage;
         orb.hud = hud;
         orb.IsAlive = true;
         orb.speed = Vector3.Distance(position, AimPoint()) / Mathf.Max(0.1f, flightSeconds);
 
         orb.Label = hud.CreateWordLabel(new Vector2(0.5f, 0f)); // centred above the orb
-        orb.Label.color = Palette.WordOrb; // pink like the orb, so it reads as "orb: type it exactly"
+        orb.wordColor = color.HasValue ? Color.Lerp(color.Value, Color.white, 0.35f) : Palette.WordOrb;
+        orb.Label.color = orb.wordColor; // the orb's colour, so it reads as "orb: type it first"
         orb.RefreshLabel();
         orb.BuildFrozenOutline();
         return orb;
@@ -133,16 +142,20 @@ public class EnergyOrb : MonoBehaviour, ITypingTarget
         float wave = Mathf.Sin(Time.time * PulseSpeed); // -1 .. 1
         float pulse = 1f + wave * PulseAmount;
         transform.localScale = Vector3.one * Size * pulse;
-        Label.color = Color.Lerp(Palette.WordOrb, Palette.WordOrbFlash, (wave + 1f) * 0.5f);
+        Label.color = Color.Lerp(wordColor, Palette.WordOrbFlash, (wave + 1f) * 0.5f);
 
         Vector3 aim = AimPoint();
-        transform.position = Vector3.MoveTowards(transform.position, aim, speed * Time.deltaTime);
+        transform.position = Vector3.MoveTowards(transform.position, aim, speed * Powers.EnemySpeedFactor * Time.deltaTime);
 
         // Too late: it hits the player.
         if (Vector3.Distance(transform.position, aim) <= HitPlayerDistance)
         {
+            bool blocked = Powers.IsShielded;
             GameManager.Instance.TakeDamage(damage);
-            hud.FlashRed();
+            if (!blocked)
+            {
+                hud.FlashRed();
+            }
             Vanish();
             Destroy(gameObject);
         }
@@ -157,7 +170,7 @@ public class EnergyOrb : MonoBehaviour, ITypingTarget
 
     public bool IsCaseSensitive
     {
-        get { return true; }
+        get { return caseSensitive; }
     }
 
     public Vector3 Position
@@ -243,7 +256,8 @@ public class EnergyOrb : MonoBehaviour, ITypingTarget
 
     private void RefreshLabel()
     {
-        ColoredWord = Zombie.TypedColorTag + Word.Substring(0, TypedCount) + "</color>" + Word.Substring(TypedCount);
+        string shown = TypingSettings.Shown(Word, caseSensitive);
+        ColoredWord = Zombie.TypedColorTag + shown.Substring(0, TypedCount) + "</color>" + shown.Substring(TypedCount);
         Label.text = ColoredWord;
     }
 }

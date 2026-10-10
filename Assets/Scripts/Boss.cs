@@ -241,6 +241,7 @@ public class Boss : MonoBehaviour
             }
         }
         string word = slot.Limb.IsHead ? WordBank.PickBossWord(used) : WordBank.PickWord(used, ZombieKind.Explosive);
+        word = TypingSettings.Style(word, used); // case, punctuation... for the typing difficulty
         slot.SetWord(word);
 
         // During a FRENZY a new word (the head's next one, a limb growing back)
@@ -336,7 +337,7 @@ public class Boss : MonoBehaviour
             return;
         }
 
-        attackTimer += Time.deltaTime;
+        attackTimer += Time.deltaTime * Powers.EnemySpeedFactor; // the shield slows the boss down too
         if (attackTimer >= interval)
         {
             attackTimer = 0f;
@@ -1045,10 +1046,13 @@ public class BossPart : ITypingTarget
         get { return TypedCount > 0; }
     }
 
+    // Every typing difficulty but Easy (see TypingSettings).
     public bool IsCaseSensitive
     {
-        get { return false; }
+        get { return caseSensitive; }
     }
+
+    private readonly bool caseSensitive = TypingSettings.IsCaseSensitive;
 
     public Vector3 Position
     {
@@ -1121,7 +1125,7 @@ public class BossPart : ITypingTarget
             return;
         }
         realWord = Word;
-        Word = shortWord;
+        Word = TypingSettings.StyleShort(shortWord);
         TypedCount = 0;
         Label.color = Palette.WordFrenzy;
         RefreshLabel();
@@ -1140,10 +1144,11 @@ public class BossPart : ITypingTarget
         RefreshLabel();
     }
 
-    // Same look as a zombie's word: stored UPPERCASE, shown in lowercase.
+    // Same look as a zombie's word: on Easy stored UPPERCASE and shown in
+    // lowercase, otherwise shown exactly as it must be typed.
     private void RefreshLabel()
     {
-        string shown = Word.ToLowerInvariant();
+        string shown = TypingSettings.Shown(Word, caseSensitive);
         ColoredWord = Zombie.TypedColorTag + shown.Substring(0, TypedCount) + "</color>" + shown.Substring(TypedCount);
         Label.text = ColoredWord;
     }

@@ -26,6 +26,13 @@ public static class Palette
     public static readonly Color RunnerYellow = new Color(0.90f, 0.85f, 0.30f);
     public static readonly Color ArmorSteel = new Color(0.35f, 0.42f, 0.55f);
     public static readonly Color FrozenIce = new Color(0.60f, 0.88f, 1.00f);
+    public static readonly Color ExplosiveRed = new Color(0.90f, 0.25f, 0.20f);
+    public static readonly Color ShifterPurple = new Color(0.65f, 0.20f, 0.90f);
+    public static readonly Color SplitterTeal = new Color(0.10f, 0.60f, 0.55f);  // teal, not green: green words are supply crates
+    public static readonly Color SplitlingTeal = new Color(0.40f, 0.85f, 0.78f);
+    public static readonly Color GhostPale = new Color(0.90f, 0.86f, 1.00f);    // pale lavender
+    public static readonly Color BruteDark = new Color(0.45f, 0.25f, 0.20f);    // dark red-brown
+    public static readonly Color SpitterAcid = new Color(0.75f, 0.95f, 0.10f);  // acid yellow-green (its globs too)
 
     // ---- Props ----
     public static readonly Color LureCrate = new Color(1.00f, 0.50f, 0.10f);   // also the lure bomb power on the HUD
@@ -34,12 +41,42 @@ public static class Palette
     public static readonly Color BombBlink = new Color(0.90f, 0.10f, 0.10f);
     public static readonly Color QuizAnswer = new Color(0.40f, 0.90f, 1.00f);
     public static readonly Color BlastOrange = new Color(1.00f, 0.55f, 0.10f);
+    public static readonly Color Shield = new Color(0.35f, 0.95f, 0.85f);      // the SHIELD power (Tab): HUD row, screen glow, "BLOCKED"
 
     // ---- Word colours (HUD text) ----
     public static readonly Color WordBarrel = new Color(1.00f, 0.60f, 0.20f);
     public static readonly Color WordCrate = new Color(0.45f, 1.00f, 0.50f);
     public static readonly Color WordQuiz = new Color(0.40f, 0.90f, 1.00f);
     public static readonly Color WordArmor = new Color(0.75f, 0.80f, 0.90f);
+
+    // A zombie's word is a light shade of its body colour (light enough to
+    // read on any background), so a word always tells which kind carries it.
+    public static readonly Color WordRunner = new Color(1.00f, 0.95f, 0.55f);
+    public static readonly Color WordExplosive = new Color(1.00f, 0.60f, 0.55f);
+    public static readonly Color WordShifter = new Color(0.86f, 0.62f, 1.00f);
+    public static readonly Color WordSplitter = new Color(0.45f, 0.95f, 0.88f);
+    public static readonly Color WordSplitling = new Color(0.70f, 1.00f, 0.94f);
+    public static readonly Color WordGhost = new Color(0.92f, 0.88f, 1.00f);
+    public static readonly Color WordBrute = new Color(0.95f, 0.72f, 0.60f);
+    public static readonly Color WordSpitter = new Color(0.88f, 1.00f, 0.45f);
+
+    // The word colour of a zombie of this kind (an armored one with its armour on: WordArmor).
+    public static Color WordFor(ZombieKind kind)
+    {
+        switch (kind)
+        {
+            case ZombieKind.Runner: return WordRunner;
+            case ZombieKind.Armored: return WordArmor;
+            case ZombieKind.Explosive: return WordExplosive;
+            case ZombieKind.Shifter: return WordShifter;
+            case ZombieKind.Splitter: return WordSplitter;
+            case ZombieKind.Splitling: return WordSplitling;
+            case ZombieKind.Ghost: return WordGhost;
+            case ZombieKind.Brute: return WordBrute;
+            case ZombieKind.Spitter: return WordSpitter;
+            default: return Color.white; // normal zombies are grey
+        }
+    }
     public static readonly Color WordChain = new Color(0.82f, 0.52f, 1.00f); // purple: a WORD CHAIN pair (hunt / hunter) and its link line
     public static readonly Color WordOrb = new Color(1.00f, 0.55f, 0.85f);   // pink, like the boss's energy orbs (their words are case-sensitive); lighter than WordFrenzy so the two never look alike
     public static readonly Color WordOrbFlash = new Color(1.00f, 0.92f, 0.97f); // almost white: an orb's word flashes up to this with every throb
