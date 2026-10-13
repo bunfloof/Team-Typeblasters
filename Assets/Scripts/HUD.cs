@@ -470,6 +470,7 @@ public class HUD : MonoBehaviour
     public void ShowStartPanel()
     {
         HideAllPanels();
+        BuildLevelSelection();
         startPanel.SetActive(true);
     }
 
@@ -485,7 +486,64 @@ public class HUD : MonoBehaviour
         HideAllPanels();
         SetTargetWord(""); // typing is over, so clear the word at the bottom
         wonScoreText.text = "Final score: " + finalScore;
+        BuildLevelCompletion();
         wonPanel.SetActive(true);
+    }
+
+    private bool levelSelectionBuilt;
+    private bool levelCompletionBuilt;
+
+    private void BuildLevelSelection()
+    {
+        if (levelSelectionBuilt) return;
+        levelSelectionBuilt = true;
+        CreateText(startPanel.transform, "Level Select Label", "SELECT LEVEL", 28f, new Vector2(0f, -390f));
+        for (int i = 0; i < GameManager.LevelCount; i++)
+        {
+            int levelIndex = i;
+            string title = (i + 1) + ". " + GameManager.LevelName(i);
+            TMP_Text label = CreateButton(startPanel.transform, "Select " + GameManager.LevelName(i),
+                title, new Vector2((i - 1) * 320f, -460f), () => GameManager.Instance.SelectLevel(levelIndex));
+            label.fontSize = 32f;
+            RectTransform rect = (RectTransform)label.transform.parent;
+            rect.sizeDelta = new Vector2(290f, 80f);
+            label.rectTransform.sizeDelta = rect.sizeDelta;
+            if (i == GameManager.CurrentLevelIndex)
+            {
+                rect.GetComponent<Image>().color = new Color(0.12f, 0.4f, 0.5f);
+                label.text = title + " <size=65%>(current)</size>";
+            }
+        }
+    }
+
+    private void BuildLevelCompletion()
+    {
+        if (levelCompletionBuilt) return;
+        levelCompletionBuilt = true;
+        // Reuse the scene's existing replay button and keyboard hint.
+        Button replay = wonPanel.GetComponentInChildren<Button>(true);
+        RectTransform replayRect = replay.GetComponent<RectTransform>();
+        PlaceRect(replayRect, Centre, Centre, new Vector2(-200f, -230f), new Vector2(360f, 100f));
+        TMP_Text replayLabel = replay.GetComponentInChildren<TMP_Text>(true);
+        replayLabel.text = "REPLAY LEVEL";
+        replayLabel.fontSize = 34f;
+        string next = GameManager.NextLevelName;
+        TMP_Text nextLabel = CreateButton(wonPanel.transform, "Next Level",
+            next != null ? "NEXT: " + next : "LEVEL SELECT", new Vector2(200f, -230f),
+            () => { if (GameManager.NextLevelName != null) GameManager.Instance.NextLevel();
+                else GameManager.Instance.SelectLevel(0); });
+        nextLabel.fontSize = 34f;
+        RectTransform nextRect = (RectTransform)nextLabel.transform.parent;
+        nextRect.sizeDelta = new Vector2(360f, 100f);
+        nextLabel.rectTransform.sizeDelta = nextRect.sizeDelta;
+        foreach (TMP_Text label in wonPanel.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (label.text == "(or press Enter)") label.text = "Enter: replay this level";
+        }
+        if (next == null)
+        {
+            CreateText(wonPanel.transform, "Campaign Complete", "Final level complete!", 32f, new Vector2(0f, -390f));
+        }
     }
 
     public void ShowLostPanel(int finalScore)

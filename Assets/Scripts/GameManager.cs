@@ -38,6 +38,14 @@ public enum GameState
 
 public class GameManager : MonoBehaviour
 {
+    private static readonly string[] levelScenes = { "Easy", "Prototype", "Hard" };
+    public static int LevelCount => levelScenes.Length;
+    public static string LevelName(int index) => levelScenes[index];
+    public static int CurrentLevelIndex => System.Array.IndexOf(levelScenes, SceneManager.GetActiveScene().name);
+    public static string NextLevelName => CurrentLevelIndex >= 0 && CurrentLevelIndex < LevelCount - 1
+        ? levelScenes[CurrentLevelIndex + 1] : null;
+    private bool loadingLevel;
+
     // The one GameManager in the scene. Set in Awake.
     public static GameManager Instance { get; private set; }
 
@@ -297,6 +305,38 @@ public class GameManager : MonoBehaviour
     // the same screen as when the game is first opened.
     public void RestartGame()
     {
+        LoadLevelScene(SceneManager.GetActiveScene().name);
+    }
+
+    // Level choices are available before play and after a run ends.
+    public void SelectLevel(int index)
+    {
+        if (index < 0 || index >= LevelCount ||
+            (State != GameState.Start && State != GameState.Won && State != GameState.Lost))
+        {
+            return;
+        }
+        if (State == GameState.Start && index == CurrentLevelIndex) return;
+        LoadLevelScene(levelScenes[index]);
+    }
+
+    public void NextLevel()
+    {
+        if (State == GameState.Won && NextLevelName != null)
+        {
+            LoadLevelScene(NextLevelName);
+        }
+    }
+
+    private void LoadLevelScene(string sceneName)
+    {
+        if (loadingLevel) return;
+        if (!Application.CanStreamedLevelBeLoaded(sceneName))
+        {
+            Debug.LogError("Level is missing from Build Settings: " + sceneName);
+            return;
+        }
+        loadingLevel = true;
         // Restarted in the middle of a run (from the pause panel): it ends here.
         if (State == GameState.Playing || State == GameState.Paused || State == GameState.Tip)
         {
@@ -312,7 +352,7 @@ public class GameManager : MonoBehaviour
 
         Time.timeScale = 1f; // in case we restart from the pause panel
         Analytics.EndRun();  // the Start panel's events belong to no run
-        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        SceneManager.LoadScene(sceneName);
     }
 
     // Called by TypingController when Enter is pressed outside of play
