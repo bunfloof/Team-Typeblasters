@@ -140,6 +140,15 @@ MonoBehaviour:
   attackDistance: 1.5
   damagePerHit: 10
   radiusPerLetter: 0.75
+  explosiveBodyColor: {r: 0.9, g: 0.25, b: 0.2, a: 1}
+  explosiveBodyScale: 1.5
+  runnerSpeedMultiplier: 2
+  armoredSpeedMultiplier: 0.8
+  explosiveSpeedMultiplier: 0.85
+  flinchSeconds: 0.15
+  flinchSlowdown: 0.25
+  separationDistance: 1.2
+  separationStrength: 1.5
   label: {fileID: 9013036688259169393}
   ring: {fileID: 2897459959297592427}
 --- !u!1 &4637148948807905426
@@ -430,7 +439,7 @@ MonoBehaviour:
   m_spriteAsset: {fileID: 0}
   m_tintAllSprites: 0
   m_StyleSheet: {fileID: 0}
-  m_TextStyleHashCode: 0
+  m_TextStyleHashCode: -1183493901
   m_overrideHtmlColors: 0
   m_faceColor:
     serializedVersion: 2

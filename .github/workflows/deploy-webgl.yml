@@ -1,36 +1,14 @@
-# Builds the Unity WebGL player on every push to main and publishes it with
-# GitHub Pages from THIS repository (no separate build repo, no build branch:
-# the build is uploaded straight to Pages).
-#
-# The site is served at https://<owner>.github.io/<repository>/ , for example
-# https://bunfloof.github.io/Team-Typeblasters/ (the path is case-sensitive).
-# Nothing below names the owner, so after the repository is transferred to an
-# organization this keeps working unchanged; only the link changes (GitHub does
-# not redirect the old Pages link).
-#
-# One-time setup: Settings > Pages > Build and deployment > Source: GitHub Actions.
-#
-# Secrets this workflow needs (Settings > Secrets and variables > Actions on THIS repo):
-#   UNITY_LICENSE   full contents of Unity_lic.ulf (Unity Personal license)
-#   UNITY_EMAIL     email of the Unity account that activated that license
-#   UNITY_PASSWORD  password of that Unity account
-# Optional, for a separate permanent Vercel link per build (see the Vercel step):
-#   VERCEL_TOKEN       token from vercel.com/account/tokens
-#   VERCEL_ORG_ID      "orgId" in .vercel/project.json after running `vercel link`
-#   VERCEL_PROJECT_ID  "projectId" in the same file
-
-name: Build and deploy WebGL
+# Build an artifact; publish playable versions manually to gh-pages.
+# Keep each release in its own folder on gh-pages so older links remain playable.
+name: Build WebGL for manual gh-pages publishing
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-# One run at a time. A newer push waits for the running one to finish instead of
-# cancelling it (GitHub advises never cutting off a Pages deploy halfway); if
-# several pushes are waiting, only the newest one runs.
 concurrency:
-  group: webgl-deploy
+  group: webgl-build
   cancel-in-progress: false
 
 permissions:
@@ -47,13 +25,11 @@ jobs:
           fetch-depth: 0
           lfs: true
 
-      # The Unity WebGL Docker image is large; make room for it on the runner.
       - name: Free up disk space on the runner
         uses: jlumbroso/free-disk-space@v2
         with:
           large-packages: false
 
-      # Reusing the Library folder between runs makes later builds much faster.
       - name: Cache the Library folder
         uses: actions/cache@v6
         with:
@@ -62,8 +38,6 @@ jobs:
           restore-keys: |
             Library-WebGL-
 
-      # Unity version is read from ProjectSettings/ProjectVersion.txt automatically.
-      # Output lands in build/WebGL/WebGL (index.html, Build/, TemplateData/).
       - name: Build the WebGL player
         uses: game-ci/unity-builder@v6
         env:
@@ -73,51 +47,10 @@ jobs:
         with:
           targetPlatform: WebGL
 
-      # Packs the build for Pages. It is not committed anywhere, so the
-      # repository does not grow with every build.
-      - name: Upload the build for GitHub Pages
-        uses: actions/upload-pages-artifact@v5
+      - name: Upload WebGL build for manual publishing
+        uses: actions/upload-artifact@v5
         with:
+          name: WebGL-${{ github.sha }}
           path: build/WebGL/WebGL
-
-      # Also sends the same build to Vercel. Every Vercel deploy gets its own
-      # permanent link (https://<project>-<random>-<team>.vercel.app), so older
-      # builds stay playable after newer ones go out. The GitHub Pages link
-      # above always shows only the newest build.
-      # The link is printed on the run's Summary page and listed under
-      # Deployments in the Vercel dashboard.
-      # Skipped (not failed) when the Vercel secrets are not set on this repo.
-      - name: Deploy to Vercel (unique link per build)
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: |
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "::notice::Vercel secrets not set, skipping the Vercel deploy."
-            exit 0
-          fi
-          # The Unity build ran in Docker as root and left root-owned folders in
-          # the runner's home, so Vercel gets a fresh home folder of its own.
-          export HOME="$RUNNER_TEMP/vercel-home"
-          mkdir -p "$HOME"
-          url=$(npx --yes vercel@latest deploy build/WebGL/WebGL --prod --yes --token "$VERCEL_TOKEN")
-          echo "Vercel link for this build: $url"
-          echo "### Vercel link for commit \`${GITHUB_SHA::7}\`: $url" >> "$GITHUB_STEP_SUMMARY"
-
-  deploy:
-    name: Publish to GitHub Pages
-    needs: build
-    runs-on: ubuntu-latest
-    # Asked for here, so it also works in an organization whose default
-    # GITHUB_TOKEN is read-only.
-    permissions:
-      pages: write     # publish the site
-      id-token: write  # prove to Pages which branch this run comes from
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v5
+          if-no-files-found: error
+          retention-days: 90
