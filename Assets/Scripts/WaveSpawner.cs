@@ -121,6 +121,36 @@ public class WaveSpawner : MonoBehaviour
         get { return hud; }
     }
 
+    // Where the player is and which way they face (for analytics positions).
+    public Vector3 PlayerPosition
+    {
+        get { return player.position; }
+    }
+
+    public float PlayerYaw
+    {
+        get { return player.eulerAngles.y; }
+    }
+
+    // What the player is doing now, for analytics: "ride" (on the rails),
+    // "fight" (a zombie wave, its banner and gate included), "boss", or
+    // "none" (before the first ride).
+    public string PhaseName
+    {
+        get
+        {
+            if (CurrentEncounter == null)
+            {
+                return "none";
+            }
+            if (rail != null && rail.IsRiding)
+            {
+                return "ride";
+            }
+            return CurrentEncounter.IsBossFight ? "boss" : "fight";
+        }
+    }
+
     // Everything the player can type right now: alive zombies, the active
     // barrels and supply crates, and the boss's parts, orbs and quiz answers.
     // The list is reused, so read it right away.
@@ -541,6 +571,15 @@ public class WaveSpawner : MonoBehaviour
             //    road (not before the first fight: the player has not been
             //    shown how to type yet).
             rail.RideAlong(encounter.Route, encounter.Facing);
+            RunStats stats = GameManager.Instance.Stats;
+            float rideStart = stats.Seconds;
+            int healthAtRideStart = GameManager.Instance.Health;
+            ambushersPlaced = 0;
+            ambushersWoken = 0;
+            AnalyticsEvent rideStartEvent = Analytics.NewEvent("ride_start");
+            rideStartEvent.Add("boss_next", encounter.IsBossFight);
+            Analytics.Send(rideStartEvent);
+
             Coroutine ambush = index > 0 ? StartCoroutine(RideAmbush(wave)) : null;
             while (!rail.IsStopped)
             {
@@ -552,6 +591,14 @@ public class WaveSpawner : MonoBehaviour
             }
             ClearAmbush();
 
+            AnalyticsEvent rideEnd = Analytics.NewEvent("ride_end");
+            rideEnd.Add("seconds", stats.Seconds - rideStart);
+            rideEnd.Add("ambushers_placed", ambushersPlaced);
+            rideEnd.Add("ambushers_woken", ambushersWoken);  // the ones the player got to see
+            rideEnd.Add("health_at_start", healthAtRideStart);
+            Analytics.AddPlayerState(rideEnd);
+            Analytics.Send(rideEnd);
+
             // 2. Fight.
             hud.ShowBanner(encounter.IsBossFight ? "BOSS FIGHT" : "Wave " + wave);
             yield return new WaitForSeconds(BannerSeconds);
@@ -559,6 +606,12 @@ public class WaveSpawner : MonoBehaviour
             GameManager.Instance.Powers.OnWaveStart(); // a new combo weapon can be bought
             ActivateProps(encounter);
             StartCoroutine(ShowPropHints());
+
+            float fightStart = stats.Seconds;
+            int killsAtStart = stats.Kills;
+            int correctKeysAtStart = stats.CorrectKeys;
+            int wrongKeysAtStart = stats.WrongKeys;
+            int healthAtStart = GameManager.Instance.Health;
 
             if (encounter.IsBossFight)
             {
@@ -568,6 +621,18 @@ public class WaveSpawner : MonoBehaviour
             {
                 yield return RunZombieWave(wave, encounter);
             }
+
+            // Analytics: the fight is won (a death ends the run instead, see "run_end").
+            AnalyticsEvent waveEnd = Analytics.NewEvent("wave_end");
+            waveEnd.Add("boss_fight", encounter.IsBossFight);
+            waveEnd.Add("seconds", stats.Seconds - fightStart);
+            waveEnd.Add("kills", stats.Kills - killsAtStart);
+            waveEnd.Add("correct_keys", stats.CorrectKeys - correctKeysAtStart);
+            waveEnd.Add("wrong_keys", stats.WrongKeys - wrongKeysAtStart);
+            waveEnd.Add("health_at_start", healthAtStart);
+            Analytics.AddPlayerState(waveEnd);
+            Analytics.Send(waveEnd);
+            Analytics.FlushSoon();
 
             // 3. Cleared: the next gate opens.
             DeactivateProps();
@@ -607,6 +672,8 @@ public class WaveSpawner : MonoBehaviour
     private const int AmbushMax = 3;
 
     private readonly List<Zombie> ambushers = new List<Zombie>();
+    private int ambushersPlaced;  // this run between two fights (for analytics)
+    private int ambushersWoken;
     private readonly Dictionary<Zombie, float> ambushAlong = new Dictionary<Zombie, float>(); // where each one waits: metres along the run (RailMover.Travelled)
     private const float AmbushPassedBy = 1.5f;   // ridden this far past where it waited: it is behind the player, it goes
 
@@ -732,6 +799,7 @@ public class WaveSpawner : MonoBehaviour
         zombie.StartLurking();
         ambushers.Add(zombie);
         ambushAlong[zombie] = along;
+        ambushersPlaced += 1;
     }
 
     // The player sees it: it gets a short word (quick to type on the move) and
@@ -740,11 +808,26 @@ public class WaveSpawner : MonoBehaviour
     {
         zombie.Wake(WordBank.PickWord(UsedFirstLetters(), ZombieKind.Runner));
         aliveZombies.Add(zombie);
+        ambushersWoken += 1;
         if (Powers.IsFrenzy)
         {
             zombie.EnterFrenzy(WordBank.PickFrenzyWord(UsedFirstLetters())); // nothing happens if it already has a frenzy word
         }
         Tutorial.Once("ambush", "AMBUSH! Shoot the zombie in the road before you run into it.", 4f);
+    }
+
+    // Called by GameManager when the run ends during a ride: the ambush
+    // zombies still lurking (they are not in AliveZombies) get their
+    // "zombie" analytics event too (woken ones are in AliveZombies already).
+    public void LogLurkersRunOver()
+    {
+        foreach (Zombie zombie in ambushers)
+        {
+            if (zombie != null && zombie.IsAlive && zombie.IsLurking)
+            {
+                zombie.LogRunOver();
+            }
+        }
     }
 
     // The run is over and the speed limit is lifted. A woken ambush zombie
@@ -783,6 +866,7 @@ public class WaveSpawner : MonoBehaviour
         ZombieKind[] plan = AddChainPairs(PlanKinds(zombiesThisWave, wave), wave, out pairStarts);
         zombiesThisWave = plan.Length;
         Tutorial.Once("type", "Type the word above a zombie to shoot it. Every letter is a bullet!", 6f);
+        LogWaveStart(plan, pairStarts.Count, speed, interval, encounter);
 
         // 2. Zombies come out in packs of GroupSize, from the spawn points in turn
         //    (a shuffled order, so it is not the same door every time).
@@ -857,6 +941,35 @@ public class WaveSpawner : MonoBehaviour
         {
             yield return null;
         }
+    }
+
+    // The "wave_start" analytics event: what this wave PLANS to send. (On the
+    // Hard level some normal zombies turn into shifters as they spawn; the
+    // "zombie" events say what really came.)
+    private void LogWaveStart(ZombieKind[] plan, int chainPairs, float speed, float interval, Encounter encounter)
+    {
+        int[] planned = new int[System.Enum.GetValues(typeof(ZombieKind)).Length];
+        foreach (ZombieKind kind in plan)
+        {
+            planned[(int)kind] += 1;
+        }
+
+        AnalyticsEvent e = Analytics.NewEvent("wave_start");
+        e.Add("boss_fight", false);
+        e.Add("zombies_planned", plan.Length);
+        for (int kind = 0; kind < planned.Length; kind++)
+        {
+            e.Add("planned_" + ((ZombieKind)kind).ToString().ToLowerInvariant(), planned[kind]);
+        }
+        e.Add("chain_pairs", chainPairs);
+        e.Add("zombie_speed", speed);
+        e.Add("spawn_interval", interval);
+        e.Add("group_size", encounter.GroupSize);
+        e.Add("map_view", IsMapViewWave);
+        e.Add("barrels", ActiveBarrels.Count);
+        e.Add("crates", activeCrates.Count);
+        Analytics.AddPlayerState(e);
+        Analytics.Send(e);
     }
 
     // One entry per zombie of the wave (in spawn order): which kind it is.
@@ -1126,6 +1239,7 @@ public class WaveSpawner : MonoBehaviour
             {
                 barrel.Activate(WordBank.PickBarrelWord(UsedFirstLetters()), hud);
                 ActiveBarrels.Add(barrel);
+                LogProp("barrel", barrel.Word, barrel.Position, Barrel.BlastRadius);
             }
         }
         foreach (SupplyCrate crate in encounter.Crates)
@@ -1134,8 +1248,24 @@ public class WaveSpawner : MonoBehaviour
             {
                 crate.Activate(WordBank.PickCrateWord(crate.Kind, UsedFirstLetters()), hud);
                 activeCrates.Add(crate);
+                LogProp("crate_" + crate.Kind.ToString().ToLowerInvariant(), crate.Word, crate.Position, 0f);
             }
         }
+    }
+
+    // The "prop" analytics event: a barrel or crate got its word (it can be typed now).
+    private static void LogProp(string kind, string word, Vector3 position, float blastRadius)
+    {
+        AnalyticsEvent e = Analytics.NewEvent("prop");
+        e.Add("kind", kind);
+        e.Add("word", word);
+        if (blastRadius > 0f)
+        {
+            e.Add("blast_radius", blastRadius);
+        }
+        e.Add("x", position.x);
+        e.Add("z", position.z);
+        Analytics.Send(e);
     }
 
     // The fight is over: barrels and crates left behind cannot be typed any more.
@@ -1194,6 +1324,14 @@ public class WaveSpawner : MonoBehaviour
         boss = Boss.Create(encounter.BossStand, player.position, this, hud);
         hud.ShowBossBar(bossName);
 
+        AnalyticsEvent e = Analytics.NewEvent("wave_start");
+        e.Add("boss_fight", true);
+        e.Add("boss_health", boss.Health);
+        e.Add("barrels", ActiveBarrels.Count);
+        e.Add("crates", activeCrates.Count);
+        Analytics.AddPlayerState(e);
+        Analytics.Send(e);
+
         // 2. Wait until it is dead.
         while (boss.IsAlive)
         {
@@ -1203,7 +1341,7 @@ public class WaveSpawner : MonoBehaviour
         // Zombies it summoned fall down with it.
         foreach (Zombie minion in new List<Zombie>(aliveZombies))
         {
-            minion.KillByBlast(boss.BodyCenter);
+            minion.KillByBlast(boss.BodyCenter, "boss_died");
         }
 
         // 3. Let it sink into the ground.

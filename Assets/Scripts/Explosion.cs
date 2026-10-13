@@ -3,7 +3,7 @@
 // Everything that blows up goes through Explosion.Detonate: red (explosive)
 // zombies, barrels and lure bombs.
 //
-//   Explosion.Detonate(position, 4f, null, 150f);
+//   Explosion.Detonate(position, 4f, null, 150f, report);
 //
 // DAMAGE (at once, only while the game is being played):
 //   1. every alive zombie within the radius dies (Zombie.KillByBlast). The
@@ -47,8 +47,10 @@ public class Explosion : MonoBehaviour
 
     // Blows up at center (a point on the ground) with the given radius. See the
     // comment at the top of the file. chain: the chain reaction this explosion
-    // belongs to, or null to start a new one.
-    public static void Detonate(Vector3 center, float radius, ExplosionChain chain, float bossDamage)
+    // belongs to, or null to start a new one. report: the "blast" analytics
+    // event of a NEW chain, filled in by whatever set it off (see ExplosionChain).
+    public static void Detonate(Vector3 center, float radius, ExplosionChain chain, float bossDamage,
+        AnalyticsEvent report)
     {
         // Every Detonate ends with exactly one chain.End(), so a new chain
         // needs its matching Begin() here.
@@ -56,6 +58,7 @@ public class Explosion : MonoBehaviour
         {
             chain = new ExplosionChain();
             chain.Begin();
+            chain.Report = report;
         }
         chain.NoteExplosion(center); // the chain's points pop up where it started
 
@@ -83,7 +86,7 @@ public class Explosion : MonoBehaviour
         {
             HitZombies(waveSpawner, chain);
             HitBarrels(waveSpawner, chain);
-            HitBoss(waveSpawner, bossDamage);
+            HitBoss(waveSpawner, chain, bossDamage);
         }
 
         chain.End();
@@ -113,8 +116,8 @@ public class Explosion : MonoBehaviour
             Vector3 zombiePosition = zombie.Position;
             float zombieBlastRadius = zombie.BlastRadius;
 
-            zombie.KillByBlast(center);
-            chain.Kills += 1;
+            zombie.KillByBlast(center, "blast");
+            chain.NoteKill(zombie);
 
             // A red zombie caught in the blast goes off too, a moment later.
             // (Not the red zombie this explosion comes from: it stands on the centre.)
@@ -145,7 +148,7 @@ public class Explosion : MonoBehaviour
     }
 
     // 3. The boss: barrels, lure bombs and red zombies (the boss summons them) hurt it.
-    private void HitBoss(WaveSpawner waveSpawner, float bossDamage)
+    private void HitBoss(WaveSpawner waveSpawner, ExplosionChain chain, float bossDamage)
     {
         Boss boss = waveSpawner.CurrentBoss;
         if (boss == null || !boss.IsAlive || bossDamage <= 0f)
@@ -156,6 +159,7 @@ public class Explosion : MonoBehaviour
         if (FlatDistance(boss.BodyCenter, center) <= radius + BossReach)
         {
             boss.TakeBlastDamage(bossDamage);
+            chain.BossDamage += bossDamage;
         }
     }
 
@@ -166,7 +170,7 @@ public class Explosion : MonoBehaviour
         delayedExplosions += 1;
         yield return new WaitForSeconds(ChainDelay);
         delayedExplosions -= 1;
-        Detonate(position, blastRadius, chain, 0f);
+        Detonate(position, blastRadius, chain, 0f, null);
     }
 
     // Distance measured on the ground (the height difference is ignored), like the rings.

@@ -154,9 +154,13 @@ public class LureBomb : MonoBehaviour
         fuseTimer += Time.deltaTime;
         if (fuseTimer >= FuseSeconds)
         {
+            AnalyticsEvent report = Analytics.NewEvent("blast");
+            report.Add("source", "lure");
+            report.Add("lured_now", CountLured()); // counted while this bomb still lures
+
             Active.Remove(this);
             IsLuring = false;
-            Explosion.Detonate(transform.position, BlastRadius, null, BossDamage);
+            Explosion.Detonate(transform.position, BlastRadius, null, BossDamage, report);
             Destroy(gameObject);
             return;
         }
@@ -168,6 +172,25 @@ public class LureBomb : MonoBehaviour
             ball.sharedMaterial = Palette.Lit(blinkOn ? Palette.BombBlink : Palette.Bomb);
             blinkTimer = Mathf.Lerp(FirstBlinkInterval, LastBlinkInterval, fuseTimer / FuseSeconds);
         }
+    }
+
+    // For analytics: how many zombies this bomb is luring right now (the
+    // zombies for which it is the closest luring bomb in reach).
+    private int CountLured()
+    {
+        int count = 0;
+        if (GameManager.Instance == null || GameManager.Instance.Spawner == null)
+        {
+            return 0;
+        }
+        foreach (Zombie zombie in GameManager.Instance.Spawner.AliveZombies)
+        {
+            if (zombie != null && zombie.IsAlive && FindLure(zombie.Position) == this)
+            {
+                count += 1;
+            }
+        }
+        return count;
     }
 
     // The list is static (it survives a scene reload), so a bomb must always leave it.

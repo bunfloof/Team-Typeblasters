@@ -243,6 +243,11 @@ public class Boss : MonoBehaviour
         string word = slot.Limb.IsHead ? WordBank.PickBossWord(used) : WordBank.PickWord(used, ZombieKind.Explosive);
         slot.SetWord(word);
 
+        AnalyticsEvent e = Analytics.NewEvent("boss_word");
+        e.Add("part", slot.Limb.IsHead ? "head" : slot.Limb.Name.Contains("Arm") ? "arm" : "leg");
+        e.Add("word", word);
+        Analytics.Send(e);
+
         // During a FRENZY a new word (the head's next one, a limb growing back)
         // is short too; its real word comes back when the frenzy ends.
         if (Powers.IsFrenzy)
@@ -364,6 +369,14 @@ public class Boss : MonoBehaviour
     private IEnumerator PerformAttack(Attack attack)
     {
         attacking = true;
+
+        AnalyticsEvent e = Analytics.NewEvent("boss_attack");
+        e.Add("attack", attack.ToString().ToLowerInvariant());
+        e.Add("angry", angry);
+        e.Add("boss_health", Health);
+        Analytics.AddPlayerState(e);
+        Analytics.Send(e);
+
         if (attack == Attack.Stomp)
         {
             yield return Stomp();
@@ -665,7 +678,7 @@ public class Boss : MonoBehaviour
         if (limb.IsHead)
         {
             ShowDamage(slot.LabelAnchor, headDamage * scale);
-            TakeHit(headDamage * scale);
+            TakeHit(headDamage * scale, "head_word");
             if (IsAlive)
             {
                 GiveNewWord(slot); // the head never falls off: it just gets a new word
@@ -674,7 +687,7 @@ public class Boss : MonoBehaviour
         }
 
         ShowDamage(slot.LabelAnchor, limbWordDamage * scale);
-        TakeHit(limbWordDamage * scale);
+        TakeHit(limbWordDamage * scale, "limb_word");
         if (!IsAlive)
         {
             return;
@@ -698,7 +711,7 @@ public class Boss : MonoBehaviour
         hud.ShowFloatingText(limb.Block.transform.position + Vector3.up, text, Color.yellow);
         CameraDirector.Shake(0.35f);
         StartCoroutine(FallOff(limb));
-        TakeHit(limbSeverDamage * (Powers.IsFrenzy ? FrenzyWordDamageScale : 1f));
+        TakeHit(limbSeverDamage * (Powers.IsFrenzy ? FrenzyWordDamageScale : 1f), "limb_off");
         if (!IsAlive)
         {
             return;
@@ -767,11 +780,12 @@ public class Boss : MonoBehaviour
         if (IsAlive)
         {
             hud.ShowFloatingText(BodyCenter + Vector3.up * 2f, "-" + Mathf.RoundToInt(damage), Palette.WordBarrel);
-            TakeHit(damage);
+            TakeHit(damage, "blast");
         }
     }
 
-    private void TakeHit(float damage)
+    // cause (for analytics): "head_word", "limb_word", "limb_off", "blast" or "quiz_right".
+    private void TakeHit(float damage, string cause)
     {
         if (!IsAlive)
         {
@@ -780,6 +794,13 @@ public class Boss : MonoBehaviour
         Health = Mathf.Max(0f, Health - damage);
         hud.SetBossHealth(Health, maxHealth);
         Shake();
+
+        AnalyticsEvent e = Analytics.NewEvent("boss_hit");
+        e.Add("cause", cause);
+        e.Add("damage", damage);
+        e.Add("boss_health", Health); // after the hit; 0 = this hit killed it
+        e.Add("angry", angry);
+        Analytics.Send(e);
 
         if (Health <= 0f)
         {
@@ -799,6 +820,11 @@ public class Boss : MonoBehaviour
     {
         Health = Mathf.Min(maxHealth, Health + amount);
         hud.SetBossHealth(Health, maxHealth);
+
+        AnalyticsEvent e = Analytics.NewEvent("boss_heal");
+        e.Add("amount", amount);
+        e.Add("boss_health", Health);
+        Analytics.Send(e);
     }
 
     // ---- The quiz ----
@@ -856,6 +882,19 @@ public class Boss : MonoBehaviour
             yield break; // Die already cleared the quiz
         }
 
+        // Analytics: the question and what the player did with it.
+        AnalyticsEvent e = Analytics.NewEvent("quiz");
+        e.Add("question_index", QuizBank.LastPickedIndex);
+        e.Add("question", question.Question);
+        e.Add("answers", string.Join(" | ", question.Answers)); // in screen order: left, middle, right
+        e.Add("correct_position", question.CorrectIndex);       // 0 = left
+        e.Add("chosen_position", chosenAnswer == null ? -1 : answers.IndexOf(chosenAnswer)); // -1 = too slow
+        e.Add("result", chosenAnswer == null ? "timeout" : chosenAnswer.Word == question.CorrectAnswer ? "right" : "wrong");
+        e.Add("seconds", elapsed);                              // quiz timer (stops while frozen)
+        e.Add("boss_health", Health);
+        Analytics.AddPlayerState(e);
+        Analytics.Send(e);
+
         // 3. The verdict.
         Vector3 textPosition = BodyCenter + Vector3.up * 3.5f;
         if (chosenAnswer == null)
@@ -867,7 +906,7 @@ public class Boss : MonoBehaviour
             hud.ShowFloatingText(textPosition, "CRITICAL HIT!", Color.yellow);
             CameraDirector.Shake(0.6f);
             GameManager.Instance.AddKill();
-            TakeHit(quizCorrectDamage);
+            TakeHit(quizCorrectDamage, "quiz_right");
         }
         else
         {

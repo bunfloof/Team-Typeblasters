@@ -60,6 +60,7 @@ public class EnergyOrb : MonoBehaviour, ITypingTarget
         orb.hud = hud;
         orb.IsAlive = true;
         orb.speed = Vector3.Distance(position, AimPoint()) / Mathf.Max(0.1f, flightSeconds);
+        orb.launchTime = Time.time;
 
         orb.Label = hud.CreateWordLabel(new Vector2(0.5f, 0f)); // centred above the orb
         orb.Label.color = Palette.WordOrb; // pink like the orb, so it reads as "orb: type it exactly"
@@ -141,11 +142,34 @@ public class EnergyOrb : MonoBehaviour, ITypingTarget
         // Too late: it hits the player.
         if (Vector3.Distance(transform.position, aim) <= HitPlayerDistance)
         {
-            GameManager.Instance.TakeDamage(damage);
+            AnalyticsEvent hit = Analytics.NewEvent("damage");
+            hit.Add("source", "orb");
+            hit.Add("attacker_word", Word);
+            hit.Add("attacker_word_length", Word.Length);
+            hit.Add("attacker_letters_typed", TypedCount);
+            hit.Add("attacker_seconds_alive", Time.time - launchTime);
+            GameManager.Instance.TakeDamage(damage, false, hit, null);
             hud.FlashRed();
+            LogEnd("hit_player");
             Vanish();
             Destroy(gameObject);
         }
+    }
+
+    // ---- Analytics: one "orb" event per orb, when it is gone ----
+
+    private float launchTime; // game time it was fired
+
+    // outcome: "shot" (its word was typed), "hit_player" or "boss_died".
+    private void LogEnd(string outcome)
+    {
+        AnalyticsEvent e = Analytics.NewEvent("orb");
+        e.Add("outcome", outcome);
+        e.Add("word", Word);
+        e.Add("word_length", Word.Length);
+        e.Add("letters_typed", TypedCount);
+        e.Add("seconds_alive", Time.time - launchTime);
+        Analytics.Send(e);
     }
 
     // ---- ITypingTarget ----
@@ -205,6 +229,7 @@ public class EnergyOrb : MonoBehaviour, ITypingTarget
             return;
         }
         GameManager.Instance.AddKill();
+        LogEnd("shot");
         Vanish();
         StartCoroutine(Burst());
     }
@@ -216,6 +241,7 @@ public class EnergyOrb : MonoBehaviour, ITypingTarget
         {
             return;
         }
+        LogEnd("boss_died");
         Vanish();
         StartCoroutine(Burst());
     }

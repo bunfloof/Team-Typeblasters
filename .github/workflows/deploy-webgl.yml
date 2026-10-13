@@ -3,7 +3,7 @@
 # the build is uploaded straight to Pages).
 #
 # The site is served at https://<owner>.github.io/<repository>/ , for example
-# https://bunfloof.github.io/Team12-Lu_Ma/ (the path is case-sensitive).
+# https://bunfloof.github.io/Team-Typeblasters/ (the path is case-sensitive).
 # Nothing below names the owner, so after the repository is transferred to an
 # organization this keeps working unchanged; only the link changes (GitHub does
 # not redirect the old Pages link).
@@ -14,6 +14,10 @@
 #   UNITY_LICENSE   full contents of Unity_lic.ulf (Unity Personal license)
 #   UNITY_EMAIL     email of the Unity account that activated that license
 #   UNITY_PASSWORD  password of that Unity account
+# Optional, for a separate permanent Vercel link per build (see the Vercel step):
+#   VERCEL_TOKEN       token from vercel.com/account/tokens
+#   VERCEL_ORG_ID      "orgId" in .vercel/project.json after running `vercel link`
+#   VERCEL_PROJECT_ID  "projectId" in the same file
 
 name: Build and deploy WebGL
 
@@ -75,6 +79,31 @@ jobs:
         uses: actions/upload-pages-artifact@v5
         with:
           path: build/WebGL/WebGL
+
+      # Also sends the same build to Vercel. Every Vercel deploy gets its own
+      # permanent link (https://<project>-<random>-<team>.vercel.app), so older
+      # builds stay playable after newer ones go out. The GitHub Pages link
+      # above always shows only the newest build.
+      # The link is printed on the run's Summary page and listed under
+      # Deployments in the Vercel dashboard.
+      # Skipped (not failed) when the Vercel secrets are not set on this repo.
+      - name: Deploy to Vercel (unique link per build)
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::notice::Vercel secrets not set, skipping the Vercel deploy."
+            exit 0
+          fi
+          # The Unity build ran in Docker as root and left root-owned folders in
+          # the runner's home, so Vercel gets a fresh home folder of its own.
+          export HOME="$RUNNER_TEMP/vercel-home"
+          mkdir -p "$HOME"
+          url=$(npx --yes vercel@latest deploy build/WebGL/WebGL --prod --yes --token "$VERCEL_TOKEN")
+          echo "Vercel link for this build: $url"
+          echo "### Vercel link for commit \`${GITHUB_SHA::7}\`: $url" >> "$GITHUB_STEP_SUMMARY"
 
   deploy:
     name: Publish to GitHub Pages

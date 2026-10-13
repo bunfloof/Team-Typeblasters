@@ -34,5 +34,9 @@ public static class Tutorial
 
         shown.Add(key);
         hud.ShowHint(text, seconds);
+
+        AnalyticsEvent e = Analytics.NewEvent("hint");
+        e.Add("key", key);
+        Analytics.Send(e);
     }
 }

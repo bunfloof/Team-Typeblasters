@@ -95,6 +95,32 @@ public class TypingController : MonoBehaviour
         get { return Time.time - lastTypingTime; }
     }
 
+    // ---- Analytics: one "word" event per typing attempt ----
+    // An attempt starts with the first letter of a word and ends when the word
+    // is finished, dropped (Backspace, or a FRENZY swapping the words), its
+    // target is gone (blown up, reached the player...), or the run ends
+    // ("run_ended", see LogOpenAttempt).
+    private bool attemptActive;
+    private string attemptTarget;       // what kind of target, e.g. "zombie_runner"
+    private string attemptWord;         // its word when the first letter was typed
+    private bool attemptCaseSensitive;
+    private int attemptCandidates;      // targets the first letter matched (2+ = a word family)
+    private int attemptCorrectKeys;
+    private int attemptWrongKeys;
+    private int attemptRockets;         // RPG rockets fired by this attempt
+    private bool attemptFrenzy;         // a FRENZY was on when its first letter was typed
+    private float attemptFirstKeyTime;  // game time of the first and the last correct key
+    private float attemptLastKeyTime;
+    private int attemptTargetId;        // zombie_id of the target (-1 = not a zombie)
+    private float attemptStartPlayTime; // the run's play seconds at the first key (the timeline position)
+    private readonly System.Text.StringBuilder attemptKeyMs = new System.Text.StringBuilder(); // "0,180,320,..." ms of each correct key after the first
+
+    // Letters typed into the current word so far (0 when nothing is being typed).
+    public int LettersTypedInWord
+    {
+        get { return attemptActive ? attemptCorrectKeys : 0; }
+    }
+
 #if ENABLE_INPUT_SYSTEM
     private Keyboard keyboard;        // the keyboard we are listening to
     private string pendingText = "";  // characters typed since the last Update
@@ -205,7 +231,7 @@ public class TypingController : MonoBehaviour
             candidates.RemoveAll(candidate => !candidate.IsAlive);
             if (candidates.Count == 0)
             {
-                EndRun();
+                EndRun("target_gone");
             }
         }
 
@@ -218,7 +244,7 @@ public class TypingController : MonoBehaviour
             }
             candidates.Clear();
             lastTypingTime = Time.time;
-            EndRun();
+            EndRun("dropped");
         }
 
         // ---- 5b. 1: aim the lure bomb while held (arrow keys steer it), throw on release ----
@@ -367,10 +393,11 @@ public class TypingController : MonoBehaviour
             FindTargetsStartingWith(typed, candidates);
             if (candidates.Count == 0)
             {
-                WrongKey();
+                WrongKey(typed);
                 return;
             }
             wordsFinished = 0;
+            StartAttempt();
         }
 
         // Keep only the candidates whose next character is this one.
@@ -384,7 +411,7 @@ public class TypingController : MonoBehaviour
         }
         if (scratch.Count == 0)
         {
-            WrongKey(); // matches none of them: nothing changes, the combo drops by one
+            WrongKey(typed); // matches none of them: nothing changes, the combo drops by one
             return;
         }
 
@@ -399,11 +426,18 @@ public class TypingController : MonoBehaviour
         candidates.Clear();
         candidates.AddRange(scratch);
         GameManager.Instance.OnCorrectKey();
+        attemptCorrectKeys += 1;
+        attemptLastKeyTime = Time.time;
+        if (attemptKeyMs.Length > 0)
+        {
+            attemptKeyMs.Append(',');
+        }
+        attemptKeyMs.Append(Mathf.RoundToInt((Time.time - attemptFirstKeyTime) * 1000f));
         AdvanceCandidates();
 
         if (candidates.Count == 0)
         {
-            EndRun();
+            EndRun("finished");
         }
     }
 
@@ -420,7 +454,7 @@ public class TypingController : MonoBehaviour
             candidate.ResetProgress();
         }
         candidates.Clear();
-        EndRun();
+        EndRun("dropped_by_frenzy");
     }
 
     // Types one letter into every candidate: a shot at the nearest one, or the
@@ -442,6 +476,10 @@ public class TypingController : MonoBehaviour
             if (candidate.IsWordComplete)
             {
                 bool rocket = GameManager.Instance.Powers.ConsumeRocket();
+                if (rocket)
+                {
+                    attemptRockets += 1;
+                }
                 Bullet.Fire(candidate, true, rocket);
                 wordsFinished += 1;
                 anyFinished = true;
@@ -468,8 +506,11 @@ public class TypingController : MonoBehaviour
 
     // A run of typing is over (every candidate finished, dropped or gone). If
     // it finished 2 or more words (hunt, then hunter), it was a WORD CHAIN.
-    private void EndRun()
+    // outcome (for analytics): "finished", "dropped", "dropped_by_frenzy" or
+    // "target_gone" ("run_ended" comes from LogOpenAttempt).
+    private void EndRun(string outcome)
     {
+        LogAttempt(outcome);
         if (wordsFinished >= 2)
         {
             GameManager.Instance.AddWordChain(wordsFinished);
@@ -477,11 +518,150 @@ public class TypingController : MonoBehaviour
         wordsFinished = 0;
     }
 
-    private void WrongKey()
+    // typed: the key that was wrong.
+    private void WrongKey(char typed)
     {
+        LogWrongKey(typed);
+
         // Progress is NOT reset; the player only loses the combo.
         GameManager.Instance.OnWrongKey();
         hud.FlashRed();
+    }
+
+    // ---- Analytics ----
+
+    // The first letter of a word was typed: a new attempt begins.
+    private void StartAttempt()
+    {
+        ITypingTarget target = NearestCandidate();
+        attemptActive = true;
+        attemptTarget = Analytics.TargetType(target);
+        attemptWord = target != null ? target.Word : "";
+        attemptCaseSensitive = target != null && target.IsCaseSensitive;
+        attemptCandidates = candidates.Count;
+        attemptCorrectKeys = 0;
+        attemptWrongKeys = 0;
+        attemptRockets = 0;
+        attemptFrenzy = Powers.IsFrenzy;
+        attemptFirstKeyTime = Time.time;
+        attemptLastKeyTime = Time.time;
+        attemptTargetId = Analytics.TargetId(target);
+        attemptStartPlayTime = GameManager.Instance.Stats.Seconds;
+        attemptKeyMs.Length = 0;
+    }
+
+    // Called by GameManager when the run ends (death, win, Restart): a word
+    // still half-typed is logged too, with outcome "run_ended".
+    public void LogOpenAttempt()
+    {
+        LogAttempt("run_ended");
+    }
+
+    // The "word" event: one typing attempt from its first letter to its end.
+    private void LogAttempt(string outcome)
+    {
+        if (!attemptActive)
+        {
+            return;
+        }
+        attemptActive = false;
+
+        AnalyticsEvent e = Analytics.NewEvent("word");
+        e.Add("outcome", outcome);
+        e.Add("target", attemptTarget);
+        e.Add("target_id", attemptTargetId);
+        e.Add("word", attemptWord);
+        e.Add("word_length", attemptWord.Length);
+        e.Add("word_style", WordStyle(attemptWord, attemptCaseSensitive));
+        e.Add("case_sensitive", attemptCaseSensitive);
+        e.Add("candidates", attemptCandidates);
+        e.Add("words_finished", wordsFinished);  // 2+ = a WORD CHAIN
+        e.Add("correct_keys", attemptCorrectKeys);
+        e.Add("wrong_keys", attemptWrongKeys);
+        e.Add("rockets", attemptRockets);
+        // From the first to the last correct key (game time). With n correct
+        // keys there are n - 1 gaps between them.
+        e.Add("typing_seconds", attemptLastKeyTime - attemptFirstKeyTime);
+        e.Add("start_t_play", attemptStartPlayTime);
+        e.Add("key_ms", attemptKeyMs.ToString());
+        e.Add("frenzy_on", attemptFrenzy);
+        Analytics.Send(e);
+    }
+
+    // The "wrong_key" event. "stray": no word was being typed and the key
+    // started none. "case_only": the right letter in the wrong case (Hard
+    // level and energy orbs are case-sensitive).
+    private void LogWrongKey(char typed)
+    {
+        AnalyticsEvent e = Analytics.NewEvent("wrong_key");
+        e.Add("typed", typed.ToString());
+
+        ITypingTarget nearest = NearestCandidate();
+        if (attemptActive && nearest != null)
+        {
+            attemptWrongKeys += 1;
+            char expected = nearest.NextLetter;
+            e.Add("stray", false);
+            e.Add("expected", expected.ToString());
+            e.Add("case_only", char.ToUpperInvariant(typed) == char.ToUpperInvariant(expected));
+            e.Add("target", Analytics.TargetType(nearest));
+            e.Add("target_id", Analytics.TargetId(nearest));
+            e.Add("letter_index", attemptCorrectKeys); // 0 = the first letter
+            e.Add("word_length", nearest.Word.Length);
+        }
+        else
+        {
+            // Did it start a word if the case is ignored? (e.g. "h" for "Hunter" on Hard)
+            ITypingTarget sameLetter = null;
+            foreach (ITypingTarget target in spawner.GetTypingTargets())
+            {
+                if (!target.IsWordComplete && char.ToUpperInvariant(target.Word[0]) == char.ToUpperInvariant(typed))
+                {
+                    sameLetter = target;
+                    break;
+                }
+            }
+            e.Add("stray", true);
+            e.Add("case_only", sameLetter != null);
+            e.Add("target", Analytics.TargetType(sameLetter));
+            e.Add("target_id", Analytics.TargetId(sameLetter));
+            if (sameLetter != null)
+            {
+                e.Add("expected", sameLetter.Word[0].ToString());
+            }
+        }
+        Analytics.Send(e);
+    }
+
+    // How a word is written: "plain" (not case-sensitive), or for a
+    // case-sensitive word "lower", "title" (first letter capital), "mixed"
+    // (capitals elsewhere) or "symbols" (anything but letters, e.g. "Sp@rk" or "Hunter!").
+    private static string WordStyle(string word, bool caseSensitive)
+    {
+        if (!caseSensitive || word.Length == 0)
+        {
+            return "plain";
+        }
+        bool capitalLater = false;
+        foreach (char character in word)
+        {
+            if (!char.IsLetter(character))
+            {
+                return "symbols";
+            }
+        }
+        for (int i = 1; i < word.Length; i++)
+        {
+            if (char.IsUpper(word[i]))
+            {
+                capitalLater = true;
+            }
+        }
+        if (capitalLater)
+        {
+            return "mixed";
+        }
+        return char.IsUpper(word[0]) ? "title" : "lower";
     }
 
     // Fills 'found' with every alive target whose word starts with the typed character.

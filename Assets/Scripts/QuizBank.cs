@@ -162,6 +162,12 @@ public static class QuizBank
     // question is never asked twice in a row. -1 = none asked yet.
     private static int lastPickedIndex = -1;
 
+    // The index of the question Pick returned last (for analytics).
+    public static int LastPickedIndex
+    {
+        get { return lastPickedIndex; }
+    }
+
     // Returns a random question (never the same as last time) with its answers
     // in a random order. Prefers questions whose answers' first letters are not
     // in usedFirstLetters (UPPERCASE first letters of words already on screen).

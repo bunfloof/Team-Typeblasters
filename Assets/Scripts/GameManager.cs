@@ -5,7 +5,8 @@
 //   - score, combo and player health
 //   - the run's statistics (accuracy, speed, best combo...) for the end screen
 //   - starting the game and restarting (reloading the scene)
-//   - pausing (Esc) and resuming with a 3-2-1 countdown. While paused,
+//   - pausing (Esc, or the browser tab being hidden: PauseForHiddenTab) and
+//     resuming with a 3-2-1 countdown. While paused,
 //     Time.timeScale is 0, so everything that uses game time (movement, spawn
 //     timers, boss attacks) freezes; the countdown uses real time.
 //
@@ -29,7 +30,7 @@ public enum GameState
 {
     Start,    // Start panel is showing, waiting for the Start button / Enter
     Playing,  // riding, fighting, typing
-    Paused,   // Esc was pressed: pause panel, or the 3-2-1 countdown before play resumes
+    Paused,   // Esc was pressed or the browser tab was hidden: pause panel, or the 3-2-1 countdown before play resumes
     Tip,      // a first-time tip box is showing (game frozen); Enter or OK continues
     Won,      // the last area was cleared, "You survived" panel is showing (Enter / Restart: back to the Start panel)
     Lost      // health reached 0, "You died" panel is showing (Enter / Restart: back to the Start panel)
@@ -65,6 +66,17 @@ public class GameManager : MonoBehaviour
     public Powers Powers
     {
         get { return powers; }
+    }
+
+    // Used by Analytics to describe what is going on.
+    public WaveSpawner Spawner
+    {
+        get { return spawner; }
+    }
+
+    public TypingController Typing
+    {
+        get { return typing; }
     }
 
     private void Awake()
@@ -148,6 +160,10 @@ public class GameManager : MonoBehaviour
     public void SetTipsEnabled(bool on)
     {
         tipsEnabled = on;
+
+        AnalyticsEvent e = Analytics.NewEvent("tips_toggle");
+        e.Add("on", on);
+        Analytics.Send(e);
     }
 
     // True while the player is in the middle of something a tip box would
@@ -185,12 +201,18 @@ public class GameManager : MonoBehaviour
         RequestTip("power " + kind, title, text, kind == PowerKind.Lure ? Palette.LureCrate : Palette.FreezeCrate);
     }
 
+    // The tip box on screen now, and when it opened (real time), for analytics.
+    private string openTipKey;
+    private float openTipSince;
+
     private void ShowNextTip()
     {
         PendingTip tip = pendingTips.Dequeue();
         State = GameState.Tip;
         Time.timeScale = 0f; // everything waits for the player
         hud.ShowPowerTip(tip.Title, tip.Text, tip.Color);
+        openTipKey = tip.Key;
+        openTipSince = Time.realtimeSinceStartup;
     }
 
     // Called by the tip box's OK button and by Enter (TypingController).
@@ -200,6 +222,11 @@ public class GameManager : MonoBehaviour
         {
             return;
         }
+
+        AnalyticsEvent e = Analytics.NewEvent("tip");
+        e.Add("key", openTipKey);
+        e.Add("seconds_open", Time.realtimeSinceStartup - openTipSince);
+        Analytics.Send(e);
 
         hud.HidePowerTip();
         if (pendingTips.Count > 0)
@@ -221,6 +248,17 @@ public class GameManager : MonoBehaviour
 
         State = GameState.Playing;
         hud.HideAllPanels();
+
+        // Logged before the waves begin: the first ride logs right away.
+        Analytics.StartRun();
+        AnalyticsEvent e = Analytics.NewEvent("run_start");
+        e.Add("run_number", Analytics.RunNumber);              // runs ever started in this browser
+        e.Add("runs_this_session", Analytics.RunsThisSession); // runs since the page was loaded (each tip shows once per page load)
+        e.Add("tips_enabled", tipsEnabled);
+        e.Add("hard_level", HardLevel.Active != null);
+        Analytics.Send(e);
+        Analytics.FlushSoon();
+
         spawner.BeginWaves();
 
         // Before anything happens, explain what the combo buys (a tip box; the
@@ -253,6 +291,12 @@ public class GameManager : MonoBehaviour
     // the same screen as when the game is first opened.
     public void RestartGame()
     {
+        // Restarted in the middle of a run (from the pause panel): it ends here.
+        if (State == GameState.Playing || State == GameState.Paused || State == GameState.Tip)
+        {
+            LogRunEnd("restart");
+        }
+
         // Tips still waiting (the player was busy until the end) were never
         // seen: forget them, so they are shown in the next run.
         foreach (PendingTip tip in pendingTips)
@@ -261,6 +305,7 @@ public class GameManager : MonoBehaviour
         }
 
         Time.timeScale = 1f; // in case we restart from the pause panel
+        Analytics.EndRun();  // the Start panel's events belong to no run
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
@@ -295,13 +340,13 @@ public class GameManager : MonoBehaviour
     {
         if (State == GameState.Playing)
         {
-            PauseGame();
+            Pause("esc_key");
         }
         else if (State == GameState.Paused)
         {
             if (resumeCountdown != null)
             {
-                PauseGame();
+                Pause("esc_key");
             }
             else
             {
@@ -310,23 +355,54 @@ public class GameManager : MonoBehaviour
         }
     }
 
+    // For a pause button, if one is added (none is wired now).
     public void PauseGame()
+    {
+        Pause("button");
+    }
+
+    // Called by AnalyticsSender when the browser tab is hidden (the player
+    // switched tabs or minimised the window): pause, so nobody dies while away.
+    public void PauseForHiddenTab()
+    {
+        if (State == GameState.Playing || (State == GameState.Paused && resumeCountdown != null))
+        {
+            Pause("tab_hidden");
+        }
+    }
+
+    private float pausedSince; // real time the current pause began (for analytics)
+
+    // reason: what paused it, for analytics ("esc_key", "tab_hidden", "button").
+    private void Pause(string reason)
     {
         if (State != GameState.Playing && State != GameState.Paused)
         {
             return;
         }
 
+        bool duringCountdown = resumeCountdown != null;
         if (resumeCountdown != null)
         {
             StopCoroutine(resumeCountdown);
             resumeCountdown = null;
+        }
+        if (State == GameState.Playing)
+        {
+            pausedSince = Time.realtimeSinceStartup; // a pause during the countdown continues the same pause
         }
 
         State = GameState.Paused;
         Time.timeScale = 0f;
         hud.HideCountdown();
         hud.ShowPausePanel();
+
+        AnalyticsEvent e = Analytics.NewEvent("pause");
+        e.Add("reason", reason);
+        e.Add("during_countdown", duringCountdown);
+        Analytics.AddPlayerState(e);
+        Analytics.Send(e);
+        Analytics.FlushSoon();
     }
 
     // Called by the Resume button on the pause panel (wired in the scene) and by OnPauseKey().
@@ -353,6 +429,10 @@ public class GameManager : MonoBehaviour
         resumeCountdown = null;
         State = GameState.Playing;
         Time.timeScale = 1f;
+
+        AnalyticsEvent e = Analytics.NewEvent("resume");
+        e.Add("paused_seconds", Time.realtimeSinceStartup - pausedSince); // the countdown included
+        Analytics.Send(e);
     }
 
     // ---- Typing statistics (called by TypingController) ----
@@ -469,11 +549,22 @@ public class GameManager : MonoBehaviour
     // lightHit: a bite from a zombie met on the run between two fights (an
     // ambush, see WaveSpawner.RideAmbush) only costs one step of combo; any
     // other hit resets the combo.
-    public void TakeDamage(int amount, bool lightHit = false)
+    // hit: the "damage" analytics event, with what hit the player already
+    // filled in (attacker: the zombie biting, or null, so it is not counted as
+    // one of the zombies around). The player's state is added here, BEFORE the
+    // damage. No default values on purpose: a call that forgets the analytics
+    // does not compile.
+    public void TakeDamage(int amount, bool lightHit, AnalyticsEvent hit, Zombie attacker)
     {
         if (State != GameState.Playing)
         {
             return;
+        }
+
+        if (hit != null)
+        {
+            hit.Add("amount", amount);
+            Analytics.AddPlayerState(hit, attacker); // health, combo... before the hit
         }
 
         Health -= amount;
@@ -493,11 +584,22 @@ public class GameManager : MonoBehaviour
             ResetCombo();
         }
 
+        if (hit != null)
+        {
+            hit.Add("health_after", Health);
+            hit.Add("combo_after", Combo);
+            hit.Add("fatal", Health <= 0);
+            Analytics.Send(hit); // sent before "run_end", so a death reads in order
+        }
+
         if (Health <= 0)
         {
+            fatalAttacker = attacker; // logs its own "zombie" event (bite) right after
             EndGame(false);
         }
     }
+
+    private Zombie fatalAttacker; // the zombie whose bite ended the run (analytics)
 
     // ---- The end ----
 
@@ -514,6 +616,9 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        // Logged while the state still says Playing (and before the waves stop).
+        LogRunEnd(won ? "won" : "lost");
+
         State = won ? GameState.Won : GameState.Lost;
         if (!won)
         {
@@ -522,5 +627,37 @@ public class GameManager : MonoBehaviour
 
         Stats.Score = Score;
         hud.ShowResults(won, Stats);
+    }
+
+    // The "run_end" analytics event: how the run ended and its statistics.
+    // outcome: "won", "lost" or "restart" (Restart pressed in the middle of a run).
+    // Then what was still going on is logged too: the word being typed
+    // ("word", outcome "run_ended") and every zombie still alive ("zombie",
+    // outcome "run_over"), which would otherwise never be logged.
+    private void LogRunEnd(string outcome)
+    {
+        AnalyticsEvent e = Analytics.NewEvent("run_end");
+        e.Add("outcome", outcome);
+        e.Add("run_number", Analytics.RunNumber);
+        e.Add("kills", Stats.Kills);
+        e.Add("best_combo", Stats.BestCombo);
+        e.Add("biggest_multi_kill", Stats.BiggestMultiKill);
+        e.Add("correct_keys", Stats.CorrectKeys);
+        e.Add("wrong_keys", Stats.WrongKeys);
+        e.Add("accuracy", Stats.Accuracy);
+        e.Add("words_per_minute", Stats.WordsPerMinute); // over all play time, rides included
+        Analytics.AddPlayerState(e, fatalAttacker); // the biter logs itself ("bite"), not "run_over"
+        Analytics.Send(e);
+
+        typing.LogOpenAttempt();
+        foreach (Zombie zombie in spawner.AliveZombies)
+        {
+            if (zombie != null && zombie.IsAlive && zombie != fatalAttacker)
+            {
+                zombie.LogRunOver();
+            }
+        }
+        spawner.LogLurkersRunOver(); // ambushers still hiding on the road (not in AliveZombies)
+        Analytics.FlushSoon();
     }
 }

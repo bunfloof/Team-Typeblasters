@@ -113,6 +113,21 @@ public class Zombie : MonoBehaviour, ITypingTarget
     private float flinchTimer;
     private bool lookingFrozen;
 
+    // ---- Analytics (see LogSpawn, LogEnd and the red zombie's "blast" report) ----
+    public int Id { get; private set; }       // zombie_id: its number within the run
+    private bool spawnLogged;                 // "zombie_spawn" sent (on its first active frame)
+    private float spawnPlayTime;              // play seconds of the run when it appeared
+    private float wokePlayTime = -1f;         // ...when an ambusher woke up (-1 = never)
+    private float firstTypedPlayTime = -1f;   // ...when its first letter was first typed (-1 = never)
+    private float lastStartPlayTime = -1f;    // ...when its first letter was typed the LAST time
+    private int typingStarts;                 // how many times the player started a word of it (Backspace or a FRENZY make them start again; an armored zombie's second word counts too)
+    private int wordShifts;                   // purple shifters: how often the word changed
+    // RED zombies: how many OTHER zombies stood inside the ring
+    private int inRingAtFirstLetter = -1;     // ...when the player first typed its first letter
+    private int inRingAtLastStart = -1;       // ...when the player typed its first letter the last time
+    private int inRingMaxWhileTyped;          // ...at most while its word was being typed (any attempt)
+    private int inRingMax;                    // ...at most during its whole life
+
     // Called by WaveSpawner right after it creates this zombie.
     //   exit: the point just outside its doorway; it walks there first.
     public void Setup(string word, float moveSpeed, Transform playerTransform, WaveSpawner owner,
@@ -127,6 +142,8 @@ public class Zombie : MonoBehaviour, ITypingTarget
 
         IsAlive = true;
         TypedCount = 0;
+        Id = Analytics.NextZombieId();
+        spawnPlayTime = GameManager.Instance.Stats.Seconds;
         IsExplosive = kind == ZombieKind.Explosive;
         HasArmor = kind == ZombieKind.Armored;
         crowdDistance = Random.Range(0.8f, 1.8f);
@@ -264,6 +281,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
     {
         if (hardTyping) word = HardLevel.ComplexWord(word);
         IsLurking = false;
+        wokePlayTime = GameManager.Instance.Stats.Seconds;
         if (realWord != null && !Powers.IsFrenzy)
         {
             ExitFrenzy(); // a frenzy started and ended while it waited
@@ -288,6 +306,24 @@ public class Zombie : MonoBehaviour, ITypingTarget
             return;
         }
 
+        // Analytics: the first frame it is active (an ambusher: once the player saw it).
+        if (!spawnLogged)
+        {
+            spawnLogged = true;
+            LogSpawn();
+        }
+
+        // Analytics: how full the red ring is.
+        if (IsExplosive)
+        {
+            int inRing = CountInRing();
+            inRingMax = Mathf.Max(inRingMax, inRing);
+            if (TypedCount > 0)
+            {
+                inRingMaxWhileTyped = Mathf.Max(inRingMaxWhileTyped, inRing);
+            }
+        }
+
         // Freeze power: stand still, icy blue.
         SetFrozenLook(Powers.IsFrozen);
         if (Powers.IsFrozen)
@@ -305,6 +341,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
                 used.Remove(char.ToUpperInvariant(Word[0]));
                 Word = HardLevel.ComplexWord(WordBank.PickWord(used, ZombieKind.Armored));
                 wordChangeTimer = 0f;
+                wordShifts += 1;
                 RefreshLabel();
                 spawner.Hud.ShowFloatingText(LabelAnchor, "WORD SHIFT!", new Color(0.8f, 0.4f, 1f));
             }
@@ -368,7 +405,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         // Safety net: wandered off somewhere it can never matter again.
         if (FlatDistance(transform.position, player.position) > LostDistance)
         {
-            Remove();
+            Remove("lost");
         }
     }
 
@@ -468,6 +505,23 @@ public class Zombie : MonoBehaviour, ITypingTarget
     {
         TypedCount += 1;
         RefreshLabel();
+
+        // Its first letter was just typed: the player started its word (again).
+        if (TypedCount == 1)
+        {
+            float now = GameManager.Instance.Stats.Seconds;
+            typingStarts += 1;
+            lastStartPlayTime = now;
+            if (IsExplosive)
+            {
+                inRingAtLastStart = CountInRing();
+            }
+            if (firstTypedPlayTime < 0f)
+            {
+                firstTypedPlayTime = now;
+                inRingAtFirstLetter = inRingAtLastStart;
+            }
+        }
     }
 
     // Called when the player drops this zombie as their target.
@@ -507,8 +561,23 @@ public class Zombie : MonoBehaviour, ITypingTarget
         if (IsExplosive)
         {
             // The explosion kills this zombie too (it stands in its own blast) and
-            // scores everything it kills together.
-            Explosion.Detonate(transform.position, BlastRadius, null, BlastBossDamage);
+            // scores everything it kills together. The "blast" analytics event
+            // is sent when the whole chain reaction is over (ExplosionChain).
+            AnalyticsEvent report = Analytics.NewEvent("blast");
+            report.Add("source", "red");
+            report.Add("zombie_id", Id);
+            report.Add("word_length", Word.Length);
+            report.Add("frenzy_word", realWord != null);
+            report.Add("blast_radius", BlastRadius);
+            report.Add("in_ring_now", CountInRing());
+            report.Add("in_ring_at_last_start", inRingAtLastStart);   // when the attempt that blew it up began
+            report.Add("in_ring_at_first_letter", inRingAtFirstLetter); // when its word was first started
+            report.Add("in_ring_max_while_typed", inRingMaxWhileTyped);
+            report.Add("in_ring_max", inRingMax);
+            report.Add("typing_starts", typingStarts);                // more than 1: started, dropped, started again
+            report.Add("typing_seconds", GameManager.Instance.Stats.Seconds - lastStartPlayTime); // last start to blast
+            report.Add("distance_to_player", FlatDistance(transform.position, player.position));
+            Explosion.Detonate(transform.position, BlastRadius, null, BlastBossDamage, report);
             return;
         }
 
@@ -524,12 +593,13 @@ public class Zombie : MonoBehaviour, ITypingTarget
         Vector3 away = transform.position - player.position;
         away.y = 0f;
         KnockOver(away.normalized * 4f + Vector3.up * 2f);
-        Remove();
+        Remove("shot");
     }
 
     // Killed by an explosion centred at center. No score here: the explosion's
     // chain scores all its kills together. The body is thrown away from center.
-    public void KillByBlast(Vector3 center)
+    // cause (for analytics): "blast", or "boss_died" for the boss's minions.
+    public void KillByBlast(Vector3 center, string cause)
     {
         if (!IsAlive)
         {
@@ -549,7 +619,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
             away.y = 0f;
         }
         KnockOver(away.normalized * 8f + Vector3.up * 6f);
-        Remove();
+        Remove(cause);
     }
 
     // The first word of an armored zombie: the armour breaks (it turns grey) and
@@ -586,12 +656,24 @@ public class Zombie : MonoBehaviour, ITypingTarget
     // Reached the player: bites (damage) and is shoved away. No score.
     private void Attack()
     {
-        GameManager.Instance.TakeDamage(damagePerHit, IsAmbusher); // an ambusher only costs one step of combo
+        AnalyticsEvent hit = Analytics.NewEvent("damage");
+        hit.Add("source", "zombie_" + Kind.ToString().ToLowerInvariant());
+        hit.Add("ambusher", IsAmbusher);
+        hit.Add("attacker_id", Id);
+        hit.Add("attacker_word", Word);
+        hit.Add("attacker_word_length", Word.Length);
+        hit.Add("attacker_letters_typed", TypedCount); // more than 0: the player was typing this very zombie
+        hit.Add("attacker_seconds_alive", GameManager.Instance.Stats.Seconds - spawnPlayTime);
+        if (IsAmbusher)
+        {
+            hit.Add("attacker_seconds_since_wake", GameManager.Instance.Stats.Seconds - wokePlayTime); // how long the player saw it
+        }
+        GameManager.Instance.TakeDamage(damagePerHit, IsAmbusher, hit, this); // an ambusher only costs one step of combo
 
         Vector3 away = transform.position - player.position;
         away.y = 0f;
         KnockOver(away.normalized * 4f + Vector3.up * 2f);
-        Remove();
+        Remove("bite");
     }
 
     // Lets go of the capsule and throws it: it tumbles, then sinks into the floor.
@@ -606,12 +688,14 @@ public class Zombie : MonoBehaviour, ITypingTarget
     {
         if (IsAlive)
         {
-            Remove();
+            Remove(IsLurking ? "never_seen" : "rode_past");
         }
     }
 
     // Takes this zombie out of the game. No score here: also used when it reaches the player.
-    private void Remove()
+    // outcome (for analytics): how it left: "shot", "blast", "bite", "rode_past",
+    // "never_seen", "lost" or "boss_died" ("run_over" comes from LogRunOver).
+    private void Remove(string outcome)
     {
         // Destroy() only really happens at the end of the frame, so other scripts
         // check IsAlive to know right away that this zombie is gone.
@@ -619,6 +703,93 @@ public class Zombie : MonoBehaviour, ITypingTarget
         spawner.RemoveZombie(this);
         Destroy(Label.gameObject); // the word is on the HUD, not a child of this zombie
         Destroy(gameObject);
+        LogEnd(outcome);
+    }
+
+    // Called by GameManager when the run ends (death, win, Restart) while this
+    // zombie is still around: its "zombie" event, outcome "run_over".
+    public void LogRunOver()
+    {
+        LogEnd("run_over");
+    }
+
+    // The "zombie_spawn" analytics event: it appeared (its word is on screen).
+    private void LogSpawn()
+    {
+        AnalyticsEvent e = Analytics.NewEvent("zombie_spawn");
+        e.Add("zombie_id", Id);
+        e.Add("kind", Kind.ToString().ToLowerInvariant());
+        e.Add("word", Word);
+        e.Add("word_length", Word.Length);
+        e.Add("ambusher", IsAmbusher);
+        e.Add("chain_linked", IsChainLinked);
+        e.Add("frenzy_word", realWord != null);
+        if (IsExplosive)
+        {
+            e.Add("blast_radius", BlastRadius);
+        }
+        AddPosition(e);
+        Analytics.Send(e);
+    }
+
+    // Map position and distance to the player (analytics).
+    private void AddPosition(AnalyticsEvent e)
+    {
+        e.Add("x", transform.position.x);
+        e.Add("z", transform.position.z);
+        e.Add("distance_to_player", FlatDistance(transform.position, player.position));
+    }
+
+    // The "zombie" analytics event: one per zombie, when it leaves the game
+    // (or when the run ends, see LogRunOver).
+    private void LogEnd(string outcome)
+    {
+        AnalyticsEvent e = Analytics.NewEvent("zombie");
+        e.Add("zombie_id", Id);
+        e.Add("outcome", outcome);
+        e.Add("kind", Kind.ToString().ToLowerInvariant());
+        e.Add("ambusher", IsAmbusher);
+        e.Add("chain_linked", IsChainLinked);
+        e.Add("word", Word);
+        e.Add("word_length", Word.Length);
+        e.Add("frenzy_word", realWord != null);
+        e.Add("letters_typed", TypedCount);
+        e.Add("was_targeted", firstTypedPlayTime >= 0f);
+        e.Add("typing_starts", typingStarts);
+        e.Add("seconds_alive", GameManager.Instance.Stats.Seconds - spawnPlayTime); // an ambusher's includes its lurking
+        if (IsAmbusher)
+        {
+            e.Add("seconds_since_wake", wokePlayTime >= 0f ? GameManager.Instance.Stats.Seconds - wokePlayTime : -1f);
+        }
+        if (Kind == ZombieKind.Shifter)
+        {
+            e.Add("word_shifts", wordShifts);
+        }
+        if (IsExplosive)
+        {
+            e.Add("blast_radius", BlastRadius);
+            e.Add("in_ring_at_first_letter", inRingAtFirstLetter);
+            e.Add("in_ring_at_last_start", inRingAtLastStart);
+            e.Add("in_ring_max_while_typed", inRingMaxWhileTyped);
+            e.Add("in_ring_max", inRingMax);
+        }
+        AddPosition(e);
+        Analytics.Send(e);
+    }
+
+    // RED zombies: how many OTHER zombies stand inside the ring right now,
+    // measured like Explosion does (flat distance from this zombie's feet).
+    private int CountInRing()
+    {
+        int count = 0;
+        foreach (Zombie other in spawner.AliveZombies)
+        {
+            if (other != this && other.IsAlive && FlatDistance(other.transform.position, transform.position) <= BlastRadius)
+            {
+                count += 1;
+            }
+        }
+        return count;
     }
 
     // Rebuilds the rich text: typed letters in yellow, remaining letters in white.

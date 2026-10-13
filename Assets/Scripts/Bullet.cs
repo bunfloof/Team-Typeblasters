@@ -129,7 +129,10 @@ public class Bullet : MonoBehaviour
     {
         if (GameManager.Instance.State == GameState.Playing)
         {
-            Explosion.Detonate(transform.position, RocketBlastRadius, null, RocketBossDamage);
+            AnalyticsEvent report = Analytics.NewEvent("blast");
+            report.Add("source", "rpg");
+            report.Add("target", Analytics.TargetType(target)); // the word the rocket was fired at
+            Explosion.Detonate(transform.position, RocketBlastRadius, null, RocketBossDamage, report);
         }
     }
 

@@ -108,10 +108,14 @@ public class Barrel : MonoBehaviour, ITypingTarget
 
         if (chain == null)
         {
+            // Shot by the player: this barrel starts the chain reaction.
             chain = new ExplosionChain();
+            chain.Report = Analytics.NewEvent("blast");
+            chain.Report.Add("source", "barrel");
         }
+        chain.NoteBarrel();
         chain.Begin(); // Explosion.Detonate calls the matching End()
-        Explosion.Detonate(transform.position, BlastRadius, chain, BossDamage);
+        Explosion.Detonate(transform.position, BlastRadius, chain, BossDamage, null); // the chain has its report already
     }
 
     // Rebuilds the rich text: typed letters in yellow, the rest in orange.

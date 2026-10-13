@@ -97,6 +97,12 @@ public class SupplyCrate : MonoBehaviour, ITypingTarget
         }
         Destroy(cube);
 
+        // Analytics: what the crate gave (health is capped at full, a power at 3).
+        AnalyticsEvent e = Analytics.NewEvent("crate");
+        e.Add("kind", Kind.ToString().ToLowerInvariant());
+        e.Add("word", Word);
+        e.Add("health_before", GameManager.Instance.Health);
+
         // A power that is already full gives nothing, so it shows no "+1" either.
         string text = null;
         if (Kind == SupplyKind.Health)
@@ -122,6 +128,10 @@ public class SupplyCrate : MonoBehaviour, ITypingTarget
         {
             hud.ShowFloatingText(transform.position + Vector3.up, text, Palette.WordCrate);
         }
+
+        e.Add("power_gained", Kind != SupplyKind.Health && text != null); // false: that power was full
+        Analytics.AddPlayerState(e); // health after, charges after...
+        Analytics.Send(e);
     }
 
     // Rebuilds the rich text: typed letters in yellow, the rest in green.
