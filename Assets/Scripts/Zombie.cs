@@ -809,4 +809,9 @@ public class Zombie : MonoBehaviour, ITypingTarget
         b.y = 0f;
         return Vector3.Distance(a, b);
     }
+
+    public void ApplySpeedMultiplier(float multiplier)
+    {
+        speed *= Mathf.Max(0f, multiplier);
+    }
 }
