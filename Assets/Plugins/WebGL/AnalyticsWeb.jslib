@@ -55,6 +55,10 @@ mergeInto(LibraryManager.library, {
       }).then(function (response) {
         clearTimeout(timer);
         report(response.status);
+        // Read the reply (it is tiny). Until it is read, Chrome counts a
+        // keepalive request as still in flight, and once those add up to
+        // 64 KB it refuses every new one ("Failed to fetch").
+        response.text().catch(function () {});
       }).catch(function () {
         clearTimeout(timer);
         report(0);
