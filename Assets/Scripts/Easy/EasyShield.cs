@@ -333,7 +333,7 @@ public class EasyShield : MonoBehaviour
     private void Block(Zombie zombie)
     {
         Vector3 at = zombie.LabelAnchor;
-        zombie.KillByBlast(player.position); // thrown away from the player; no score, and a red zombie does NOT explode
+        zombie.KillByBlast(player.position, "shield"); // thrown away from the player; no score, and a red zombie does NOT explode
 
         spawner.Hud.ShowFloatingText(at, "BLOCKED!", shieldColor);
         CameraDirector.Shake(0.25f);
