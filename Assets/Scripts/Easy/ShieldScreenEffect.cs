@@ -1,6 +1,6 @@
 // ShieldScreenEffect.cs
 // ---------------------------------------------------------------------------
-// EASY SCENE ONLY (currently).
+// Shared shield visual effect used by all scenes.
 //
 // Creates a full-screen UI overlay with a procedurally generated blue
 // vignette: the edges are tinted while the center remains transparent.

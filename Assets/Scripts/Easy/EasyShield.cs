@@ -1,6 +1,7 @@
 // EasyShield.cs
 // ---------------------------------------------------------------------------
-// EASY SCENE ONLY.
+// Shared shield mechanic used by all scenes. The class name is retained for
+// existing scene references.
 //
 // Implements a one-use shield that the player raises by typing a word.
 // Press SPACE to start, provided no zombie word is currently being typed.
@@ -275,7 +276,7 @@ public class EasyShield : MonoBehaviour
             }
             else
             {
-                spawner.Hud.FlashRed(); // only a flash: no combo loss in Easy
+                spawner.Hud.FlashRed(); // shield typing mistakes do not cost combo
             }
         }
     }
