@@ -666,10 +666,12 @@ public class WaveSpawner : MonoBehaviour
     private const float AmbushSlowDistance = 35f; // ...within this many metres
     private const float AmbushStartGap = 30f;     // the first one waits at least this far along the run
     private const float AmbushEndGap = 12f;       // none closer than this to the stop (the fight is about to start)
-    private const float AmbushSpacing = 30f;      // metres of run per ambush zombie (a 179 m run: about 3)
-    private const float AmbushMinApart = 18f;     // metres between two of them along the road
+    [Header("Ambush on the run")]
+    [SerializeField] private float ambushSpacing = 30f;   // metres of run per ambush zombie
+    [SerializeField] private float ambushMinApart = 18f;  // metres between two of them along the road
+    [SerializeField] private int ambushMax = 3;
+    private const float AmbushWakeGap = 2.5f;   // seconds between two ambushers waking
     private const float AmbushSearchStep = 2f;    // looking for a hidden spot: try every 2 m further along
-    private const int AmbushMax = 3;
 
     private readonly List<Zombie> ambushers = new List<Zombie>();
     private int ambushersPlaced;  // this run between two fights (for analytics)
@@ -685,12 +687,12 @@ public class WaveSpawner : MonoBehaviour
 
         // 1. Place them now, before the camera can see them: evenly along the
         //    run, each moved further along until the camera cannot see it.
-        int count = Mathf.Clamp(Mathf.FloorToInt((runLength - AmbushStartGap - AmbushEndGap) / AmbushSpacing) + 1, 0, AmbushMax);
-        float lastPlaced = -AmbushMinApart;
+        int count = Mathf.Clamp(Mathf.FloorToInt((runLength - AmbushStartGap - AmbushEndGap) / ambushSpacing) + 1, 0, ambushMax);
+        float lastPlaced = -ambushMinApart;
         for (int i = 0; i < count; i++)
         {
             float planned = Mathf.Lerp(AmbushStartGap, runLength - AmbushEndGap, count == 1 ? 0.5f : (float)i / (count - 1));
-            float along = Mathf.Max(planned, lastPlaced + AmbushMinApart);
+            float along = Mathf.Max(planned, lastPlaced + ambushMinApart);
             while (along <= runLength - AmbushEndGap && CanBeSeen(AmbushSpot(along, i)))
             {
                 along += AmbushSearchStep;
@@ -702,6 +704,8 @@ public class WaveSpawner : MonoBehaviour
             PlaceAmbusher(AmbushSpot(along, i), speed, rail.Travelled + along);
             lastPlaced = along;
         }
+
+        float nextWake = 0f;
 
         // 2. While riding: wake the ones the player can see, drop the ones
         //    ridden past, and slow down while a woken one is in the road ahead.
@@ -726,9 +730,10 @@ public class WaveSpawner : MonoBehaviour
                     ambushers.RemoveAt(i);
                     continue;
                 }
-                if (zombie.IsLurking && CanBeSeen(zombie.Position))
+                if (zombie.IsLurking && Time.time >= nextWake && CanBeSeen(zombie.Position))
                 {
                     WakeAmbusher(zombie);
+                    // nextWake = Time.time + AmbushWakeGap;
                 }
                 if (!zombie.IsLurking && fromPlayer.magnitude < AmbushSlowDistance && Vector3.Dot(fromPlayer, rail.Heading) > 0f)
                 {

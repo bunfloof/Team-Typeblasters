@@ -38,7 +38,7 @@ public enum GameState
 
 public class GameManager : MonoBehaviour
 {
-    private static readonly string[] levelScenes = { "Easy", "Prototype", "Hard" };
+    private static readonly string[] levelScenes = { "Easy", "Normal", "Hard" };
     public static int LevelCount => levelScenes.Length;
     public static string LevelName(int index) => levelScenes[index];
     public static int CurrentLevelIndex => System.Array.IndexOf(levelScenes, SceneManager.GetActiveScene().name);

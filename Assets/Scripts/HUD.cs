@@ -470,7 +470,7 @@ public class HUD : MonoBehaviour
     public void ShowStartPanel()
     {
         HideAllPanels();
-        BuildLevelSelection();
+        // BuildLevelSelection();
         startPanel.SetActive(true);
     }
 
