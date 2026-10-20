@@ -164,6 +164,7 @@ public static class Analytics
         e.Add("screen_height", Screen.height);
         e.Add("screen_dpi", Screen.dpi);
         e.Add("language", Application.systemLanguage.ToString());
+        e.Add("touch_controls", TouchControls.Active); // a phone / tablet playing with the on-screen keyboard
         Send(e);
     }
 
