@@ -162,7 +162,7 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
             case Power.Freeze:
                 countText.text = "x" + powers.FreezeCharges;
                 statusText.text = Powers.IsFrozen ? "FROZEN!" : (powers.FreezeCharges > 0 ? "TAP" : "");
-                usable = powers.FreezeCharges > 0;
+                usable = powers.FreezeCharges > 0 || Powers.IsFrozen;
                 break;
             case Power.Shield:
                 countText.text = "x" + powers.ShieldCharges;
@@ -178,6 +178,10 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
                 {
                     statusText.text = "LOADED";
                 }
+                else if (!rocket && Powers.IsFrenzy)
+                {
+                    statusText.text = "ACTIVE";
+                }
                 else if (canBuy)
                 {
                     statusText.text = kept > 0 ? "TAP: USE HOLD: BUY" : "HOLD: BUY";
@@ -186,10 +190,13 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
                 {
                     statusText.text = kept > 0 ? "TAP: USE" : "";
                 }
-                usable = kept > 0 || canBuy || (rocket && powers.RocketLoaded);
+                usable = kept > 0 || canBuy || (rocket ? powers.RocketLoaded : Powers.IsFrenzy);
                 break;
         }
         bool pressed = ownerFinger != NoFinger;
+        bool active = power == Power.Lure ? powers.IsAiming : power == Power.Freeze ? Powers.IsFrozen
+            : power == Power.Shield ? Powers.IsShielded : power == Power.Frenzy ? Powers.IsFrenzy : powers.RocketLoaded;
+        background.color = Color.Lerp(Color.black, color, pressed ? 0.7f : active ? 0.6f : 0.35f);
         group.alpha = usable || pressed ? 1f : DimmedAlpha;
 
         // While a weapon button is held and a hold would buy: fill it like the

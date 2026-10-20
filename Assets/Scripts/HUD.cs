@@ -964,6 +964,7 @@ public class HUD : MonoBehaviour
         {
             if (powerPulseTimers[row] <= 0f)
             {
+                ApplyPowerRowLook(row, 0f, 0f); // active effects stay bright after the use pulse ends
                 continue;
             }
 
@@ -989,12 +990,22 @@ public class HUD : MonoBehaviour
         powerRows[row].localScale = new Vector3(scale, scale, 1f);
 
         Color color = PowerColor(row);
+        bool active = IsPowerRowActive(row);
+        flash = Mathf.Max(flash, active ? 0.7f : 0f);
         powerKeyCaps[row].color = Color.Lerp(Color.white, color, flash);
         powerNames[row].color = Color.Lerp(Color.white, color, flash);
 
         // No charges: the whole row is dimmed (but fully visible while it flashes).
-        float restAlpha = powerCharges[row] > 0 ? 1f : powerEmptyAlpha;
+        float restAlpha = active || powerCharges[row] > 0 ? 1f : powerEmptyAlpha;
         powerRowGroups[row].alpha = Mathf.Lerp(restAlpha, 1f, flash);
+    }
+
+    private static bool IsPowerRowActive(int row)
+    {
+        Powers powers = GameManager.Instance != null ? GameManager.Instance.Powers : null;
+        if (powers == null) return false;
+        return row == 0 ? powers.IsAiming : row == 1 ? Powers.IsFrozen
+            : row == FrenzyRow ? Powers.IsFrenzy : powers.RocketLoaded;
     }
 
     private static Color PowerColor(int row)

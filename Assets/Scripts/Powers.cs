@@ -332,13 +332,12 @@ public class Powers : MonoBehaviour
     // ---- Combo weapons (called by TypingController) ----
 
     // Key 3 (rocket = false) or key 4 (rocket = true), one key for two actions:
-    //   TAP  (released within TapMaxSeconds)  -> USE a kept weapon
+    //   RELEASE before BuyHoldSeconds -> USE a kept weapon
     //   HOLD (kept down for BuyHoldSeconds)   -> BUY one with the combo
     // While it is held, a bar under the weapon's slots fills up (HUD); let go
     // before it is full (and after a tap) and nothing happens. A click on a
     // slot always uses.
     public const float BuyHoldSeconds = 0.6f;
-    private const float TapMaxSeconds = 0.3f;
     private const float HoldBarDelay = 0.1f;    // the bar only shows after this (a tap never flashes it)
 
     private readonly float[] weaponHold = { -1f, -1f }; // seconds held: [0] = 3 FRENZY, [1] = 4 RPG; -1 = not held
@@ -346,6 +345,9 @@ public class Powers : MonoBehaviour
     public void WeaponKeyDown(bool rocket)
     {
         weaponHold[rocket ? 1 : 0] = 0f;
+        hud.ShowHint((rocket ? "RPG [4]" : "FRENZY [3]")
+            + ": release to USE; hold " + BuyHoldSeconds.ToString("0.0") + "s to BUY ("
+            + (rocket ? RocketCost : FrenzyCost) + " combo).", 2f);
     }
 
     public void WeaponKeyUp(bool rocket)
@@ -354,18 +356,9 @@ public class Powers : MonoBehaviour
         float held = weaponHold[index];
         weaponHold[index] = -1f;
         hud.SetWeaponHold(rocket, 0f);
-        if (held >= 0f && held <= TapMaxSeconds)
+        if (held >= 0f && held < BuyHoldSeconds)
         {
             TapWeapon(rocket);
-        }
-        else if (held > TapMaxSeconds)
-        {
-            // Held too long for a tap, let go before the buy: nothing happens
-            // in the game, but it was probably an attempt to buy.
-            AnalyticsEvent e = PowerEvent("hold_released", rocket ? "rpg" : "frenzy");
-            e.Add("held_seconds", held);
-            e.Add("could_buy", CanBuyNow(rocket));
-            SendPowerEvent(e);
         }
     }
 
@@ -401,6 +394,11 @@ public class Powers : MonoBehaviour
     // A tap: use a kept weapon, or say how to get one.
     private void TapWeapon(bool rocket)
     {
+        if (rocket ? RocketLoaded : IsFrenzy)
+        {
+            UseWeapon(rocket, "key"); // report ACTIVE / LOADED, even with no spare inventory
+            return;
+        }
         if (Kept(rocket) > 0)
         {
             UseWeapon(rocket, "key");
@@ -416,7 +414,7 @@ public class Powers : MonoBehaviour
         if (CanBuyWeapon(cost, weaponName)) // (if not, it shows why)
         {
             hud.ShowHint("HOLD " + (rocket ? "4" : "3") + " to get " + (rocket ? "an RPG" : "a FRENZY")
-                + " (tap = use one you have).", 2.5f);
+                + ": hold " + BuyHoldSeconds.ToString("0.0") + "s to BUY; release sooner to USE a kept one.", 2.5f);
         }
     }
 
@@ -479,6 +477,13 @@ public class Powers : MonoBehaviour
     private void UseWeapon(bool rocket, string via)
     {
         string item = rocket ? "rpg" : "frenzy";
+        if (rocket ? RocketLoaded : IsFrenzy)
+        {
+            hud.ShowHint(rocket ? "RPG LOADED: finish a word to fire. It has not been cancelled."
+                : "FRENZY ACTIVE: keep typing the shortened words.", 2.5f);
+            LogUseRefused(item, rocket ? "already_loaded" : "frenzy_on", via);
+            return;
+        }
         if (Kept(rocket) <= 0)
         {
             hud.ShowHint("No " + (rocket ? "RPG" : "FRENZY") + " kept. HOLD " + (rocket ? "4" : "3")
