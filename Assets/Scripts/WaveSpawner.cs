@@ -672,6 +672,7 @@ public class WaveSpawner : MonoBehaviour
             waveEnd.Add("correct_keys", stats.CorrectKeys - correctKeysAtStart);
             waveEnd.Add("wrong_keys", stats.WrongKeys - wrongKeysAtStart);
             waveEnd.Add("health_at_start", healthAtStart);
+            waveEnd.Add("dda_extra_zombies", encounter.IsBossFight ? 0 : extraZombiesThisWave); // on top of "zombies_planned" (wave_start)
             Analytics.AddPlayerState(waveEnd);
             Analytics.Send(waveEnd);
             Analytics.FlushSoon();
@@ -897,8 +898,11 @@ public class WaveSpawner : MonoBehaviour
 
     // ---- A zombie wave ----
 
+    private int extraZombiesThisWave; // ADAPTIVE DIFFICULTY's extra zombies in the wave being fought (analytics, "wave_end")
+
     private IEnumerator RunZombieWave(int wave, Encounter encounter)
     {
+        extraZombiesThisWave = 0;
         // 1. This wave's numbers. Wave 1 uses the base values.
         int zombiesThisWave = zombiesBase + zombiesPerWave * wave;
         float speed = zombieSpeed + zombieSpeedPerWave * (wave - 1);
@@ -931,7 +935,8 @@ public class WaveSpawner : MonoBehaviour
             SpawnPoint point = order[next % order.Count];
             next += 1;
 
-            int pack = Mathf.Min(Mathf.Max(1, encounter.GroupSize), zombiesThisWave - spawned);
+            // ADAPTIVE DIFFICULTY: a fast typist gets one more zombie per pack.
+            int pack = Mathf.Min(Mathf.Max(1, encounter.GroupSize) + DynamicDifficulty.PackBonus, zombiesThisWave - spawned);
             if (point.Door != null)
             {
                 point.Door.BurstOpen();
@@ -985,6 +990,24 @@ public class WaveSpawner : MonoBehaviour
             yield return new WaitForSeconds(interval * pack * DynamicDifficulty.SpawnIntervalFactor);
         }
 
+        // 2b. ADAPTIVE DIFFICULTY: a fast typist gets extra zombies at the end
+        //     of the wave (normal ones, and runners once runners have come),
+        //     a little quicker than the packs. None at or below the reference speed.
+        int extra = DynamicDifficulty.ExtraZombies(zombiesThisWave);
+        extraZombiesThisWave = extra;
+        for (int i = 0; i < extra; i++)
+        {
+            SpawnPoint point = order[next % order.Count];
+            next += 1;
+            if (point.Door != null)
+            {
+                point.Door.BurstOpen();
+            }
+            ZombieKind kind = wave >= runnerFirstWave && i % 3 == 2 ? ZombieKind.Runner : ZombieKind.Normal;
+            SpawnZombie(point, kind, speed);
+            yield return new WaitForSeconds(interval * 0.6f * DynamicDifficulty.SpawnIntervalFactor);
+        }
+
         // 3. Wait until every zombie of this wave is dead or removed.
         while (aliveZombies.Count > 0)
         {
@@ -1019,7 +1042,8 @@ public class WaveSpawner : MonoBehaviour
         e.Add("crates", activeCrates.Count);
         DynamicDifficulty.AddTo(e);
         e.Add("dda_pace_factor", DynamicDifficulty.PaceFactor);
-        e.Add("dda_spawn_factor", DynamicDifficulty.SpawnIntervalFactor);
+        e.Add("dda_spawn_factor", DynamicDifficulty.SpawnIntervalFactor); // zombie_speed and spawn_interval above are the level's own; these scale them
+        e.Add("dda_pack_bonus", DynamicDifficulty.PackBonus);              // added to group_size
         Analytics.AddPlayerState(e);
         Analytics.Send(e);
     }

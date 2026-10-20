@@ -46,23 +46,32 @@
 //    a ratio: going from 25 to 50 WPM is the same step as from 50 to 100.
 //
 // 4. SMOOTHING: the level actually used (Level) moves toward the target at
-//    most CalibrationRate per second while calibrating and TrackingRate per
-//    second after, with a small dead band. Zombies never visibly jump in speed,
-//    and the level cannot swing back and forth with each word.
+//    most CatchUpRate per second until it first reaches it after calibration
+//    (a few seconds, so the change lands inside the first wave), then at most
+//    TrackingRate per second, with a small dead band. Zombies never jump in
+//    speed, and the level cannot swing back and forth with each word.
 //
-// 5. WHAT IT CHANGES (all neutral at level 0):
+// 5. WHAT IT CHANGES (all neutral at level 0). Above 0 the curves are
+//    steeper than below: a fast typist kills a zombie the moment it can be
+//    read, so walking speed alone barely matters; what challenges them is
+//    MORE zombies on screen at once. Below 0 nothing is added or removed.
 //    PaceFactor          2^(0.42 x level)   zombie walking speed, spitters,
-//                                           the boss's attack clock, orbs
+//                        (0.55 above 0)     the boss's attack clock, orbs
 //                                           (Powers.EnemySpeedFactor)
 //    SpawnIntervalFactor 2^(-0.32 x level)  time between packs (WaveSpawner)
+//                        (-0.45 above 0)
+//    ExtraZombieFraction 0.35 x level       fast typists only: this much more
+//                                           of the wave comes at the end of it
+//    PackBonus           +1 from level 0.6  fast typists only: one more zombie
+//                                           in every pack
 //    ShortWordShift      -0.22 x level      chance of a short word for a
 //                                           normal zombie (WordBank.PickWord)
 //    WordLengthBias      0.6 x level        "best of two": slower typists
 //                                           tend to get the shorter of two
 //                                           words, faster ones the longer
 //    LongWordChance      fast typists only  some normal zombies carry long words
-//    The number of zombies in a wave never changes: the level is as long for
-//    everyone, it just comes faster or slower.
+//    For players at or below the reference speed the number of zombies never
+//    changes: the level is as long as designed, it just comes slower.
 //
 // Static (like TypingSettings) so the measured speed carries over from one
 // level to the next and to a Restart in the same session.
@@ -130,12 +139,16 @@ public static class DynamicDifficulty
 
     private const float MinLevel = -1.4f;
     private const float MaxLevel = 1.3f;
-    private const float CalibrationRate = 0.12f;    // level units per second while calibrating
-    private const float TrackingRate = 0.03f;       // ...and after (the whole range takes about a minute and a half)
+    private const float CatchUpRate = 0.25f;        // level units per second until the level first reaches its target after calibration
+    private const float TrackingRate = 0.08f;       // ...and after
     private const float DeadBand = 0.04f;
 
-    private const float PaceExponent = 0.42f;
+    private const float PaceExponent = 0.42f;       // below level 0 (slower typists)...
+    private const float PaceExponentUp = 0.55f;     // ...and above it (faster typists)
     private const float SpawnExponent = -0.32f;
+    private const float SpawnExponentUp = -0.45f;
+    private const float ExtraZombieSlope = 0.35f;   // fast typists: extra zombies per wave, as a fraction of the wave
+    private const float PackBonusLevel = 0.6f;      // fast typists: one more zombie per pack from this level
     private const float ShortWordSlope = -0.22f;
     private const float LengthBiasSlope = 0.6f;
 
@@ -151,6 +164,7 @@ public static class DynamicDifficulty
     private static float level;           // the level in use (smoothed)
     private static float lastKeyTime;     // Time.time of the last key (or of a target appearing)
     private static bool hadTargets;
+    private static bool converged;        // the level has reached its target once since calibration
     private static float sessionWpm = -1f; // the last measured speed this session (-1 = none yet)
 
     // True once the first CalibrationSeconds of typing have been measured in this run.
@@ -193,13 +207,13 @@ public static class DynamicDifficulty
     // Enemies' speed and attack clocks (multiplied into Powers.EnemySpeedFactor).
     public static float PaceFactor
     {
-        get { return Mathf.Pow(2f, PaceExponent * level); }
+        get { return Mathf.Pow(2f, (level > 0f ? PaceExponentUp : PaceExponent) * level); }
     }
 
     // Time between packs of zombies (WaveSpawner).
     public static float SpawnIntervalFactor
     {
-        get { return Mathf.Pow(2f, SpawnExponent * level); }
+        get { return Mathf.Pow(2f, (level > 0f ? SpawnExponentUp : SpawnExponent) * level); }
     }
 
     // Added to a normal zombie's chance of a short word (WordBank.PickWord).
@@ -212,6 +226,18 @@ public static class DynamicDifficulty
     public static float WordLengthBias
     {
         get { return Mathf.Clamp(LengthBiasSlope * level, -1f, 1f); }
+    }
+
+    // Fast typists only: extra zombies for a wave of 'waveSize' (0 at or below the reference speed).
+    public static int ExtraZombies(int waveSize)
+    {
+        return Mathf.RoundToInt(waveSize * ExtraZombieSlope * Mathf.Max(0f, level));
+    }
+
+    // Fast typists only: added to the size of every pack of zombies.
+    public static int PackBonus
+    {
+        get { return level >= PackBonusLevel ? 1 : 0; }
     }
 
     // Chance that a normal zombie gets a LONG word (only for fast typists, up to 20%).
@@ -234,6 +260,7 @@ public static class DynamicDifficulty
         accuracy = 0.95f;
         damagePenalty = 0f;
         Calibrated = false;
+        converged = false;
         hadTargets = false;
         lastKeyTime = Time.time;
         level = Enabled ? TargetLevel() : 0f; // starts there: no ramp at the start of a level
@@ -254,9 +281,13 @@ public static class DynamicDifficulty
 
         float target = Enabled ? TargetLevel() : 0f;
         float difference = target - level;
+        if (Calibrated && Mathf.Abs(difference) <= DeadBand)
+        {
+            converged = true;
+        }
         if (Mathf.Abs(difference) > DeadBand || !Enabled)
         {
-            float rate = Calibrated && Enabled ? TrackingRate : CalibrationRate;
+            float rate = converged && Enabled ? TrackingRate : CatchUpRate;
             level = Mathf.MoveTowards(level, target, rate * deltaTime);
         }
     }
@@ -349,6 +380,23 @@ public static class DynamicDifficulty
             Tutorial.Once("dda", "AUTO DIFFICULTY: tuned to your speed (about "
                 + Mathf.RoundToInt(EstimatedWpm) + " WPM). Change it in SETTINGS (pause with Esc).", 5f);
         }
+    }
+
+    // One line for the editor's debug readout (HUD): what the adaptive difficulty sees and does.
+    public static string DebugText()
+    {
+        if (!Enabled)
+        {
+            return "ADAPTIVE OFF";
+        }
+        return "ADAPTIVE  " + Mathf.RoundToInt(EstimatedWpm) + " WPM" + (Calibrated ? "" : " (measuring " + Mathf.FloorToInt(activeSeconds) + "s)")
+            + "   acc " + Mathf.RoundToInt(accuracy * 100f) + "%"
+            + "   level " + level.ToString("+0.00;-0.00") + " -> " + TargetLevel().ToString("+0.00;-0.00")
+            + "\nzombie speed x" + PaceFactor.ToString("0.00")
+            + "   spawn gap x" + SpawnIntervalFactor.ToString("0.00")
+            + "\nextra zombies +" + Mathf.RoundToInt(ExtraZombieSlope * Mathf.Max(0f, level) * 100f) + "%"
+            + "   pack +" + PackBonus
+            + "   short words " + Mathf.RoundToInt(100f * Mathf.Clamp(0.60f + ShortWordShift, 0.3f, 0.92f)) + "%";
     }
 
     // For analytics events ("run_end").

@@ -152,6 +152,40 @@ public class HUD : MonoBehaviour
         UpdateComboLook();
         UpdateHint();
         UpdateQuizPop();
+        UpdateAdaptiveReadout();
+    }
+
+    // ---- Adaptive difficulty readout (Unity editor only, top-left under the health bar) ----
+    // What DynamicDifficulty measures and changes, live, for testing and tuning.
+    // Never shown in a real build.
+
+    private TMP_Text adaptiveReadout; // null until the first frame of play in the editor
+
+    private void UpdateAdaptiveReadout()
+    {
+        if (!Application.isEditor)
+        {
+            return;
+        }
+        GameState state = GameManager.Instance != null ? GameManager.Instance.State : GameState.Start;
+        bool show = state == GameState.Playing || state == GameState.Paused || state == GameState.Tip;
+        if (adaptiveReadout == null)
+        {
+            if (!show)
+            {
+                return;
+            }
+            adaptiveReadout = CreateText(readoutLayer, "Adaptive Readout (editor only)", "", 20f, Vector2.zero);
+            PlaceRect(adaptiveReadout.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(40f, -78f), new Vector2(680f, 90f)); // left of the combo plate
+            adaptiveReadout.alignment = TextAlignmentOptions.TopLeft;
+            adaptiveReadout.color = new Color(0.55f, 1f, 0.75f);
+            adaptiveReadout.textWrappingMode = TextWrappingModes.NoWrap;
+        }
+        adaptiveReadout.gameObject.SetActive(show);
+        if (show)
+        {
+            adaptiveReadout.text = DynamicDifficulty.DebugText();
+        }
     }
 
     private void LateUpdate()
