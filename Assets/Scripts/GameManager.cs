@@ -308,6 +308,12 @@ public class GameManager : MonoBehaviour
         LoadLevelScene(SceneManager.GetActiveScene().name);
     }
 
+    // Called by the MENU buttons (Start, pause, win and lose panels): back to the Menu scene.
+    public void LoadMenu()
+    {
+        LoadLevelScene("Menu");
+    }
+
     // Level choices are available before play and after a run ends.
     public void SelectLevel(int index)
     {

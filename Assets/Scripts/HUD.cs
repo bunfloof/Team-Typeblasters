@@ -471,6 +471,7 @@ public class HUD : MonoBehaviour
     {
         HideAllPanels();
         // BuildLevelSelection();
+        BuildMenuButtons();
         startPanel.SetActive(true);
     }
 
@@ -1977,5 +1978,30 @@ public class HUD : MonoBehaviour
         rect.anchorMax = Vector2.one;
         rect.offsetMin = Vector2.zero;
         rect.offsetMax = Vector2.zero;
+    }
+
+    private bool menuButtonsBuilt;
+
+    // A MENU button on the Start, pause, win and lose panels.
+    private void BuildMenuButtons()
+    {
+        if (menuButtonsBuilt)
+        {
+            return;
+        }
+        menuButtonsBuilt = true;
+        AddMenuButton(startPanel.transform, new Vector2(0f, -435f));
+        AddMenuButton(pausePanel.transform, new Vector2(0f, -260f));
+        AddMenuButton(wonPanel.transform, new Vector2(0f, -450f));
+        AddMenuButton(lostPanel.transform, new Vector2(0f, -450f));
+    }
+
+    private void AddMenuButton(Transform panel, Vector2 position)
+    {
+        TMP_Text label = CreateButton(panel, "Menu Button", "MENU", position, () => GameManager.Instance.LoadMenu());
+        label.fontSize = 40f;
+        RectTransform rect = (RectTransform)label.transform.parent;
+        rect.sizeDelta = new Vector2(320f, 80f);
+        label.rectTransform.sizeDelta = rect.sizeDelta;
     }
 }
