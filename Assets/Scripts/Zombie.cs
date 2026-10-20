@@ -32,7 +32,7 @@
 //
 // Every kind's word is a light shade of its body colour (Palette.WordFor).
 // The word itself is styled for the TYPING DIFFICULTY (TypingSettings.Style):
-// lowercase on Easy, then mixed case, punctuation, digits and symbols.
+// lowercase on Easy, then mixed case, punctuation and symbols.
 //
 // Where it walks: out of its doorway first (to the spawn point's exit), then
 // straight at the player. If a lure bomb is on the ground nearby, it walks to

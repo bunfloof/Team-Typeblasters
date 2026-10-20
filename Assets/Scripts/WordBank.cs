@@ -112,16 +112,17 @@ public static class WordBank
     }
 
     // 3-6 characters, for the boss's energy orbs. Short, but typed EXACTLY:
-    // they mix upper and lower case, digits and symbols. Never use '<' or '>'
-    // (TextMeshPro would read them as rich-text tags) or spaces.
+    // they mix upper and lower case and symbols. Never use digits (the number
+    // keys are the powers), '<' or '>' (TextMeshPro would read them as
+    // rich-text tags) or spaces.
     private static readonly string[] OrbWords =
     {
-        "Zap!", "Hex#", "B00m", "Fry!", "Rot?", "@Burn", "#Doom", "$Void", "Kr@ck", "Sp@rk",
-        "Fl@re", "V0lt", "!Hit", "&Fear", "*Ash", "%Rip", "Nuk#", "Sh0ck", "Ion+", "Jolt!",
-        "Qu@ke", "Wisp~", "Emb#r", "T0xic", "Omen!", "Pyr0", "Lava*", "Mana=", "Ray^", "EMP!",
-        "Xen0n", "yELL", "dOOm", "cRaCk", "gl0w", "uRGe", "HeX", "Z@p", "k!LL", "BuRn!"
+        "Zap!", "Hex#", "Boom!", "Fry!", "Rot?", "@Burn", "#Doom", "$Void", "Kr@ck", "Sp@rk",
+        "Fl@re", "Volt*", "!Hit", "&Fear", "*Ash", "%Rip", "Nuk#", "Sh@ck", "Ion+", "Jolt!",
+        "Qu@ke", "Wisp~", "Emb#r", "Tox!c", "Omen!", "Pyro^", "Lava*", "Mana=", "Ray^", "EMP!",
+        "Xenon=", "yELL", "dOOm", "cRaCk", "gLoW", "uRGe", "HeX", "Z@p", "k!LL", "BuRn!"
     };
-    // (Extreme only. No orb word may contain the digits 1-4: those keys are the powers, see Powers.)
+    // (Extreme only. No orb word may contain a digit: the number keys are the powers, see Powers.)
 
     // Explosive barrels (orange words).
     private static readonly string[] BarrelWords =
@@ -204,7 +205,7 @@ public static class WordBank
     // not in usedFirstLetters, so typing it never picks a boss part by mistake.
     // usedFirstLetters must be UPPERCASE (fold with char.ToUpperInvariant).
     // A short common word styled for the typing difficulty; on Extreme, one of
-    // the hand-made OrbWords (case, digits and symbols mixed).
+    // the hand-made OrbWords (case and symbols mixed).
     public static string PickOrbWord(List<char> usedFirstLetters)
     {
         if (TypingSettings.Difficulty != TypingDifficulty.Extreme)

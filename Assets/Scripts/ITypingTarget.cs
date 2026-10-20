@@ -19,7 +19,7 @@ public interface ITypingTarget
     bool IsTargeted { get; }        // true while the player is typing this word
     // false: typing is case-insensitive; the word is stored UPPERCASE A-Z and shown
     // in lowercase (zombies, boss parts).
-    // true: every character must be typed exactly, including case, digits and
+    // true: every character must be typed exactly, including case and
     // symbols (the boss's energy orbs, e.g. "Sp@rk").
     bool IsCaseSensitive { get; }
     Vector3 Position { get; }       // used to pick the NEAREST target

@@ -12,7 +12,7 @@
 // Boss holds the long, hard ones for the boss's head (10-14 letters).
 //
 // To add words: type them into the right string, letters a-z only (no
-// apostrophes, digits or capitals; TypingSettings adds those on the harder
+// apostrophes, digits or capitals; TypingSettings adds capitals and symbols on the harder
 // difficulties). Duplicates are ignored. Word families ("work", "worker")
 // become WORD CHAINS automatically (WordBank.PickChainPair).
 // ---------------------------------------------------------------------------

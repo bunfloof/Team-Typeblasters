@@ -23,9 +23,10 @@
 //   - TYPING DIFFICULTY (TypingSettings, picked on the Start panel): on Easy
 //     words are stored UPPERCASE, shown in lowercase, and typing them is
 //     case-insensitive. On Medium, Hard and Extreme every word is
-//     case-sensitive and may contain punctuation (Hard) or digits and symbols
-//     (Extreme), which must be typed exactly. Digits and symbols are ignored
-//     while no case-sensitive word is on screen.
+//     case-sensitive and may contain punctuation (Hard) or symbols (Extreme),
+//     which must be typed exactly. Symbols are ignored while no
+//     case-sensitive word is on screen. No word ever contains a DIGIT (the
+//     number keys are the powers), so digit keys are never typing.
 //   - SPACE only counts when the word being typed expects one (a BRUTE's
 //     phrase, "cold dark night"); anywhere else it is ignored, never wrong.
 //   - A wrong key never resets progress. The screen flashes red and the
@@ -337,8 +338,14 @@ public class TypingController : MonoBehaviour
                 GameManager.Instance.Powers.TryUseFreeze();
                 continue;
             }
+            // No word ever contains a digit (the number keys are the powers),
+            // so the other digits are never typing: ignored, never a wrong key.
+            if (character >= '0' && character <= '9')
+            {
+                continue;
+            }
 
-            // Digits and symbols only matter while a case-sensitive word (any word
+            // Symbols only matter while a case-sensitive word (any word
             // above Easy, or an energy orb) is around; otherwise they are ignored.
             char upper = char.ToUpperInvariant(character);
             bool isLetter = upper >= 'A' && upper <= 'Z';
@@ -412,7 +419,7 @@ public class TypingController : MonoBehaviour
         return char.ToUpperInvariant(typed) == expected;
     }
 
-    // True if digits/symbols should count as key presses right now: the current
+    // True if symbols should count as key presses right now: the current
     // target is case-sensitive, or (no target yet) some case-sensitive target exists.
     private bool SymbolsMatter()
     {

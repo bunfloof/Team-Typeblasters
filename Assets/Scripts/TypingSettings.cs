@@ -14,12 +14,13 @@
 //   HARD     + punctuation, like a typing test: "water,", "Water.", "help?",
 //            "world's". PURPLE SHIFTERS appear: their word changes if you
 //            wait too long (start typing it to lock it).
-//   EXTREME  + numbers and symbols: "#water", "(Paper)", "level85",
-//            "user_07", "Rate*9". Shifters appear more often and change faster.
+//   EXTREME  + symbols: "#water", "(Paper)", "Rate*", "help?!", "Sp@rk".
+//            Shifters appear more often and change faster.
 //
-// Digits are only ever 0 and 5-9: the keys 1-4 are the powers (see
-// TypingController). A word never contains '<' or '>' (TextMeshPro would read
-// them as rich-text tags) or spaces.
+// A word NEVER contains a digit: the number keys are the powers and combo
+// weapons (1-4, see TypingController), and TypingController ignores every
+// digit key while typing. A word never contains '<' or '>' (TextMeshPro would
+// read them as rich-text tags) or spaces.
 //
 // A styled word keeps the FIRST LETTER rule (WordBank): a symbol in front
 // ("#water", "(paper)") is only used when no other word on screen starts with
@@ -117,7 +118,7 @@ public static class TypingSettings
             case TypingDifficulty.Hard:
                 return "+ punctuation, and words that CHANGE     <color=#9AA0AA>e.g.</color>  water,   House.   world's";
             default:
-                return "+ numbers and symbols, faster shifters     <color=#9AA0AA>e.g.</color>  #water   (House)   level85";
+                return "+ symbols, faster shifters     <color=#9AA0AA>e.g.</color>  #water   (House)   Sp@rk   help?!";
         }
     }
 
@@ -135,19 +136,21 @@ public static class TypingSettings
 
     // ---- Styling a word ----
 
-    // Digits a word may contain (1-4 are the power keys).
-    private const string SafeDigits = "056789";
-
     // Hard: punctuation after the word (a comma most often, as in real text).
     private static readonly string[] EndPunctuation = { ",", ",", ",", ".", ".", "!", "?", ";", ":", "'s" };
 
-    // Extreme: a symbol in front, a pair around the word, or a symbol + digit after it.
+    // Extreme: a symbol in front, a pair around the word, a symbol after it, or
+    // a symbol in place of a letter. Never a digit (see the top of this file).
     private static readonly string[] FrontSymbols = { "#", "@", "$", "&" };
     private static readonly string[][] Wraps =
     {
         new[] { "(", ")" }, new[] { "\"", "\"" }, new[] { "'", "'" }, new[] { "[", "]" }, new[] { "{", "}" }
     };
-    private static readonly string[] JoinSymbols = { "+", "*", "=", "/", "~", "^", "-" };
+    private static readonly string[] EndSymbols = { "+", "*", "=", "~", "^", "-", "?!", "!!", "..." };
+
+    // Extreme: letters that can be swapped for a look-alike symbol ("Sp@rk").
+    private const string SwapLetters = "asi";
+    private const string SwapSymbols = "@$!";
 
     // A WordBank word (UPPERCASE A-Z) styled for the current difficulty.
     //   used: the first characters already on screen (UPPERCASE, see
@@ -289,16 +292,11 @@ public static class TypingSettings
         }
         if (roll < 52)
         {
-            return word + Digits(Random.Range(1, 3));         // level85
-        }
-        if (roll < 62)
-        {
-            return word + "_" + Digits(2);                     // user_07
+            return word + EndSymbols[Random.Range(0, EndSymbols.Length)]; // Rate*  help?!
         }
         if (roll < 74)
         {
-            string join = JoinSymbols[Random.Range(0, JoinSymbols.Length)];
-            return word + join + Digits(1);                    // Rate*9
+            return SwapForSymbol(word);                        // Sp@rk  gla$s  qu!t
         }
         if (!allowFront)
         {
@@ -312,14 +310,26 @@ public static class TypingSettings
         return wrap[0] + word + wrap[1];                       // (paper)
     }
 
-    private static string Digits(int count)
+    // One a / s / i (never the first letter, so the word still starts with its
+    // own letter) becomes @ / $ / !. A word with none of them gets a symbol
+    // after it instead.
+    private static string SwapForSymbol(string word)
     {
-        char[] digits = new char[count];
-        for (int i = 0; i < count; i++)
+        List<int> spots = new List<int>();
+        for (int i = 1; i < word.Length; i++)
         {
-            digits[i] = SafeDigits[Random.Range(0, SafeDigits.Length)];
+            if (SwapLetters.IndexOf(char.ToLowerInvariant(word[i])) >= 0)
+            {
+                spots.Add(i);
+            }
         }
-        return new string(digits);
+        if (spots.Count == 0)
+        {
+            return word + EndSymbols[Random.Range(0, EndSymbols.Length)];
+        }
+        int spot = spots[Random.Range(0, spots.Count)];
+        char symbol = SwapSymbols[SwapLetters.IndexOf(char.ToLowerInvariant(word[spot]))];
+        return word.Substring(0, spot) + symbol + word.Substring(spot + 1);
     }
 
     // Title Case, or for a compound word ("SUNFLOWER") a capital on each part
