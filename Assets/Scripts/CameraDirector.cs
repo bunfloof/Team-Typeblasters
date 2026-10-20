@@ -297,7 +297,8 @@ public class CameraDirector : MonoBehaviour
         float roll = bobRoll + shakeRoll;
         transform.localRotation = Quaternion.Euler(-pitchUp, yaw, roll);
         transform.localPosition = basePosition + Vector3.up * bobHeightNow + transform.localRotation * shakeOffset;
-        cam.fieldOfView = UpdateFieldOfView(deltaTime, playing);
+        // (on a phone the view above the on-screen keyboard is very wide: see TouchControls)
+        cam.fieldOfView = TouchControls.FitFieldOfView(UpdateFieldOfView(deltaTime, playing), cam.aspect);
 
         // ---- 5. Map view (waves 2 and 4): blend the first-person view above with it ----
         UpdateMapView(deltaTime, shakeYaw, shakePitch, shakeRoll);
@@ -345,7 +346,7 @@ public class CameraDirector : MonoBehaviour
         position.y = Mathf.Lerp(eyePosition.y, mapPosition.y, rise);
 
         transform.SetPositionAndRotation(position, Quaternion.Slerp(eyeRotation, mapRotation, t));
-        cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, mapFieldOfView, t);
+        cam.fieldOfView = Mathf.Lerp(cam.fieldOfView, TouchControls.FitFieldOfView(mapFieldOfView, cam.aspect), t);
     }
 
     // The map view's camera pose: behind and above the player, facing the way
@@ -367,7 +368,7 @@ public class CameraDirector : MonoBehaviour
 
         // The player is BELOW the centre of the view: the ray to them points
         // "below" degrees further down than the view itself.
-        float tanHalf = Mathf.Tan(mapFieldOfView * 0.5f * Mathf.Deg2Rad);
+        float tanHalf = Mathf.Tan(TouchControls.FitFieldOfView(mapFieldOfView, cam.aspect) * 0.5f * Mathf.Deg2Rad);
         float below = Mathf.Atan((0.5f - mapPlayerScreenHeight) * 2f * tanHalf) * Mathf.Rad2Deg;
         Vector3 towardPlayer = heading * Quaternion.Euler(mapPitch + below, 0f, 0f) * Vector3.forward;
 
