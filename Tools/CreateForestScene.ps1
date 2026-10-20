@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 $utf8 = [Text.UTF8Encoding]::new($false)
 function Save($path,$text) { [IO.File]::WriteAllText((Join-Path $PWD $path),$text,$utf8) }
-$scene=[IO.File]::ReadAllText((Join-Path $PWD 'Assets/Scenes/Prototype.unity')).Replace("`r`n","`n")
+$scene=[IO.File]::ReadAllText((Join-Path $PWD 'Assets/Scenes/Normal.unity')).Replace("`r`n","`n")
 $blocks=@{}
 foreach($m in [regex]::Matches($scene,'(?ms)^--- !u!\d+ &(\d+).*?(?=^--- !u!|\z)')) { $blocks[$m.Groups[1].Value]=$m.Value }
 # Keep the normal game's managers/UI, but deactivate its entire physical map,
