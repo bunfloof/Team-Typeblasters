@@ -622,7 +622,7 @@ public class WaveSpawner : MonoBehaviour
             rideStartEvent.Add("boss_next", encounter.IsBossFight);
             Analytics.Send(rideStartEvent);
 
-            Coroutine ambush = index > 0 ? StartCoroutine(RideAmbush(wave)) : null;
+            Coroutine ambush = index > 0 && EasyTutorial.Active == null ? StartCoroutine(RideAmbush(wave)) : null;
             while (!rail.IsStopped)
             {
                 yield return null;
@@ -646,6 +646,7 @@ public class WaveSpawner : MonoBehaviour
             yield return new WaitForSeconds(BannerSeconds);
             hud.HideBanner();
             GameManager.Instance.Powers.OnWaveStart(); // a new combo weapon can be bought
+            EasyTutorial.Active?.BeginLesson(wave);
             ActivateProps(encounter);
             StartCoroutine(ShowPropHints());
 
@@ -663,6 +664,20 @@ public class WaveSpawner : MonoBehaviour
             {
                 yield return RunZombieWave(wave, encounter);
             }
+
+            // Clearing enemies alone cannot skip the hands-on tool lesson.
+            while (EasyTutorial.Active != null && !EasyTutorial.Active.LessonComplete)
+            {
+                EasyTutorial.Active.EnsureSupplies();
+                if (EasyTutorial.Active.NeedsRocketTarget && aliveZombies.Count == 0)
+                {
+                    SpawnZombie(encounter.SpawnPoints[0], ZombieKind.Normal, 0.35f, "PRACTICE");
+                }
+                yield return null;
+            }
+            // A replacement RPG target must also be cleared before moving on.
+            while (aliveZombies.Count > 0) yield return null;
+            EasyTutorial.Active?.EndLesson();
 
             // Analytics: the fight is won (a death ends the run instead, see "run_end").
             AnalyticsEvent waveEnd = Analytics.NewEvent("wave_end");
@@ -910,7 +925,16 @@ public class WaveSpawner : MonoBehaviour
 
         // The WORD CHAIN pairs come on top of the wave's zombies (2 more each).
         HashSet<int> pairStarts;
-        ZombieKind[] plan = AddChainPairs(PlanKinds(zombiesThisWave, wave), wave, out pairStarts);
+        ZombieKind[] plan;
+        if (EasyTutorial.Active != null)
+        {
+            plan = EasyTutorial.Plan(wave);
+            pairStarts = new HashSet<int>();
+            if (wave == 5) pairStarts.Add(0);
+            speed = 0.7f;
+            interval = 2.8f;
+        }
+        else plan = AddChainPairs(PlanKinds(zombiesThisWave, wave), wave, out pairStarts);
         zombiesThisWave = plan.Length;
         Tutorial.Once("type", "Type the word above a zombie to shoot it. Every letter is a bullet!", 6f);
         LogWaveStart(plan, pairStarts.Count, speed, interval, encounter);
@@ -986,6 +1010,7 @@ public class WaveSpawner : MonoBehaviour
         // 3. Wait until every zombie of this wave is dead or removed.
         while (aliveZombies.Count > 0)
         {
+            EasyTutorial.Active?.EnsureSupplies();
             yield return null;
         }
     }
@@ -1160,6 +1185,13 @@ public class WaveSpawner : MonoBehaviour
         // Same case for both words, so the long one still starts with the short
         // one; no chains on Hard / Extreme typing (punctuation would break them).
         string[] words = TypingSettings.StyleChainPair(WordBank.PickChainPair(UsedFirstLetters()));
+        if (words == null && EasyTutorial.Active != null)
+        {
+            // Teach chains even when a saved typing setting normally disables them.
+            words = WordBank.PickChainPair(UsedFirstLetters());
+            if (words != null)
+                for (int i = 0; i < words.Length; i++) words[i] = words[i].ToLowerInvariant();
+        }
         if (words == null)
         {
             return false;
@@ -1257,7 +1289,7 @@ public class WaveSpawner : MonoBehaviour
     {
         // Hard / Extreme typing: every few normal zombies is a SHIFTER (its word
         // changes while nobody types it). Never one with a set word (a chain pair).
-        if (kind == ZombieKind.Normal && forcedWord == null && TypingSettings.HasShifters
+        if (EasyTutorial.Active == null && kind == ZombieKind.Normal && forcedWord == null && TypingSettings.HasShifters
             && normalSpawns++ % TypingSettings.ShifterEvery == 1)
         {
             kind = ZombieKind.Shifter;

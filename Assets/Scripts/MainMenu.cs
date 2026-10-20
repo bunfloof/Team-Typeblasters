@@ -11,6 +11,7 @@
 // Clicking a level loads that scene by name. The scene must be in Build Settings.
 // ---------------------------------------------------------------------------
 using TMPro;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.Events;
@@ -31,6 +32,13 @@ public class MainMenu : MonoBehaviour
     private GameObject levelPage;
     private TMP_Text levelMessage;   // shows an error if a level scene is missing from Build Settings
     private bool loading;
+    private RectTransform canvasRect;
+    private CanvasScaler canvasScaler;
+    private TMP_Text mainTitle, levelTitle;
+    private RectTransform startButton, backButton;
+    private readonly List<RectTransform> levelButtons = new List<RectTransform>();
+    private Vector2 lastLayoutSize;
+    private bool portraitLayout;
 
     private void Start()
     {
@@ -49,13 +57,72 @@ public class MainMenu : MonoBehaviour
         }
 
         Transform canvas = BuildCanvas();
+        canvasRect = (RectTransform)canvas;
+        canvasScaler = canvas.GetComponent<CanvasScaler>();
         GameObject dim = CreatePage("Dim", canvas);
         Image dimImage = dim.AddComponent<Image>();
         dimImage.color = dimColor;
         dimImage.raycastTarget = false;
         mainPage = BuildMainPage(canvas);
         levelPage = BuildLevelPage(canvas);
+        Canvas.ForceUpdateCanvases();
+        UpdateResponsiveLayout();
         ShowMain();
+    }
+
+    private void Update()
+    {
+        UpdateResponsiveLayout();
+    }
+
+    // The menu has no HUD, so TouchControls cannot adapt its layout for it.
+    // Use the canvas aspect (also works in Device Simulator), not a platform flag.
+    private void UpdateResponsiveLayout()
+    {
+        if (canvasRect == null || mainTitle == null) return;
+        Vector2 size = canvasRect.rect.size;
+        bool portrait = size.x < size.y;
+        if (size == lastLayoutSize && portrait == portraitLayout) return;
+        portraitLayout = portrait;
+        canvasScaler.referenceResolution = portrait ? new Vector2(1080f, 1920f) : new Vector2(1920f, 1080f);
+        canvasScaler.matchWidthOrHeight = portrait ? 0f : 1f;
+        Canvas.ForceUpdateCanvases();
+        size = canvasRect.rect.size;
+        lastLayoutSize = size;
+        float width = Mathf.Max(240f, Mathf.Min(portrait ? 900f : 1700f, size.x - 120f));
+        LayoutTitle(mainTitle, width, portrait ? 210f : 120f, portrait ? 330f : 300f, 84f, portrait);
+        LayoutTitle(levelTitle, width, 110f, portrait ? 450f : 300f, 72f, false);
+        LayoutButton(startButton, new Vector2(0f, portrait ? -40f : 0f), portrait ? new Vector2(760f, 140f) : new Vector2(360f, 100f), portrait);
+        float rowStep = Mathf.Min(400f, (size.x - 120f) / Mathf.Max(1, levelButtons.Count));
+        for (int i = 0; i < levelButtons.Count; i++)
+        {
+            Vector2 position = portrait ? new Vector2(0f, 260f - i * 180f)
+                : new Vector2((i - (levelButtons.Count - 1) * .5f) * rowStep, 20f);
+            LayoutButton(levelButtons[i], position, portrait ? new Vector2(760f, 140f) : new Vector2(Mathf.Min(360f, rowStep - 24f), 180f), portrait);
+        }
+        LayoutButton(backButton, new Vector2(0f, portrait ? -380f : -300f), portrait ? new Vector2(500f, 110f) : new Vector2(360f, 100f), portrait);
+        levelMessage.rectTransform.anchoredPosition = new Vector2(0f, portrait ? -240f : -140f);
+        levelMessage.rectTransform.sizeDelta = new Vector2(width, portrait ? 80f : 50f);
+        levelMessage.textWrappingMode = TextWrappingModes.Normal;
+    }
+
+    private static void LayoutTitle(TMP_Text title, float width, float height, float y, float maxSize, bool wrap)
+    {
+        title.rectTransform.anchoredPosition = new Vector2(0f, y);
+        title.rectTransform.sizeDelta = new Vector2(width, height);
+        title.enableAutoSizing = true;
+        title.fontSizeMin = 32f;
+        title.fontSizeMax = maxSize;
+        title.textWrappingMode = wrap ? TextWrappingModes.Normal : TextWrappingModes.NoWrap;
+    }
+
+    private static void LayoutButton(RectTransform button, Vector2 position, Vector2 size, bool portrait)
+    {
+        button.anchoredPosition = position;
+        button.sizeDelta = size;
+        TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+        label.rectTransform.sizeDelta = size;
+        label.fontSize = portrait ? 56f : 44f;
     }
 
     // ---- Pages ----
@@ -76,30 +143,32 @@ public class MainMenu : MonoBehaviour
     private GameObject BuildMainPage(Transform canvas)
     {
         GameObject page = CreatePage("Main Page", canvas);
-        CreateText(page.transform, "Title", gameTitle, 84f, new Vector2(0f, 300f), new Vector2(1700f, 120f));
-        CreateButton(page.transform, "Start Button", "START", new Vector2(0f, 0f), new Vector2(360f, 100f), ShowLevels);
+        mainTitle = CreateText(page.transform, "Title", gameTitle, 84f, new Vector2(0f, 300f), new Vector2(1700f, 120f));
+        startButton = (RectTransform)CreateButton(page.transform, "Start Button", "START", new Vector2(0f, 0f), new Vector2(360f, 100f), ShowLevels).transform;
         return page;
     }
 
     private GameObject BuildLevelPage(Transform canvas)
     {
         GameObject page = CreatePage("Level Page", canvas);
-        CreateText(page.transform, "Title", "SELECT LEVEL", 72f, new Vector2(0f, 300f), new Vector2(1700f, 110f));
+        levelTitle = CreateText(page.transform, "Title", "SELECT LEVEL", 72f, new Vector2(0f, 300f), new Vector2(1700f, 110f));
 
         int count = GameManager.LevelCount;
         for (int i = 0; i < count; i++)
         {
             int levelIndex = i; // copy for the lambda
             string label = (i + 1) + ". " + GameManager.LevelName(i);
+            string[] maps = { "TRAINING ACADEMY", "CAMPUS", "HOLLOW FOREST" };
+            label += "\n<size=55%>" + maps[i] + "</size>";
             float x = (i - (count - 1) * 0.5f) * 400f;
-            CreateButton(page.transform, "Level " + GameManager.LevelName(i), label,
-                new Vector2(x, 20f), new Vector2(360f, 180f), () => LoadLevel(levelIndex));
+            levelButtons.Add((RectTransform)CreateButton(page.transform, "Level " + GameManager.LevelName(i), label,
+                new Vector2(x, 20f), new Vector2(360f, 180f), () => LoadLevel(levelIndex)).transform);
         }
 
         levelMessage = CreateText(page.transform, "Message", "", 32f, new Vector2(0f, -140f), new Vector2(1700f, 50f));
         levelMessage.color = new Color(1f, 0.4f, 0.3f);
 
-        CreateButton(page.transform, "Back Button", "BACK", new Vector2(0f, -300f), new Vector2(360f, 100f), ShowMain);
+        backButton = (RectTransform)CreateButton(page.transform, "Back Button", "BACK", new Vector2(0f, -300f), new Vector2(360f, 100f), ShowMain).transform;
         return page;
     }
 

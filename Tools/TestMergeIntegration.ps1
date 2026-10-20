@@ -80,6 +80,7 @@ public class GameManager {
  $gameMethod
 }
 public class Powers {
+ public static event System.Action<string,string> ActionPerformed;
  public static float shieldTimeLeft;private static float shieldSlow=1f;
  public int ShieldCharges=1;private int shieldChargesPerLevel=1;private float shieldSeconds=8f;
  private float shieldWordTimeLeft;private float shieldWordSeconds=6f;private float shieldEnemySpeed=.35f;

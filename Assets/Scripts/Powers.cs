@@ -119,6 +119,20 @@ public class Powers : MonoBehaviour
 
     public int ShieldCharges { get; private set; }
 
+    // Successful actions (and refusals) are observable without coupling powers to a level.
+    public static event System.Action<string, string> ActionPerformed;
+
+    public void RefillTrainingSupplies()
+    {
+        LureCharges = maxCharges;
+        FreezeCharges = maxCharges;
+        ShieldCharges = Mathf.Max(ShieldCharges, 1);
+        weaponBoughtThisWave = false;
+        RefreshHud();
+        RefreshShieldHud();
+        RefreshWeaponStatus();
+    }
+
     private float shieldWordTimeLeft; // > 0 while the shield word is waiting to be typed
 
     // Combo weapons. Static like the freeze (reset in Awake).
@@ -302,6 +316,7 @@ public class Powers : MonoBehaviour
 
     private static AnalyticsEvent PowerEvent(string action, string item)
     {
+        ActionPerformed?.Invoke(action, item);
         AnalyticsEvent e = Analytics.NewEvent("power");
         e.Add("action", action);
         e.Add("item", item);
@@ -628,6 +643,7 @@ public class Powers : MonoBehaviour
         }
         RocketLoaded = false;
         RefreshWeaponStatus();
+        SendPowerEvent(PowerEvent("fire", "rpg"));
         return true;
     }
 

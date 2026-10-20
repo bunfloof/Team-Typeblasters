@@ -324,6 +324,14 @@ public class GameManager : MonoBehaviour
         powers.OnComboChanged(Combo);
     }
 
+    // A teaching allowance is spendable combo, never score or earned kill statistics.
+    public void GrantTrainingCombo(int minimum)
+    {
+        Combo = Mathf.Max(Combo, minimum);
+        hud.SetCombo(Combo);
+        powers.OnComboChanged(Combo);
+    }
+
     // Called by the Restart buttons (pause panel and the end screens) and by
     // Enter on the end screens: reloads the scene, which shows the Start panel,
     // the same screen as when the game is first opened.

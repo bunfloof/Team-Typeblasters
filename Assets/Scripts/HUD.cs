@@ -514,7 +514,7 @@ public class HUD : MonoBehaviour
             difficultyButtons[i].color = selected ? TypingSettings.Tint(level) : DifficultyIdle;
             difficultyNames[i].color = selected ? Color.black : TypingSettings.Tint(level);
         }
-        difficultyDescription.text = TypingSettings.Description(picked);
+        difficultyDescription.text = "";
     }
 
     private void BuildDifficultySelector()
@@ -523,7 +523,7 @@ public class HUD : MonoBehaviour
         PlaceRect(difficultyRoot, Centre, TopCentre, new Vector2(0f, DifficultyTop), new Vector2(1000f, 150f));
 
         TMP_Text title = CreateText(difficultyRoot, "Title",
-            "TYPING DIFFICULTY   <size=75%><color=#9AA0AA>click, or LEFT / RIGHT arrows</color></size>", 26f, Vector2.zero);
+            "TYPING DIFFICULTY", 26f, Vector2.zero);
         PlaceRect(title.rectTransform, TopCentre, TopCentre, Vector2.zero, new Vector2(1000f, 34f));
         title.fontStyle = FontStyles.Bold;
 
@@ -545,7 +545,7 @@ public class HUD : MonoBehaviour
         }
 
         difficultyDescription = CreateText(difficultyRoot, "Description", "", 24f, Vector2.zero);
-        PlaceRect(difficultyDescription.rectTransform, TopCentre, TopCentre, new Vector2(0f, -106f), new Vector2(1200f, 34f));
+        PlaceRect(difficultyDescription.rectTransform, TopCentre, TopCentre, new Vector2(0f, -106f), new Vector2(1200f, 64f));
         difficultyDescription.textWrappingMode = TextWrappingModes.NoWrap;
     }
 

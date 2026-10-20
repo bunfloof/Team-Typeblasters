@@ -2425,7 +2425,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: HARD - The Hollow Forest
+  m_text: The Hollow Forest
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
@@ -11696,20 +11696,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: 'HARD FOREST: follow the forest trail. Enemies move 30% faster and carry long words.
-
-    Finish
-    a RED zombie or a BARREL to blow up everything inside its ring.
-
-    Grab SUPPLY
-    CRATES by typing their green words.
-
-
-    [1] Lure bomb     [2] Freeze     [Tab] Shield     Backspace:
-    change target     Esc: pause
-
-
-    Click the game window, then press Start'
+  m_text: ''
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
   m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
