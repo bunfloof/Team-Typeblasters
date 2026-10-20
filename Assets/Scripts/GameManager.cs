@@ -259,6 +259,7 @@ public class GameManager : MonoBehaviour
 
         State = GameState.Playing;
         hud.HideAllPanels();
+        DynamicDifficulty.BeginRun(); // ADAPTIVE DIFFICULTY: measure this run's typing from a first guess
 
         // Logged before the waves begin: the first ride logs right away.
         Analytics.StartRun();
@@ -267,6 +268,7 @@ public class GameManager : MonoBehaviour
         e.Add("runs_this_session", Analytics.RunsThisSession); // runs since the page was loaded (each tip shows once per page load)
         e.Add("tips_enabled", tipsEnabled);
         e.Add("hard_level", HardLevel.Active != null);
+        DynamicDifficulty.AddTo(e);
         Analytics.Send(e);
         Analytics.FlushSoon();
 
@@ -662,6 +664,8 @@ public class GameManager : MonoBehaviour
             Analytics.AddPlayerState(hit, attacker); // health, combo... before the hit
         }
 
+        DynamicDifficulty.OnDamage(amount); // getting hurt eases the adaptive difficulty a little, for a while
+
         Health -= amount;
         if (Health < 0)
         {
@@ -741,6 +745,7 @@ public class GameManager : MonoBehaviour
         e.Add("wrong_keys", Stats.WrongKeys);
         e.Add("accuracy", Stats.Accuracy);
         e.Add("words_per_minute", Stats.WordsPerMinute); // over all play time, rides included
+        DynamicDifficulty.AddTo(e); // the adaptive difficulty's measured speed (active typing only) and level
         Analytics.AddPlayerState(e, fatalAttacker); // the biter logs itself ("bite"), not "run_over"
         Analytics.Send(e);
 

@@ -9,7 +9,8 @@
 // Extreme. Orb words on Extreme are the hand-made list below.
 //
 // PickWord() picks a bucket by zombie kind (explosive: long; runner: short;
-// armored: medium; normal: about 60% short, 40% medium) and tries to return a
+// armored: medium; normal: about 60% short, 40% medium, moved by the ADAPTIVE
+// DIFFICULTY, see DynamicDifficulty) and tries to return a
 // word whose FIRST LETTER is not already used by anything on screen, so that
 // typing a first letter always points at exactly one target.
 // Barrels and supply crates have their own word lists further down: their
@@ -266,9 +267,13 @@ public static class WordBank
         {
             rolledBucket = MediumWords;
         }
-        else if (Random.value < 0.60f)
+        else if (Random.value < DynamicDifficulty.LongWordChance)
         {
-            rolledBucket = ShortWords;
+            rolledBucket = LongWords; // ADAPTIVE DIFFICULTY: a fast typist sometimes meets a long word
+        }
+        else if (Random.value < Mathf.Clamp(0.60f + DynamicDifficulty.ShortWordShift, 0.3f, 0.92f))
+        {
+            rolledBucket = ShortWords; // 60% at the reference speed, more for slower typists
         }
         else
         {
@@ -578,6 +583,9 @@ public static class WordBank
 
     // Returns a random word from the bucket whose first letter is not in
     // usedFirstLetters, or null if the bucket has no such word.
+    // ADAPTIVE DIFFICULTY: two words are drawn and, with a chance of
+    // |DynamicDifficulty.WordLengthBias|, the shorter one is kept (a slower
+    // typist) or the longer one (a faster typist); otherwise the first.
     private static string PickWordWithUnusedFirstLetter(string[] bucket, List<char> usedFirstLetters)
     {
         List<string> candidates = new List<string>();
@@ -593,6 +601,14 @@ public static class WordBank
         {
             return null;
         }
-        return candidates[Random.Range(0, candidates.Count)];
+        string first = candidates[Random.Range(0, candidates.Count)];
+        float bias = DynamicDifficulty.WordLengthBias;
+        if (Mathf.Abs(bias) < 0.01f || Random.value >= Mathf.Abs(bias))
+        {
+            return first;
+        }
+        string second = candidates[Random.Range(0, candidates.Count)];
+        bool secondFits = bias < 0f ? second.Length < first.Length : second.Length > first.Length;
+        return secondFits ? second : first;
     }
 }

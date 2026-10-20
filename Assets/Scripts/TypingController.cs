@@ -48,6 +48,8 @@
 //     panel, and restarts it from the "You survived" / "You died" panels.
 //     On the Start panel, LEFT / RIGHT change the typing difficulty.
 //     A tip box never opens in the middle of a word (see GameManager.LateUpdate).
+//   - Every key is also reported to DynamicDifficulty (the ADAPTIVE
+//     DIFFICULTY measures the player's typing speed from them).
 //
 // INPUT BACKEND: this project uses Unity's Input System package
 // (Project Settings > Player > Active Input Handling), so typed characters come
@@ -225,6 +227,12 @@ public class TypingController : MonoBehaviour
             (Input.GetKey(KeyCode.UpArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.DownArrow) ? 1f : 0f));
 #endif
 
+        // ---- 1b. The SETTINGS panel is open (Start or pause panel): Esc / Enter close it, nothing else happens ----
+        if (SettingsPanel.HandleKeys(pausePressed, enterPressed))
+        {
+            return;
+        }
+
         // ---- 2. Escape: pause / resume ----
         if (pausePressed)
         {
@@ -244,6 +252,9 @@ public class TypingController : MonoBehaviour
             }
             return;
         }
+
+        // ADAPTIVE DIFFICULTY: measures typing only while there is something to type.
+        DynamicDifficulty.Tick(Time.deltaTime, spawner.GetTypingTargets().Count > 0);
 
         // ---- 4. Forget candidates that are gone (reached the player, got blown up...) ----
         if (candidates.Count > 0)
@@ -432,7 +443,8 @@ public class TypingController : MonoBehaviour
 
         // Nothing being typed yet: this character picks every target whose word
         // starts with it (usually exactly one), and counts as their first character.
-        if (candidates.Count == 0)
+        bool startsWord = candidates.Count == 0;
+        if (startsWord)
         {
             FindTargetsStartingWith(typed, candidates);
             if (candidates.Count == 0)
@@ -470,6 +482,7 @@ public class TypingController : MonoBehaviour
         candidates.Clear();
         candidates.AddRange(scratch);
         GameManager.Instance.OnCorrectKey();
+        DynamicDifficulty.OnCorrectKey(startsWord);
         attemptCorrectKeys += 1;
         attemptLastKeyTime = Time.time;
         if (attemptKeyMs.Length > 0)
@@ -575,6 +588,7 @@ public class TypingController : MonoBehaviour
 
         // Progress is NOT reset; the player only loses the combo.
         GameManager.Instance.OnWrongKey();
+        DynamicDifficulty.OnWrongKey();
         hud.FlashRed();
     }
 

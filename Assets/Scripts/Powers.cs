@@ -111,10 +111,12 @@ public class Powers : MonoBehaviour
         get { return shieldTimeLeft > 0f; }
     }
 
-    // Enemies multiply their speed by this: below 1 while the shield is up.
+    // Enemies multiply their speed (and their attack clocks) by this: below 1
+    // while the shield is up, and scaled to the player's typing speed by the
+    // ADAPTIVE DIFFICULTY (DynamicDifficulty.PaceFactor, 1 when it is off).
     public static float EnemySpeedFactor
     {
-        get { return IsShielded ? shieldSlow : 1f; }
+        get { return (IsShielded ? shieldSlow : 1f) * DynamicDifficulty.PaceFactor; }
     }
 
     public int ShieldCharges { get; private set; }

@@ -913,7 +913,7 @@ public class WaveSpawner : MonoBehaviour
         ZombieKind[] plan = AddChainPairs(PlanKinds(zombiesThisWave, wave), wave, out pairStarts);
         zombiesThisWave = plan.Length;
         Tutorial.Once("type", "Type the word above a zombie to shoot it. Every letter is a bullet!", 6f);
-        LogWaveStart(plan, pairStarts.Count, speed, interval, encounter);
+        LogWaveStart(plan, pairStarts.Count, speed, interval, encounter); // the level's own numbers (the "dda_" fields say how they were scaled)
 
         // 2. Zombies come out in packs of GroupSize, from the spawn points in turn
         //    (a shuffled order, so it is not the same door every time).
@@ -980,7 +980,9 @@ public class WaveSpawner : MonoBehaviour
                     yield return new WaitForSeconds(PackStagger);
                 }
             }
-            yield return new WaitForSeconds(interval * pack);
+            // ADAPTIVE DIFFICULTY: read at every pack, so a wave already under
+            // way follows the player's measured speed too.
+            yield return new WaitForSeconds(interval * pack * DynamicDifficulty.SpawnIntervalFactor);
         }
 
         // 3. Wait until every zombie of this wave is dead or removed.
@@ -1015,6 +1017,9 @@ public class WaveSpawner : MonoBehaviour
         e.Add("map_view", IsMapViewWave);
         e.Add("barrels", ActiveBarrels.Count);
         e.Add("crates", activeCrates.Count);
+        DynamicDifficulty.AddTo(e);
+        e.Add("dda_pace_factor", DynamicDifficulty.PaceFactor);
+        e.Add("dda_spawn_factor", DynamicDifficulty.SpawnIntervalFactor);
         Analytics.AddPlayerState(e);
         Analytics.Send(e);
     }
