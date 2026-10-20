@@ -23,9 +23,10 @@
 //   - TYPING DIFFICULTY (TypingSettings, picked on the Start panel): on Easy
 //     words are stored UPPERCASE, shown in lowercase, and typing them is
 //     case-insensitive. On Medium, Hard and Extreme every word is
-//     case-sensitive and may contain punctuation (Hard) or digits and symbols
-//     (Extreme), which must be typed exactly. Digits and symbols are ignored
-//     while no case-sensitive word is on screen.
+//     case-sensitive and may contain punctuation (Hard) or symbols (Extreme),
+//     which must be typed exactly. Symbols are ignored while no
+//     case-sensitive word is on screen. No word ever contains a DIGIT (the
+//     number keys are the powers), so digit keys are never typing.
 //   - SPACE only counts when the word being typed expects one (a BRUTE's
 //     phrase, "cold dark night"); anywhere else it is ignored, never wrong.
 //   - A wrong key never resets progress. The screen flashes red and the
@@ -48,6 +49,8 @@
 //     panel, and restarts it from the "You survived" / "You died" panels.
 //     On the Start panel, LEFT / RIGHT change the typing difficulty.
 //     A tip box never opens in the middle of a word (see GameManager.LateUpdate).
+//   - Every key is also reported to DynamicDifficulty (the ADAPTIVE
+//     DIFFICULTY measures the player's typing speed from them).
 //
 // INPUT BACKEND: this project uses Unity's Input System package
 // (Project Settings > Player > Active Input Handling), so typed characters come
@@ -225,6 +228,12 @@ public class TypingController : MonoBehaviour
             (Input.GetKey(KeyCode.UpArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.DownArrow) ? 1f : 0f));
 #endif
 
+        // ---- 1b. The SETTINGS panel is open (Start or pause panel): Esc / Enter close it, nothing else happens ----
+        if (SettingsPanel.HandleKeys(pausePressed, enterPressed))
+        {
+            return;
+        }
+
         // ---- 2. Escape: pause / resume ----
         if (pausePressed)
         {
@@ -244,6 +253,9 @@ public class TypingController : MonoBehaviour
             }
             return;
         }
+
+        // ADAPTIVE DIFFICULTY: measures typing only while there is something to type.
+        DynamicDifficulty.Tick(Time.deltaTime, spawner.GetTypingTargets().Count > 0);
 
         // ---- 4. Forget candidates that are gone (reached the player, got blown up...) ----
         if (candidates.Count > 0)
@@ -326,8 +338,14 @@ public class TypingController : MonoBehaviour
                 GameManager.Instance.Powers.TryUseFreeze();
                 continue;
             }
+            // No word ever contains a digit (the number keys are the powers),
+            // so the other digits are never typing: ignored, never a wrong key.
+            if (character >= '0' && character <= '9')
+            {
+                continue;
+            }
 
-            // Digits and symbols only matter while a case-sensitive word (any word
+            // Symbols only matter while a case-sensitive word (any word
             // above Easy, or an energy orb) is around; otherwise they are ignored.
             char upper = char.ToUpperInvariant(character);
             bool isLetter = upper >= 'A' && upper <= 'Z';
@@ -401,7 +419,7 @@ public class TypingController : MonoBehaviour
         return char.ToUpperInvariant(typed) == expected;
     }
 
-    // True if digits/symbols should count as key presses right now: the current
+    // True if symbols should count as key presses right now: the current
     // target is case-sensitive, or (no target yet) some case-sensitive target exists.
     private bool SymbolsMatter()
     {
@@ -432,7 +450,8 @@ public class TypingController : MonoBehaviour
 
         // Nothing being typed yet: this character picks every target whose word
         // starts with it (usually exactly one), and counts as their first character.
-        if (candidates.Count == 0)
+        bool startsWord = candidates.Count == 0;
+        if (startsWord)
         {
             FindTargetsStartingWith(typed, candidates);
             if (candidates.Count == 0)
@@ -470,6 +489,7 @@ public class TypingController : MonoBehaviour
         candidates.Clear();
         candidates.AddRange(scratch);
         GameManager.Instance.OnCorrectKey();
+        DynamicDifficulty.OnCorrectKey(startsWord);
         attemptCorrectKeys += 1;
         attemptLastKeyTime = Time.time;
         if (attemptKeyMs.Length > 0)
@@ -575,6 +595,7 @@ public class TypingController : MonoBehaviour
 
         // Progress is NOT reset; the player only loses the combo.
         GameManager.Instance.OnWrongKey();
+        DynamicDifficulty.OnWrongKey();
         hud.FlashRed();
     }
 

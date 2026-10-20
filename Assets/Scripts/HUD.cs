@@ -27,7 +27,8 @@
 //   - the Start panel (with its "Show tips" toggle and the TYPING DIFFICULTY
 //     buttons, built in code under it), the "You survived" and
 //     "You died" panels (with the run's stats at the end), the pause panel
-//     and the 3-2-1 resume countdown
+//     and the 3-2-1 resume countdown; the SETTINGS gear (top-right of the
+//     Start and pause panels, see SettingsPanel)
 //
 // The HUD never decides anything. Other scripts call these methods when a value
 // changes (for example GameManager calls SetScore after a kill).
@@ -151,6 +152,40 @@ public class HUD : MonoBehaviour
         UpdateComboLook();
         UpdateHint();
         UpdateQuizPop();
+        UpdateAdaptiveReadout();
+    }
+
+    // ---- Adaptive difficulty readout (Unity editor only, top-left under the health bar) ----
+    // What DynamicDifficulty measures and changes, live, for testing and tuning.
+    // Never shown in a real build.
+
+    private TMP_Text adaptiveReadout; // null until the first frame of play in the editor
+
+    private void UpdateAdaptiveReadout()
+    {
+        if (!Application.isEditor)
+        {
+            return;
+        }
+        GameState state = GameManager.Instance != null ? GameManager.Instance.State : GameState.Start;
+        bool show = state == GameState.Playing || state == GameState.Paused || state == GameState.Tip;
+        if (adaptiveReadout == null)
+        {
+            if (!show)
+            {
+                return;
+            }
+            adaptiveReadout = CreateText(readoutLayer, "Adaptive Readout (editor only)", "", 20f, Vector2.zero);
+            PlaceRect(adaptiveReadout.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(40f, -78f), new Vector2(680f, 90f)); // left of the combo plate
+            adaptiveReadout.alignment = TextAlignmentOptions.TopLeft;
+            adaptiveReadout.color = new Color(0.55f, 1f, 0.75f);
+            adaptiveReadout.textWrappingMode = TextWrappingModes.NoWrap;
+        }
+        adaptiveReadout.gameObject.SetActive(show);
+        if (show)
+        {
+            adaptiveReadout.text = DynamicDifficulty.DebugText();
+        }
     }
 
     private void LateUpdate()
@@ -477,6 +512,7 @@ public class HUD : MonoBehaviour
         HideAllPanels();
         // BuildLevelSelection();
         BuildMenuButtons();
+        BuildSettingsButtons();
         startPanel.SetActive(true);
         RefreshDifficulty();
     }
@@ -2287,7 +2323,7 @@ public class HUD : MonoBehaviour
     //   Score 12750
     //   Accuracy 97.5%    Speed 62 WPM
     //   Kills 50    Best combo x51    Biggest blast x7
-    //   Time 4:12    Typing HARD
+    //   Time 4:12    Typing HARD    Adaptive ON (58 WPM)
     private static string StatsText(RunStats stats)
     {
         int seconds = Mathf.FloorToInt(stats.Seconds);
@@ -2302,7 +2338,18 @@ public class HUD : MonoBehaviour
             + StatLabel + "Best combo</color>  <b>x" + stats.BestCombo + "</b>     "
             + StatLabel + "Biggest blast</color>  <b>x" + stats.BiggestMultiKill + "</b>\n"
             + StatLabel + "Time</color>  <b>" + time + "</b>     "
-            + StatLabel + "Typing</color>  <b>" + TypingSettings.Name(TypingSettings.Difficulty) + "</b>";
+            + StatLabel + "Typing</color>  <b>" + TypingSettings.Name(TypingSettings.Difficulty) + "</b>     "
+            + StatLabel + "Adaptive</color>  <b>" + AdaptiveText() + "</b>";
+    }
+
+    // "ON (42 WPM)" once the adaptive difficulty has measured the player, else "ON" / "OFF".
+    private static string AdaptiveText()
+    {
+        if (!DynamicDifficulty.Enabled)
+        {
+            return "OFF";
+        }
+        return DynamicDifficulty.Calibrated ? "ON (" + Mathf.RoundToInt(DynamicDifficulty.EstimatedWpm) + " WPM)" : "ON";
     }
 
     // ---- Small UI helpers ----
@@ -2364,6 +2411,22 @@ public class HUD : MonoBehaviour
         AddMenuButton(pausePanel.transform, new Vector2(0f, -260f));
         AddMenuButton(wonPanel.transform, new Vector2(0f, -450f));
         AddMenuButton(lostPanel.transform, new Vector2(0f, -450f));
+    }
+
+    private bool settingsButtonsBuilt;
+
+    // The SETTINGS gear (adaptive difficulty, see SettingsPanel) at the
+    // top-right of the Start and pause panels, just under Wave / Score.
+    private void BuildSettingsButtons()
+    {
+        if (settingsButtonsBuilt)
+        {
+            return;
+        }
+        settingsButtonsBuilt = true;
+        Vector2 underScore = new Vector2(-40f, -150f);
+        SettingsPanel.AddButton((RectTransform)startPanel.transform, underScore);
+        SettingsPanel.AddButton((RectTransform)pausePanel.transform, underScore);
     }
 
     private void AddMenuButton(Transform panel, Vector2 position)

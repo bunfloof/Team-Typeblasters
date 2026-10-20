@@ -3,8 +3,9 @@
 // The menu scene ("Menu.unity"). Builds its whole UI in code (like HUD does), so
 // the scene only needs: a camera, an EventSystem and ONE object with this script.
 //
-//   MAIN PAGE:   title, a CHARACTER slot (placeholder, not implemented yet) and
-//                a START button at the bottom that opens the level page.
+//   MAIN PAGE:   title, a CHARACTER slot (placeholder, not implemented yet),
+//                a START button at the bottom that opens the level page and
+//                the SETTINGS gear top-right (see SettingsPanel).
 //   LEVEL PAGE:  one button per level (the list comes from GameManager.LevelName,
 //                so there is a single list of levels) and a BACK button.
 //
@@ -145,6 +146,7 @@ public class MainMenu : MonoBehaviour
         GameObject page = CreatePage("Main Page", canvas);
         mainTitle = CreateText(page.transform, "Title", gameTitle, 84f, new Vector2(0f, 300f), new Vector2(1700f, 120f));
         startButton = (RectTransform)CreateButton(page.transform, "Start Button", "START", new Vector2(0f, 0f), new Vector2(360f, 100f), ShowLevels).transform;
+        SettingsPanel.AddButton((RectTransform)page.transform, new Vector2(-40f, -40f)); // the SETTINGS gear, top-right
         return page;
     }
 

@@ -17,4 +17,8 @@ Each wave adds 25 spendable combo and refills bomb, freeze and shield supplies. 
 
 The on-screen objective stays visible even with optional tips disabled, and follows the usable HUD area on phones. Enemy introductions are deterministic, move slowly, and have no ride ambushes or overhead-camera waves. The tutorial uses a dedicated component; the old elite/word-swapping/speed-adjustment components are not attached to the new scene.
 
+Adaptive difficulty can be switched in Settings from the menu, level Start panel or pause panel. It adjusts the map's existing pressure, including additional practice enemies for fast typists; the six academy stations and required tool objectives remain in place. Typing words never contain digits, so unused number keys do not count as mistakes.
+
+For Frenzy and RPG, releasing before 0.6 seconds uses a stored item; holding for 0.6 seconds buys one. There is no gap between tap and hold. Active Frenzy, Freeze and loaded RPG stay highlighted even when their stored count is zero. A repeated tap reports ACTIVE or LOADED without consuming another item.
+
 Existing kill, typing, damage and power analytics remain in place. Teaching allowances do not directly add kills, score or correct keystrokes. `tutorial_lesson_start` and `tutorial_lesson_complete` identify the teaching steps; RPG shots also report the `power` action `fire`.

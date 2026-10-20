@@ -8,7 +8,7 @@
 //   - too slow -> the orb reaches the player and deals its damage.
 //
 // Orb words are short and follow the TYPING DIFFICULTY (WordBank.PickOrbWord):
-// plain lowercase on Easy, up to digits and symbols on Extreme. They are drawn
+// plain lowercase on Easy, up to symbols on Extreme. They are drawn
 // in pink like the orb (Palette.WordOrb), flashing with every throb of the
 // orb: the word to type first.
 // The freeze power stops it in mid-air, with an ice-blue outline; the shield

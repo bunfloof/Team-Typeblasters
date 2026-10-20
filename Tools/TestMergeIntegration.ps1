@@ -24,6 +24,7 @@ $space=Member $typing 'private bool NextIsSpace('
 $powerMethods=foreach($signature in 'public static bool IsShielded','public static float EnemySpeedFactor','public void TryUseShield(','private void CloseShieldWord(','public void RaiseShield(','public void OnShieldHit(','private void UpdateShield(','private void RefreshShieldHud(','private static AnalyticsEvent PowerEvent(','private static void SendPowerEvent('){Member $powers $signature}
 $settings=[regex]::Replace((ReadSource 'TypingSettings'),'(?m)^using [^;]+;\r?\n','')
 $event=[regex]::Replace((ReadSource 'AnalyticsEvent'),'(?m)^using [^;]+;\r?\n','')
+$adaptive=[regex]::Replace((ReadSource 'DynamicDifficulty'),'(?m)^using [^;]+;\r?\n','')
 $header=@'
 using System;
 using System.Collections.Generic;
@@ -38,12 +39,21 @@ namespace UnityEngine {
  public struct Color { public Color(float r,float g,float b,float a=1f){} }
  public static class Mathf {
   public static int Clamp(int v,int a,int b){return Math.Min(b,Math.Max(a,v));}
+  public static float Clamp(float v,float a,float b){return Math.Min(b,Math.Max(a,v));}
+  public static float Clamp01(float v){return Clamp(v,0f,1f);}
+  public static float Pow(float a,float b){return (float)Math.Pow(a,b);}
+  public static float Log(float a,float b){return (float)Math.Log(a,b);}
+  public static float Abs(float a){return Math.Abs(a);}
+  public static float Min(float a,float b){return Math.Min(a,b);}
+  public static int RoundToInt(float a){return (int)Math.Round(a);}
+  public static int FloorToInt(float a){return (int)Math.Floor(a);}
+  public static float MoveTowards(float a,float b,float step){return Math.Abs(b-a)<=step?b:a+Math.Sign(b-a)*step;}
   public static float Max(float a,float b){return Math.Max(a,b);}
   public static int Max(int a,int b){return Math.Max(a,b);}
  }
  public static class Random { static System.Random rng=new System.Random(526); public static float value {get{return (float)rng.NextDouble();}} public static int Range(int a,int b){return rng.Next(a,b);} }
- public static class PlayerPrefs {static int saved; public static int GetInt(string key,int fallback){return saved;} public static void SetInt(string key,int v){saved=v;} public static void Save(){} }
- public static class Time {public static float deltaTime;}
+ public static class PlayerPrefs {static Dictionary<string,int> saved=new Dictionary<string,int>(); public static int GetInt(string key,int fallback){return saved.ContainsKey(key)?saved[key]:fallback;} public static void SetInt(string key,int v){saved[key]=v;} public static void Save(){} }
+ public static class Time {public static float deltaTime;public static float time;}
  public static class Object {public static T FindFirstObjectByType<T>() where T:class{return null;} }
 }
 public enum GameState {Start,Playing,Paused,Tip,Won,Lost}
@@ -54,6 +64,7 @@ public class HUD {
  public void PulseShield(){} public void SetShield(int n,int max,float f){}
 }
 public static class CameraDirector {public static void Shake(float n){} }
+public static class Tutorial {public static void Once(string key,string text,float seconds){} }
 public static class Analytics {
  public static List<string> Sent=new List<string>();
  public static AnalyticsEvent NewEvent(string name){return new AnalyticsEvent(name);}
@@ -80,6 +91,7 @@ public class GameManager {
  $gameMethod
 }
 public class Powers {
+ public static bool IsFrenzy=false;
  public static event System.Action<string,string> ActionPerformed;
  public static float shieldTimeLeft;private static float shieldSlow=1f;
  public int ShieldCharges=1;private int shieldChargesPerLevel=1;private float shieldSeconds=8f;
@@ -97,7 +109,16 @@ $tests=@'
 public static class MergeRegression {
  static int count;
  static void Check(bool value,string name){if(!value)throw new Exception(name);count++;}
- static GameManager Fresh(){Powers.shieldTimeLeft=0;ShieldWord.Current=null;Analytics.Sent.Clear();return GameManager.Instance=new GameManager();}
+ static GameManager Fresh(){Powers.shieldTimeLeft=0;ShieldWord.Current=null;var game=GameManager.Instance=new GameManager();DynamicDifficulty.Enabled=false;DynamicDifficulty.BeginRun();Analytics.Sent.Clear();return game;}
+ static void Measure(float wpm){
+  Time.time=0;DynamicDifficulty.Enabled=true;DynamicDifficulty.BeginRun();
+  for(int word=0;word<160;word++){
+   Time.time+=.5f;DynamicDifficulty.Tick(.5f,true);DynamicDifficulty.OnCorrectKey(true);
+   for(int key=0;key<4;key++){float gap=12f/wpm;Time.time+=gap;DynamicDifficulty.Tick(gap,true);DynamicDifficulty.OnCorrectKey(false);}
+  }
+  Check(DynamicDifficulty.Calibrated,"DDA finishes calibration");
+  Check(Math.Abs(DynamicDifficulty.EstimatedWpm-wpm)<3f,"DDA measures actual intra-word typing speed");
+ }
  public static string Run(){
   var game=Fresh();game.TakeDamage(10,false,new AnalyticsEvent("damage"),null);
   Check(game.Health==90 && game.Combo==1,"Normal hit health/combo");
@@ -134,16 +155,24 @@ public static class MergeRegression {
    Check(TypingSettings.HasShifters==(difficulty>=TypingDifficulty.Hard),"Difficulty controls shifters independently of map");
    for(int i=0;i<200;i++){
     string word=TypingSettings.Style("WATER");
-    Check(word.IndexOfAny("1234<>".ToCharArray())<0,"Styled words avoid power keys and rich text delimiters");
+    Check(word.IndexOfAny("0123456789<>".ToCharArray())<0,"Styled words avoid all digits and rich text delimiters");
     if(difficulty==TypingDifficulty.Easy)Check(TypingSettings.Shown(word,false)=="water","Easy displays lowercase");
     if(difficulty==TypingDifficulty.Medium)Check(word.ToUpperInvariant()=="WATER","Medium preserves spelling without symbols");
    }
   }
-  return "PASS: "+count+" assertions (damage/telemetry, shield lifecycle/pause, mobile phrases, four typing difficulties).";
+  Measure(25f);
+  Check(DynamicDifficulty.PaceFactor<1f && DynamicDifficulty.ExtraZombies(10)==0 && DynamicDifficulty.PackBonus==0,"Slow typists get more time without extra enemies");
+  Measure(110f);
+  Check(DynamicDifficulty.PaceFactor>1f && DynamicDifficulty.SpawnIntervalFactor<1f && DynamicDifficulty.ExtraZombies(10)>0 && DynamicDifficulty.PackBonus==1,"Fast typists get stronger adaptive pressure");
+  float before=DynamicDifficulty.Level;DynamicDifficulty.OnDamage(40);DynamicDifficulty.Tick(1f,true);
+  Check(DynamicDifficulty.Level<before,"Damage eases adaptive pressure");
+  DynamicDifficulty.Enabled=false;DynamicDifficulty.Tick(30f,false);
+  Check(DynamicDifficulty.PaceFactor==1f && DynamicDifficulty.SpawnIntervalFactor==1f && DynamicDifficulty.ExtraZombies(10)==0,"Turning adaptive off restores level tuning");
+  return "PASS: "+count+" assertions (damage/telemetry, shields, mobile phrases, digit-free typing, adaptive calibration and pressure).";
  }
 }
 '@
-Add-Type -TypeDefinition ($header+$stubs+$event+$settings+$classes+$tests)
+Add-Type -TypeDefinition ($header+$stubs+$event+$settings+$adaptive+$classes+$tests)
 [MergeRegression]::Run()
 # Source-level wiring checks supplement behavior tests without loading Unity UI.
 foreach($snippet in 'TouchPowerButton.Power.Shield','float total = PauseWeight + 5f + TypeWeight') {if(!$touch.Contains($snippet)){throw "Missing mobile shield wiring: $snippet"}}
