@@ -10,7 +10,7 @@
 //    a s d f g h j k l
 //   SHIFT z x c v b n m DEL        DEL: Backspace (drop the word being typed)
 //   #+0  [      SPACE       ]      #+0: the symbols rows (tap again: letters)
-//                                  SPACE: raises the shield (see EasyShield)
+//                                  SHIELD: Tab; SPACE: a space in a phrase
 //
 // SHIFT types the next letter in capitals (tap it twice quickly for caps
 // lock). Only the Hard level and the boss's energy orbs care about capitals.
@@ -88,10 +88,12 @@ public class TouchKeyboard : MonoBehaviour
         }
         TouchKey delete = CreateKey(area, 2, 8.5f, 1.5f, TouchKey.KeyAction.Hold, '\0', SpecialKeyColor);
         delete.SetLabel("DEL");
-        // Row 4: the symbols key and the space bar.
+        // Row 4: symbols, the same Tab shield as desktop, and a real space.
         symbolsKey = CreateKey(area, 3, 0f, 2f, TouchKey.KeyAction.Symbols, '\0', SpecialKeyColor);
-        TouchKey space = CreateKey(area, 3, 2f, 8f, TouchKey.KeyAction.Hold, '\0', SpecialKeyColor, Key.Space);
-        space.SetLabel("SPACE  <size=70%>(shield)</size>");
+        TouchKey shield = CreateKey(area, 3, 2f, 2f, TouchKey.KeyAction.Hold, '\0', SpecialKeyColor, Key.Tab);
+        shield.SetLabel("SHIELD");
+        TouchKey space = CreateKey(area, 3, 4f, 6f, TouchKey.KeyAction.Character, ' ', SpecialKeyColor);
+        space.SetLabel("SPACE");
 
         RefreshKeys();
     }

@@ -1,6 +1,6 @@
 // Powers.cs
 // ---------------------------------------------------------------------------
-// The player's two special powers, used with the number keys:
+// The player's special powers, used with the number keys (and Tab):
 //
 //   [1] LURE BOMB - HOLD 1: a dashed arc (ThrowArc) shows where it will land,
 //       throwDistance metres ahead, where you look, and a hint (bottom-right)
@@ -13,6 +13,18 @@
 //       freezeSeconds. You keep typing. While frozen, IsFrozen is true.
 //
 // Charges (max maxCharges of each) come ONLY from supply crates in the level.
+//
+//   [Tab] SHIELD  - NOT from crates: shieldChargesPerLevel charges for the
+//       whole level (1 by default, given at the start). Tab only brings up a
+//       SHIELD WORD (ShieldWord, e.g. "protect", styled for the typing
+//       difficulty): the player must TYPE it within shieldWordSeconds, while
+//       the enemies keep coming. Too slow, or Tab again: no shield, but the
+//       charge is kept. Once the word is typed, for shieldSeconds the
+//       player takes NO damage and every enemy (zombies, energy orbs, the
+//       boss's attack timer) moves at shieldEnemySpeed: time to think and
+//       pick targets. A zombie that reaches the player bounces off the shield
+//       and stays alive, so it can still be shot. While it is up, IsShielded
+//       is true and EnemySpeedFactor is below 1.
 //
 // COMBO WEAPONS: the combo (kills in a row without a mistake) buys them.
 // One key per weapon, two actions:
@@ -69,6 +81,12 @@ public class Powers : MonoBehaviour
     [Header("Freeze")]
     [SerializeField] private float freezeSeconds = 4f;
 
+    [Header("Shield")]
+    [SerializeField] private int shieldChargesPerLevel = 1;  // given at the start of the level, never refilled
+    [SerializeField] private float shieldSeconds = 8f;
+    [SerializeField, Range(0.1f, 1f)] private float shieldEnemySpeed = 0.35f; // enemies move at this fraction of their speed
+    [SerializeField] private float shieldWordSeconds = 6f;   // time to type the shield word after pressing Tab
+
     [Header("References (wired in the scene)")]
     [SerializeField] private HUD hud;
     [SerializeField] private Transform player;
@@ -82,6 +100,26 @@ public class Powers : MonoBehaviour
     {
         get { return freezeTimeLeft > 0f; }
     }
+
+    // The shield. Static like the freeze (reset in Awake).
+    private static float shieldTimeLeft;
+    private static float shieldSlow = 1f;
+
+    // True while the shield is up: the player takes no damage.
+    public static bool IsShielded
+    {
+        get { return shieldTimeLeft > 0f; }
+    }
+
+    // Enemies multiply their speed by this: below 1 while the shield is up.
+    public static float EnemySpeedFactor
+    {
+        get { return IsShielded ? shieldSlow : 1f; }
+    }
+
+    public int ShieldCharges { get; private set; }
+
+    private float shieldWordTimeLeft; // > 0 while the shield word is waiting to be typed
 
     // Combo weapons. Static like the freeze (reset in Awake).
     private static float frenzyTimeLeft;
@@ -125,10 +163,15 @@ public class Powers : MonoBehaviour
     {
         freezeTimeLeft = 0f;
         frenzyTimeLeft = 0f;
+        shieldTimeLeft = 0f;
+        shieldSlow = 1f;
+        ShieldWord.Reset();
     }
 
     private void Start()
     {
+        ShieldCharges = shieldChargesPerLevel;
+        RefreshShieldHud();
         RefreshHud();
         RefreshWeaponSlots();
         OnComboChanged(1);
@@ -153,6 +196,7 @@ public class Powers : MonoBehaviour
             }
         }
         RefreshWeaponStatus();
+        UpdateShield();
 
         if (freezeTimeLeft <= 0f || GameManager.Instance.State != GameState.Playing)
         {
@@ -782,6 +826,133 @@ public class Powers : MonoBehaviour
         AnalyticsEvent e = PowerEvent("use", "freeze");
         e.Add("while_frozen", alreadyFrozen); // used again before the last one ran out
         SendPowerEvent(e);
+    }
+
+    // ---- Shield (Tab) ----
+
+    // Called by TypingController when Tab is pressed: brings up the SHIELD
+    // WORD to type (or closes it again if it is already up).
+    public void TryUseShield()
+    {
+        if (GameManager.Instance.State != GameState.Playing)
+        {
+            return;
+        }
+        if (ShieldWord.Current != null)
+        {
+            SendPowerEvent(PowerEvent("word_cancelled", "shield"));
+            CloseShieldWord("Shield cancelled. Press Tab to try again.");
+            return;
+        }
+        if (IsShielded)
+        {
+            LogUseRefused("shield", "already_active", "key");
+            hud.ShowHint("Your shield is already up.", 1.5f);
+            return;
+        }
+        if (ShieldCharges <= 0)
+        {
+            SendPowerEvent(PowerEvent("empty", "shield"));
+            hud.ShowHint("No shield left: you get " + shieldChargesPerLevel + " per level.", 2.5f);
+            return;
+        }
+
+        // A word whose first character nothing on screen uses, styled for the
+        // typing difficulty ("protect", "Protect,", "#Shield_07"...).
+        WaveSpawner spawner = Object.FindFirstObjectByType<WaveSpawner>();
+        List<char> used = spawner != null ? spawner.UsedFirstLetters() : new List<char>();
+        string word = TypingSettings.Style(WordBank.PickShieldWord(used), used);
+        ShieldWord.Open(word, this, hud);
+        AnalyticsEvent started = PowerEvent("word_started", "shield");
+        started.Add("word", word);
+        started.Add("time_limit", shieldWordSeconds);
+        SendPowerEvent(started);
+        shieldWordTimeLeft = shieldWordSeconds;
+        hud.SetShieldPromptTime(1f);
+    }
+
+    // Closes the shield word without raising the shield (the charge is kept).
+    private void CloseShieldWord(string hint)
+    {
+        ShieldWord.Close();
+        shieldWordTimeLeft = 0f;
+        hud.ShowHint(hint, 2.5f);
+    }
+
+    // Called by ShieldWord when its word has been typed: the shield goes up.
+    public void RaiseShield()
+    {
+        shieldWordTimeLeft = 0f;
+        if (ShieldCharges <= 0 || GameManager.Instance.State != GameState.Playing)
+        {
+            return;
+        }
+
+        ShieldCharges -= 1;
+        shieldSlow = shieldEnemySpeed;
+        shieldTimeLeft = shieldSeconds;
+        AnalyticsEvent used = PowerEvent("use", "shield");
+        used.Add("duration", shieldSeconds);
+        used.Add("enemy_speed_factor", shieldEnemySpeed);
+        SendPowerEvent(used);
+        RefreshShieldHud();
+        hud.PulseShield();
+        hud.ShowHint("SHIELD UP! No damage for " + shieldSeconds.ToString("0.#")
+            + " seconds and enemies are slowed. Take your time.", 3f);
+    }
+
+    // Called when the shield blocks a hit (a zombie bounced off it, an orb or
+    // the boss would have hurt the player).
+    public void OnShieldHit()
+    {
+        SendPowerEvent(PowerEvent("block", "shield"));
+        hud.PulseShield();
+        CameraDirector.Shake(0.15f);
+    }
+
+    // Game time: the shield (and the shield word's timer) waits while the
+    // game is paused or a tip is open.
+    private void UpdateShield()
+    {
+        if (ShieldWord.Current != null)
+        {
+            GameState state = GameManager.Instance.State;
+            if (state == GameState.Won || state == GameState.Lost)
+            {
+                ShieldWord.Close();
+                shieldWordTimeLeft = 0f;
+            }
+            else if (state == GameState.Playing)
+            {
+                shieldWordTimeLeft -= Time.deltaTime;
+                hud.SetShieldPromptTime(shieldWordSeconds > 0f ? shieldWordTimeLeft / shieldWordSeconds : 0f);
+                if (shieldWordTimeLeft <= 0f)
+                {
+                    SendPowerEvent(PowerEvent("word_timeout", "shield"));
+                    CloseShieldWord("Too slow: no shield. Press Tab to try again.");
+                }
+            }
+        }
+
+        if (shieldTimeLeft <= 0f || GameManager.Instance.State != GameState.Playing)
+        {
+            return;
+        }
+
+        shieldTimeLeft = Mathf.Max(0f, shieldTimeLeft - Time.deltaTime);
+        RefreshShieldHud();
+        if (shieldTimeLeft <= 0f)
+        {
+            SendPowerEvent(PowerEvent("end", "shield"));
+            shieldSlow = 1f;
+            hud.ShowHint("Shield down!", 1.5f);
+        }
+    }
+
+    private void RefreshShieldHud()
+    {
+        float fraction = shieldSeconds > 0f ? shieldTimeLeft / shieldSeconds : 0f;
+        hud.SetShield(ShieldCharges, shieldChargesPerLevel, fraction);
     }
 
     // Where the lure bomb lands: 'wanted' metres ahead along the ground,

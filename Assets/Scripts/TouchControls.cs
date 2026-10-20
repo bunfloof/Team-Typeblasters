@@ -6,7 +6,7 @@
 //   - typing with the PHONE'S OWN KEYBOARD: while playing, a tap on the game
 //     opens it (Plugins/WebGL/TouchControlsWeb.jslib) and what is typed goes
 //     to the game as if typed on a computer keyboard (capitals, symbols, the
-//     delete key drops the word, the space bar raises the shield; the number
+//     delete key drops the word, spaces type phrases; SHIELD opens its word; the number
 //     keys 1-4 do nothing: the powers have their own buttons)
 //   - a row of buttons just above the keyboard: pause, the four powers
 //     (TouchPowerButton) and TAP TO TYPE / HIDE KEYBOARD (TouchTypeButton)
@@ -142,9 +142,11 @@ public class TouchControls : MonoBehaviour
         "Click the game window, then press Start", "Tap START to play",
         "Backspace: change target", DeleteKey + ": change target",
         "(or Backspace)", "(or " + DeleteKey + ")",
-        "Press SPACE", "Tap SPACE",
+        "Press Tab", "Tap SHIELD",
+        "[TAB]", "[SHIELD]",
+        "Tab: cancel", "SHIELD: cancel",
         "Esc: pause", "II: pause",
-        "(Esc = cancel)", "(" + DeleteKey + " = cancel)",
+        "(Esc = cancel)", "(SHIELD = cancel)",
         "Use the ARROW KEYS to aim", "DRAG your finger to aim",
         "Release 1 to throw", "Let go to throw",
         "Press 2 to freeze", "Tap 2 to freeze",
@@ -298,8 +300,8 @@ public class TouchControls : MonoBehaviour
 
     // ---- What the phone's keyboard typed (called by the .jslib) ----
 
-    // Typed characters. A space is the Space key (it raises the shield, see
-    // EasyShield); everything else is typed as it is, except 1-4: on a
+    // Text includes spaces inside Brute phrases. Shield has its own button;
+    // typing a space must never trigger it. Except 1-4: on a
     // computer those keys are the powers, but a phone keyboard types them
     // when a letter is held a little long (q w e r), and the powers have
     // their own buttons. (No word has those digits.)
@@ -307,11 +309,7 @@ public class TouchControls : MonoBehaviour
     {
         foreach (char character in text)
         {
-            if (character == ' ')
-            {
-                TapKey(Key.Space);
-            }
-            else if (!char.IsControl(character) && (character < '1' || character > '4'))
+            if (!char.IsControl(character) && (character < '1' || character > '4'))
             {
                 TouchInput.Type(character);
             }
@@ -647,7 +645,7 @@ public class TouchControls : MonoBehaviour
         buttonRow.anchorMax = new Vector2(1f, 0f);
         buttonRow.pivot = new Vector2(0.5f, 0f);
 
-        float total = PauseWeight + 4f + TypeWeight;
+        float total = PauseWeight + 5f + TypeWeight;
         float left = 0f;
 
         // Pause: the same pause as Esc (analytics reason "button").
@@ -664,6 +662,7 @@ public class TouchControls : MonoBehaviour
         CreateRowPower(ref left, total, TouchPowerButton.Power.Freeze, "2", "FREEZE", Palette.FreezeCrate);
         CreateRowPower(ref left, total, TouchPowerButton.Power.Frenzy, "3", "FRENZY", Palette.WeaponFrenzy);
         CreateRowPower(ref left, total, TouchPowerButton.Power.Rocket, "4", "RPG", Palette.BlastOrange);
+        CreateRowPower(ref left, total, TouchPowerButton.Power.Shield, "TAB", "SHIELD", Palette.Shield);
 
         RectTransform typeSlot = CreateRowSlot("Touch Type Button", left, TypeWeight, total);
         Image typeImage = typeSlot.gameObject.AddComponent<Image>();

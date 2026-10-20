@@ -276,20 +276,44 @@ public class GameManager : MonoBehaviour
         // game waits for Enter / OK). Shown once, not again after a Restart.
         if (showComboWeaponsTip)
         {
-            RequestTip("combo weapons", "COMBO WEAPONS",
-                "Type without mistakes to build your COMBO (top of the screen), then SPEND it on a weapon:\n\n"
-                + "<color=#FF4D33>[3] FRENZY</color> - costs " + Powers.FrenzyCost + " combo: for 5 seconds every enemy word\n"
-                + "turns into a TINY red word (1 to 4 letters - even a single letter!).\n"
-                + "<color=#FF8C1A>[4] RPG</color> - costs " + Powers.RocketCost + " combo: your next finished word fires a rocket\n"
-                + "that blows up everything around its target (it hurts the boss too).\n\n"
-                + "HOLD 3 / 4 to GET a weapon (a bar fills under its slots): it is kept bottom-left,\n"
-                + "2 slots each, until you want it. TAP 3 / 4 (or click its slot) to USE one.\n"
-                + "Weaker against the boss!\n"
-                + "One weapon per wave. A wrong key costs 1 combo; a bite resets it\n"
-                + "(a bite on the run between two fights only costs 1).\n"
-                + "Lure bombs [1] and freezes [2] come from supply crates.",
-                Palette.BlastOrange);
+        RequestTip("combo weapons", "COMBO WEAPONS",
+            "Type without mistakes to build your COMBO (top of the screen), then SPEND it on a weapon:\n\n"
+            + "<color=#FF4D33>[3] FRENZY</color> - costs " + Powers.FrenzyCost + " combo: for 5 seconds every enemy word\n"
+            + "turns into a TINY red word (1 to 4 letters - even a single letter!).\n"
+            + "<color=#FF8C1A>[4] RPG</color> - costs " + Powers.RocketCost + " combo: your next finished word fires a rocket\n"
+            + "that blows up everything around its target (it hurts the boss too).\n\n"
+            + "HOLD 3 / 4 to GET a weapon (a bar fills under its slots): it is kept bottom-left,\n"
+            + "2 slots each, until you want it. TAP 3 / 4 (or click its slot) to USE one.\n"
+            + "Weaker against the boss!\n"
+            + "One weapon per wave. A wrong key costs 1 combo; a bite resets it\n"
+            + "(a bite on the run between two fights only costs 1).\n"
+            + "Lure bombs [1] and freezes [2] come from supply crates.\n\n"
+            + "<color=#59F2D9>[TAB] SHIELD</color> - once per level: press Tab, then TYPE the shield word\n"
+            + "in time. No damage for a few seconds and every enemy slows down!",
+            Palette.BlastOrange);
         }
+    }
+
+    // ---- Typing difficulty (picked on the Start panel, see TypingSettings) ----
+
+    // Called by the difficulty buttons on the Start panel (HUD). Only before
+    // the run starts: every word is styled when its enemy appears.
+    public void SetTypingDifficulty(TypingDifficulty level)
+    {
+        if (State != GameState.Start)
+        {
+            return;
+        }
+        TypingSettings.Difficulty = level;
+        hud.RefreshDifficulty();
+    }
+
+    // Called by TypingController: LEFT / RIGHT arrows on the Start panel.
+    public void CycleTypingDifficulty(int step)
+    {
+        int count = TypingSettings.DifficultyCount;
+        int next = ((int)TypingSettings.Difficulty + step % count + count) % count;
+        SetTypingDifficulty((TypingDifficulty)next);
     }
 
     // Spends combo on a weapon (Powers): the combo goes down by 'amount' (never below 1).
@@ -613,9 +637,28 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        // The shield (Tab) blocks every hit while it is up.
+        if (Powers.IsShielded)
+        {
+            powers.OnShieldHit();
+            if (hit != null)
+            {
+                hit.Add("amount", 0);
+                hit.Add("attempted_amount", amount);
+                hit.Add("shield_blocked", true);
+                Analytics.AddPlayerState(hit, attacker);
+                hit.Add("health_after", Health);
+                hit.Add("combo_after", Combo);
+                hit.Add("fatal", false);
+                Analytics.Send(hit);
+            }
+            return;
+        }
+
         if (hit != null)
         {
             hit.Add("amount", amount);
+            hit.Add("shield_blocked", false);
             Analytics.AddPlayerState(hit, attacker); // health, combo... before the hit
         }
 

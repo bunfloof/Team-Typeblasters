@@ -24,7 +24,7 @@ $scene=$scene.Replace('  m_ClearFlags: 1','  m_ClearFlags: 2')
 $scene=[regex]::Replace($scene,'(?m)^  m_BackGroundColor: .+$','  m_BackGroundColor: {r: 0.055, g: 0.085, b: 0.08, a: 1}')
 $scene=[regex]::Replace($scene,'(?m)^  m_AmbientSkyColor: .+$','  m_AmbientSkyColor: {r: 0.25, g: 0.32, b: 0.34, a: 1}')
 $scene=$scene.Replace('m_text: The Typeblaster of the Dead','m_text: HARD - The Hollow Forest')
-$scene=$scene.Replace('Type the word above a zombie to shoot it. Every letter is a bullet.','HARD FOREST: type EXACT case and punctuation. Follow the forest trail. Purple enemies change words while idle. Enemies move 30% faster.')
+$scene=$scene.Replace('Type the word above a zombie to shoot it. Every letter is a bullet.','HARD FOREST: follow the forest trail. Enemies move 30% faster and carry long words. Choose your typing difficulty before starting.')
 $scene=$scene.Replace('  spawnInterval: 2','  spawnInterval: 1.6').Replace('  runnerFirstWave: 3','  runnerFirstWave: 2').Replace('  armoredFirstWave: 3','  armoredFirstWave: 2').Replace('  bossName: SUBJECT ZERO','  bossName: THE HOLLOW WARDEN')
 $materials=@{
     ForestEarth=@('0711525c90ef4cd7aac565201974b102','0.14, g: 0.13, b: 0.105');
@@ -116,7 +116,7 @@ function Shape($name,$position,$scale,$surface,$parent,$mesh=10202,$yaw=0,$colli
     return $node
 }
 $root=Node 'Hard - The Hollow Forest'
-Script $root 'ac41dbe137fe41969c6c9d139da4d261' "  enemySpeedMultiplier: 1.3`n  wordChangeSeconds: 4.5"
+Script $root 'ac41dbe137fe41969c6c9d139da4d261' '  enemySpeedMultiplier: 1.3'
 $land=Node 'Forest - Terrain and Trails' -parent $root.transform
 $trees=Node 'Forest - Trees and Underbrush' -parent $root.transform
 $fights=Node 'Forest - New Encounters' -parent $root.transform

@@ -10,6 +10,9 @@
 //     and the combo weapons kept for later, "[3] FRENZY" and "[4] RPG": one
 //     square per slot, lit while a weapon is kept, clickable to use it; a bar
 //     under the slots fills while 3 / 4 is HELD to buy one
+//   - the SHIELD just above the powers: "[TAB] SHIELD" with its charge, a bar
+//     that drains while it is up, and a glow along the screen edges; after
+//     Tab, the SHIELD WORD box (bottom-centre, above the hint) with its timer
 //   - while 1 is held (aiming the lure bomb): an arrow-keys hint in a dark box
 //     (bottom-right); a "+1" next to a power whenever a charge is gained
 //   - the first-time tip box (the game waits until Enter / OK)
@@ -21,7 +24,8 @@
 //   - the enemies' words (CreateWordLabel). They are drawn on this Canvas, on
 //     top of the 3D scene, so an enemy's body can never hide another's word.
 //     WaveSpawner.LayoutLabels moves them to their enemies every frame.
-//   - the Start panel (with its "Show tips" toggle), the "You survived" and
+//   - the Start panel (with its "Show tips" toggle and the TYPING DIFFICULTY
+//     buttons, built in code under it), the "You survived" and
 //     "You died" panels (with the run's stats at the end), the pause panel
 //     and the 3-2-1 resume countdown
 //
@@ -142,6 +146,7 @@ public class HUD : MonoBehaviour
         UpdateMultiKill();
         UpdateRedFlash();
         UpdatePowerPulses();
+        UpdateShieldLook();
         UpdateComboRewardBar();
         UpdateComboLook();
         UpdateHint();
@@ -473,6 +478,75 @@ public class HUD : MonoBehaviour
         // BuildLevelSelection();
         BuildMenuButtons();
         startPanel.SetActive(true);
+        RefreshDifficulty();
+    }
+
+    // ---- Typing difficulty (Start panel, under the "Show tips" toggle) ----
+    //   TYPING DIFFICULTY
+    //   [ EASY ] [ MEDIUM ] [ HARD ] [ EXTREME ]
+    //   what it adds, with example words
+    // The picked one is filled in its colour. Clicking a button (or LEFT /
+    // RIGHT, see TypingController) calls GameManager.SetTypingDifficulty.
+
+    private const float DifficultyTop = -378f;        // canvas units from the centre of the Start panel
+    private static readonly Vector2 DifficultyButtonSize = new Vector2(210f, 54f);
+    private const float DifficultyButtonGap = 14f;
+    private static readonly Color DifficultyIdle = new Color(0.17f, 0.18f, 0.21f);
+
+    private RectTransform difficultyRoot; // null until the Start panel is first shown
+    private readonly Image[] difficultyButtons = new Image[TypingSettings.DifficultyCount];
+    private readonly TMP_Text[] difficultyNames = new TMP_Text[TypingSettings.DifficultyCount];
+    private TMP_Text difficultyDescription;
+
+    // Shows the difficulty picked now (TypingSettings.Difficulty).
+    public void RefreshDifficulty()
+    {
+        if (difficultyRoot == null)
+        {
+            BuildDifficultySelector();
+        }
+
+        TypingDifficulty picked = TypingSettings.Difficulty;
+        for (int i = 0; i < TypingSettings.DifficultyCount; i++)
+        {
+            TypingDifficulty level = (TypingDifficulty)i;
+            bool selected = level == picked;
+            difficultyButtons[i].color = selected ? TypingSettings.Tint(level) : DifficultyIdle;
+            difficultyNames[i].color = selected ? Color.black : TypingSettings.Tint(level);
+        }
+        difficultyDescription.text = TypingSettings.Description(picked);
+    }
+
+    private void BuildDifficultySelector()
+    {
+        difficultyRoot = CreateRect("Typing Difficulty", startPanel.transform);
+        PlaceRect(difficultyRoot, Centre, TopCentre, new Vector2(0f, DifficultyTop), new Vector2(1000f, 150f));
+
+        TMP_Text title = CreateText(difficultyRoot, "Title",
+            "TYPING DIFFICULTY   <size=75%><color=#9AA0AA>click, or LEFT / RIGHT arrows</color></size>", 26f, Vector2.zero);
+        PlaceRect(title.rectTransform, TopCentre, TopCentre, Vector2.zero, new Vector2(1000f, 34f));
+        title.fontStyle = FontStyles.Bold;
+
+        float rowWidth = TypingSettings.DifficultyCount * DifficultyButtonSize.x
+            + (TypingSettings.DifficultyCount - 1) * DifficultyButtonGap;
+        for (int i = 0; i < TypingSettings.DifficultyCount; i++)
+        {
+            TypingDifficulty level = (TypingDifficulty)i;
+            float x = -rowWidth * 0.5f + DifficultyButtonSize.x * 0.5f + i * (DifficultyButtonSize.x + DifficultyButtonGap);
+            TMP_Text label = CreateButton(difficultyRoot, TypingSettings.Name(level), TypingSettings.Name(level), Vector2.zero,
+                () => GameManager.Instance.SetTypingDifficulty(level));
+            RectTransform button = (RectTransform)label.rectTransform.parent;
+            PlaceRect(button, TopCentre, TopCentre, new Vector2(x, -42f), DifficultyButtonSize);
+            label.rectTransform.sizeDelta = DifficultyButtonSize;
+            label.fontSize = 28f;
+            label.fontStyle = FontStyles.Bold;
+            difficultyButtons[i] = button.GetComponent<Image>();
+            difficultyNames[i] = label;
+        }
+
+        difficultyDescription = CreateText(difficultyRoot, "Description", "", 24f, Vector2.zero);
+        PlaceRect(difficultyDescription.rectTransform, TopCentre, TopCentre, new Vector2(0f, -106f), new Vector2(1200f, 34f));
+        difficultyDescription.textWrappingMode = TextWrappingModes.NoWrap;
     }
 
     // Ticks or unticks "Show tips" without calling its OnValueChanged (GameManager
@@ -1112,6 +1186,284 @@ public class HUD : MonoBehaviour
         {
             GameManager.Instance.Powers.UseWeapon(rocket);
         }
+    }
+
+    // ---- Shield (Tab), just above the powers (bottom-left) ----
+    //   [TAB] SHIELD   [#]
+    // a wider key cap, the name, then one pip per charge (like the powers).
+    // While the shield is up: a bar under the pips drains, the row glows, and
+    // a band in the shield's colour lines the screen edges (blinking at the end).
+
+    private const float ShieldKeyWidth = 70f;
+    private const float ShieldGlowThickness = 16f;
+    private const float ShieldWarnFraction = 0.25f; // the glow blinks once this little time is left
+
+    private RectTransform shieldRow;      // null until the first SetShield
+    private CanvasGroup shieldRowGroup;
+    private Image shieldKeyCap;
+    private TMP_Text shieldName;
+    private RectTransform shieldPipStrip;
+    private readonly List<Image> shieldPips = new List<Image>();
+    private RectTransform shieldBar;
+    private RectTransform shieldBarFill;
+    private CanvasGroup shieldGlow;
+    private int shieldCharges;
+    private float shieldFraction;         // 0 = down, 1 = just raised
+    private float shieldPulseTimer;
+
+    // charges: shields left this level; timeLeftFraction: 0 while it is down,
+    // otherwise how much of it is left (1 = just raised).
+    public void SetShield(int charges, int maxCharges, float timeLeftFraction)
+    {
+        if (shieldRow == null)
+        {
+            BuildShield();
+        }
+
+        shieldCharges = charges;
+        shieldFraction = Mathf.Clamp01(timeLeftFraction);
+
+        int shown = Mathf.Max(0, maxCharges);
+        while (shieldPips.Count < shown)
+        {
+            Image pip = CreateImage("Pip", shieldPipStrip, EmptyPipColor);
+            float x = PowerPipPadding + shieldPips.Count * (PowerPipSize + PowerPipGap);
+            PlaceRect(pip.rectTransform, LeftMiddle, LeftMiddle, new Vector2(x, 0f), new Vector2(PowerPipSize, PowerPipSize));
+            shieldPips.Add(pip);
+        }
+        for (int i = 0; i < shieldPips.Count; i++)
+        {
+            shieldPips[i].gameObject.SetActive(i < shown);
+            shieldPips[i].color = i < charges ? Palette.Shield : EmptyPipColor;
+        }
+        float stripWidth = shown > 0 ? PowerPipPadding * 2f + shown * PowerPipSize + (shown - 1) * PowerPipGap : 0f;
+        shieldPipStrip.sizeDelta = new Vector2(stripWidth, PowerPipSize + PowerPipPadding * 2f);
+
+        bool up = shieldFraction > 0f;
+        if (shieldBar.gameObject.activeSelf != up)
+        {
+            shieldBar.gameObject.SetActive(up);
+            shieldGlow.gameObject.SetActive(up);
+        }
+        shieldBarFill.anchorMax = new Vector2(shieldFraction, 1f);
+    }
+
+    // The shield row flashes and grows for a moment (raised, or a hit blocked).
+    public void PulseShield()
+    {
+        if (shieldRow == null)
+        {
+            BuildShield();
+        }
+        shieldPulseTimer = Mathf.Max(0.01f, powerPulseSeconds);
+    }
+
+    private void UpdateShieldLook()
+    {
+        if (shieldRow == null)
+        {
+            return;
+        }
+
+        float flash = 0f;
+        float grow = 0f;
+        if (shieldPulseTimer > 0f)
+        {
+            shieldPulseTimer -= Time.unscaledDeltaTime;
+            float progress = 1f - Mathf.Max(0f, shieldPulseTimer) / Mathf.Max(0.01f, powerPulseSeconds);
+            grow = Mathf.Sin(progress * Mathf.PI);
+            flash = 1f - progress;
+        }
+
+        bool up = shieldFraction > 0f;
+        float scale = Mathf.Lerp(1f, powerPulseScale, grow);
+        shieldRow.localScale = new Vector3(scale, scale, 1f);
+        Color lit = up ? Palette.Shield : Color.white;
+        shieldKeyCap.color = Color.Lerp(lit, Palette.Shield, flash);
+        shieldName.color = Color.Lerp(lit, Palette.Shield, flash);
+        float restAlpha = shieldCharges > 0 || up ? 1f : powerEmptyAlpha;
+        shieldRowGroup.alpha = Mathf.Lerp(restAlpha, 1f, flash);
+
+        if (up)
+        {
+            // A slow breathing glow; it blinks fast when the shield is about to drop.
+            float glow = 0.55f + 0.15f * Mathf.Sin(Time.unscaledTime * 4f);
+            if (shieldFraction < ShieldWarnFraction && Mathf.Repeat(Time.unscaledTime * 5f, 1f) < 0.4f)
+            {
+                glow = 0.15f;
+            }
+            shieldGlow.alpha = Mathf.Max(glow, flash);
+        }
+    }
+
+    // ShieldRow (above the powers) > KeyCap (+ Key), Name, Pips, Bar (+ Fill);
+    // ShieldGlow (four edge bands + a faint tint) at the back of the readouts.
+    private void BuildShield()
+    {
+        if (powersPanel == null)
+        {
+            BuildPowers();
+        }
+        float powersHeight = PowerCount * PowerRowHeight + (PowerCount - 1) * PowerRowGap;
+        float y = BottomRowY() + powersHeight + PowerRowGap * 2f + PowerRowHeight * 0.5f;
+
+        shieldRow = CreateRect("SHIELD", readoutLayer);
+        PlaceRect(shieldRow, BottomLeft, LeftMiddle, new Vector2(powersMargin, y), new Vector2(PowerPipsX + 120f, PowerRowHeight));
+        shieldRowGroup = shieldRow.gameObject.AddComponent<CanvasGroup>();
+
+        shieldKeyCap = CreateImage("KeyCap", shieldRow, Color.white);
+        PlaceRect(shieldKeyCap.rectTransform, LeftMiddle, LeftMiddle, Vector2.zero, new Vector2(ShieldKeyWidth, PowerKeySize));
+        TMP_Text keyText = CreateText(shieldKeyCap.rectTransform, "Key", "TAB", 24f, Vector2.zero);
+        StretchToParent(keyText.rectTransform);
+        keyText.color = Color.black;
+        keyText.fontStyle = FontStyles.Bold;
+
+        shieldName = CreateText(shieldRow, "Name", "SHIELD", 30f, Vector2.zero);
+        PlaceRect(shieldName.rectTransform, LeftMiddle, LeftMiddle, new Vector2(ShieldKeyWidth + 14f, 0f),
+            new Vector2(PowerPipsX - ShieldKeyWidth - 14f, PowerRowHeight));
+        shieldName.alignment = TextAlignmentOptions.Left;
+        shieldName.fontStyle = FontStyles.Bold;
+        shieldName.textWrappingMode = TextWrappingModes.NoWrap;
+        shieldName.fontSharedMaterial = OutlineMaterial(shieldName);
+
+        Image strip = CreateImage("Pips", shieldRow, new Color(0f, 0f, 0f, 0.55f));
+        PlaceRect(strip.rectTransform, LeftMiddle, LeftMiddle, new Vector2(PowerPipsX, 0f), Vector2.zero);
+        shieldPipStrip = strip.rectTransform;
+
+        // The time left, under the row's name and pips.
+        Image bar = CreateImage("Bar", shieldRow, new Color(0f, 0f, 0f, 0.6f));
+        PlaceRect(bar.rectTransform, LeftMiddle, new Vector2(0f, 1f), new Vector2(ShieldKeyWidth + 14f, -PowerRowHeight * 0.5f - 2f),
+            new Vector2(PowerPipsX + 40f - ShieldKeyWidth - 14f, WeaponHoldBarHeight));
+        Image fill = CreateImage("Fill", bar.rectTransform, Palette.Shield);
+        fill.rectTransform.anchorMin = Vector2.zero;
+        fill.rectTransform.anchorMax = Vector2.one;
+        fill.rectTransform.offsetMin = Vector2.zero;
+        fill.rectTransform.offsetMax = Vector2.zero;
+        shieldBar = bar.rectTransform;
+        shieldBarFill = fill.rectTransform;
+        bar.gameObject.SetActive(false);
+
+        // The glow: under every readout, over the enemy words only at the very edges.
+        RectTransform glow = CreateRect("ShieldGlow", readoutLayer);
+        StretchToParent(glow);
+        glow.SetAsFirstSibling();
+        shieldGlow = glow.gameObject.AddComponent<CanvasGroup>();
+        shieldGlow.blocksRaycasts = false;
+        shieldGlow.interactable = false;
+        Image tint = CreateImage("Tint", glow, new Color(Palette.Shield.r, Palette.Shield.g, Palette.Shield.b, 0.06f));
+        StretchToParent(tint.rectTransform);
+        CreateEdgeBand(glow, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, ShieldGlowThickness));
+        CreateEdgeBand(glow, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, ShieldGlowThickness));
+        CreateEdgeBand(glow, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(ShieldGlowThickness, 0f));
+        CreateEdgeBand(glow, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(ShieldGlowThickness, 0f));
+        glow.gameObject.SetActive(false);
+    }
+
+    // ---- The shield word box (after Tab, see ShieldWord) ----
+    //   TYPE IT TO RAISE YOUR SHIELD   (Tab: cancel)
+    //               protect
+    //   [=========================-----]   <- time left
+    // Bottom-centre, above the hint box, so it never covers the enemies' words.
+
+    private const float ShieldPromptBottom = 250f;      // canvas units above the bottom edge
+    private static readonly Vector2 ShieldPromptSize = new Vector2(620f, 132f);
+
+    private RectTransform shieldPrompt;   // null until Tab is first pressed
+    private TMP_Text shieldPromptWord;
+    private RectTransform shieldPromptFill;
+
+    // The word's text (ShieldWord.Label).
+    public TMP_Text ShieldPromptLabel
+    {
+        get
+        {
+            if (shieldPrompt == null)
+            {
+                BuildShieldPrompt();
+            }
+            return shieldPromptWord;
+        }
+    }
+
+    public void ShowShieldPrompt()
+    {
+        if (shieldPrompt == null)
+        {
+            BuildShieldPrompt();
+        }
+        shieldPrompt.gameObject.SetActive(true);
+        shieldPrompt.SetAsLastSibling();
+    }
+
+    public void HideShieldPrompt()
+    {
+        if (shieldPrompt != null)
+        {
+            shieldPrompt.gameObject.SetActive(false);
+        }
+    }
+
+    public void SetShieldPromptWord(string richText)
+    {
+        ShieldPromptLabel.text = richText;
+    }
+
+    // fraction: time left to type it (1 = all of it).
+    public void SetShieldPromptTime(float fraction)
+    {
+        if (shieldPrompt == null)
+        {
+            BuildShieldPrompt();
+        }
+        shieldPromptFill.anchorMax = new Vector2(Mathf.Clamp01(fraction), 1f);
+    }
+
+    // ShieldPrompt (dark box, shield-coloured strip and border) > Title, Word, Bar (+ Fill).
+    private void BuildShieldPrompt()
+    {
+        Image border = CreateImage("ShieldPrompt", readoutLayer, Palette.Shield);
+        shieldPrompt = border.rectTransform;
+        PlaceRect(shieldPrompt, BottomCentre, BottomCentre, new Vector2(0f, ShieldPromptBottom), ShieldPromptSize);
+
+        Image box = CreateImage("Box", shieldPrompt, new Color(0.03f, 0.05f, 0.08f, 0.92f));
+        StretchToParent(box.rectTransform);
+        box.rectTransform.offsetMin = new Vector2(3f, 3f);
+        box.rectTransform.offsetMax = new Vector2(-3f, -3f);
+
+        TMP_Text title = CreateText(shieldPrompt, "Title",
+            "TYPE IT TO RAISE YOUR SHIELD   <size=75%><color=#9AA0AA>Tab: cancel</color></size>", 24f, Vector2.zero);
+        PlaceRect(title.rectTransform, TopCentre, TopCentre, new Vector2(0f, -10f), new Vector2(ShieldPromptSize.x, 32f));
+        title.color = Palette.Shield;
+        title.fontStyle = FontStyles.Bold;
+
+        shieldPromptWord = CreateText(shieldPrompt, "Word", "", 56f, Vector2.zero);
+        PlaceRect(shieldPromptWord.rectTransform, Centre, Centre, new Vector2(0f, -8f), new Vector2(ShieldPromptSize.x - 20f, 64f));
+        shieldPromptWord.fontStyle = FontStyles.Bold;
+        shieldPromptWord.textWrappingMode = TextWrappingModes.NoWrap;
+        shieldPromptWord.fontSharedMaterial = OutlineMaterial(shieldPromptWord);
+
+        Image bar = CreateImage("Bar", shieldPrompt, new Color(0f, 0f, 0f, 0.7f));
+        PlaceRect(bar.rectTransform, BottomCentre, BottomCentre, new Vector2(0f, 10f), new Vector2(ShieldPromptSize.x - 40f, 8f));
+        Image fill = CreateImage("Fill", bar.rectTransform, Palette.Shield);
+        fill.rectTransform.anchorMin = Vector2.zero;
+        fill.rectTransform.anchorMax = Vector2.one;
+        fill.rectTransform.offsetMin = Vector2.zero;
+        fill.rectTransform.offsetMax = Vector2.zero;
+        shieldPromptFill = fill.rectTransform;
+
+        shieldPrompt.gameObject.SetActive(false);
+    }
+
+    // One band along a screen edge (anchored from anchorMin to anchorMax).
+    private static void CreateEdgeBand(Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 size)
+    {
+        Image band = CreateImage("Edge", parent, Palette.Shield);
+        RectTransform rect = band.rectTransform;
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.pivot = pivot;
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = size;
     }
 
     // ---- Lure bomb aiming hint (bottom-right, while 1 is held) ----
@@ -1898,6 +2250,11 @@ public class HUD : MonoBehaviour
 
         // The game is over: hide the enemies' words so they do not show through the panel.
         wordLayer.gameObject.SetActive(false);
+        if (shieldGlow != null)
+        {
+            shieldGlow.gameObject.SetActive(false);
+        }
+        HideShieldPrompt();
 
         TMP_Text message;
         if (won)
@@ -1919,7 +2276,7 @@ public class HUD : MonoBehaviour
     //   Score 12750
     //   Accuracy 97.5%    Speed 62 WPM
     //   Kills 50    Best combo x51    Biggest blast x7
-    //   Time 4:12
+    //   Time 4:12    Typing HARD
     private static string StatsText(RunStats stats)
     {
         int seconds = Mathf.FloorToInt(stats.Seconds);
@@ -1933,7 +2290,8 @@ public class HUD : MonoBehaviour
             + StatLabel + "Kills</color>  <b>" + stats.Kills + "</b>     "
             + StatLabel + "Best combo</color>  <b>x" + stats.BestCombo + "</b>     "
             + StatLabel + "Biggest blast</color>  <b>x" + stats.BiggestMultiKill + "</b>\n"
-            + StatLabel + "Time</color>  <b>" + time + "</b>";
+            + StatLabel + "Time</color>  <b>" + time + "</b>     "
+            + StatLabel + "Typing</color>  <b>" + TypingSettings.Name(TypingSettings.Difficulty) + "</b>";
     }
 
     // ---- Small UI helpers ----
@@ -1990,7 +2348,8 @@ public class HUD : MonoBehaviour
             return;
         }
         menuButtonsBuilt = true;
-        AddMenuButton(startPanel.transform, new Vector2(0f, -435f));
+        // Keep MENU beside the new difficulty selector instead of over its buttons.
+        AddMenuButton(startPanel.transform, new Vector2(740f, -435f));
         AddMenuButton(pausePanel.transform, new Vector2(0f, -260f));
         AddMenuButton(wonPanel.transform, new Vector2(0f, -450f));
         AddMenuButton(lostPanel.transform, new Vector2(0f, -450f));

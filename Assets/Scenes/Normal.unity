@@ -11705,7 +11705,7 @@ MonoBehaviour:
     CRATES by typing their green words.
 
 
-    [1] Lure bomb     [2] Freeze     Backspace:
+    [1] Lure bomb     [2] Freeze     [Tab] Shield     Backspace:
     change target     Esc: pause
 
 
@@ -36358,7 +36358,7 @@ MonoBehaviour:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 3200000000}
-  m_Enabled: 1
+  m_Enabled: 0
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: dbee65f98fd428744963e39850653894, type: 3}
   m_Name:

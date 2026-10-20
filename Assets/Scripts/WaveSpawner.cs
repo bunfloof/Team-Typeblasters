@@ -57,6 +57,13 @@ public class WaveSpawner : MonoBehaviour
     [SerializeField] private int armoredStartCount = 2;
     [SerializeField] private int armoredPerWave = 1;
 
+    [Header("New enemies (added on top of the wave's zombies)")]
+    [SerializeField] private int splitterFirstWave = 2;         // each kind first comes in this wave...
+    [SerializeField] private int ghostFirstWave = 2;
+    [SerializeField] private int bruteFirstWave = 3;
+    [SerializeField] private int spitterFirstWave = 3;
+    [SerializeField] private int newEnemiesPerWave = 1;         // ...then this many more of them (any kind) every later wave
+
     [Header("Map view")]
     [SerializeField] private int[] mapViewWaves = { 2, 4 };     // in these waves the camera rises to a view over the whole area (CameraDirector)
 
@@ -87,6 +94,8 @@ public class WaveSpawner : MonoBehaviour
 
     private RailMover rail;          // on the Player object
     private Boss boss;               // the current boss, or null
+    private readonly List<EnergyOrb> strayOrbs = new List<EnergyOrb>(); // acid globs from SPITTERS, still in the air
+    private int normalSpawns;        // normal zombies spawned so far (every few is a SHIFTER on Hard / Extreme typing)
 
     // Every zombie that is currently alive.
     public List<Zombie> AliveZombies
@@ -152,7 +161,8 @@ public class WaveSpawner : MonoBehaviour
     }
 
     // Everything the player can type right now: alive zombies, the active
-    // barrels and supply crates, and the boss's parts, orbs and quiz answers.
+    // barrels and supply crates, the boss's parts, orbs and quiz answers, the
+    // SPITTERS' acid globs, and the shield word while it is up.
     // The list is reused, so read it right away.
     public List<ITypingTarget> GetTypingTargets()
     {
@@ -175,6 +185,12 @@ public class WaveSpawner : MonoBehaviour
         if (boss != null && boss.IsAlive)
         {
             boss.AddTypeableParts(typingTargets);
+        }
+        strayOrbs.RemoveAll(orb => orb == null || !orb.IsAlive);
+        typingTargets.AddRange(strayOrbs);
+        if (ShieldWord.Current != null && ShieldWord.Current.IsAlive)
+        {
+            typingTargets.Add(ShieldWord.Current); // Tab's shield word (drawn by the HUD, not in the world)
         }
         return typingTargets;
     }
@@ -290,6 +306,7 @@ public class WaveSpawner : MonoBehaviour
 
         labelOrder.Clear();
         labelOrder.AddRange(GetTypingTargets());
+        labelOrder.RemoveAll(target => target is ShieldWord); // the HUD draws it in its own box
         labelOrder.Sort((a, b) =>
         {
             if (a.IsTargeted != b.IsTargeted)
@@ -551,6 +568,31 @@ public class WaveSpawner : MonoBehaviour
     public void RemoveZombie(Zombie zombie)
     {
         aliveZombies.Remove(zombie);
+    }
+
+    // Called by a SPITTER: its acid glob can be typed like any target.
+    public void AddStrayOrb(EnergyOrb orb)
+    {
+        strayOrbs.Add(orb);
+    }
+
+    // Called by a SPLITTER shot dead at 'at': its word (splitterWord) broke
+    // into two halves. Two SPLITLINGS appear on its left and right (as seen by
+    // the player), each carrying a new word that HIDES one half ("SUN" ->
+    // "SUNSHINE", "SET" -> "UPSET"), and run at the player.
+    public void SpawnSplitlings(Vector3 at, float speed, string splitterWord, string firstHalf, string secondHalf)
+    {
+        Vector3 toPlayer = player.position - at;
+        toPlayer.y = 0f;
+        Vector3 side = toPlayer.sqrMagnitude > 0.001f ? new Vector3(toPlayer.z, 0f, -toPlayer.x).normalized : Vector3.right;
+        string[] halves = { firstHalf, secondHalf };
+        for (int i = 0; i < 2; i++)
+        {
+            Vector3 spot = at + side * (i == 0 ? -1f : 1f);
+            string word = WordBank.PickWordContaining(halves[i], splitterWord, UsedFirstLetters());
+            Zombie splitling = SpawnZombieAt(spot, spot, 0f, ZombieKind.Splitling, speed, word);
+            splitling.MarkFragment(halves[i]);
+        }
     }
 
     // A coroutine: it runs over many frames. Every "yield return" pauses it here
@@ -980,8 +1022,14 @@ public class WaveSpawner : MonoBehaviour
     // One entry per zombie of the wave (in spawn order): which kind it is.
     private ZombieKind[] PlanKinds(int zombieCount, int wave)
     {
-        ZombieKind[] plan = new ZombieKind[zombieCount];
+        List<ZombieKind> newEnemies = NewEnemiesFor(wave);
+        ZombieKind[] plan = new ZombieKind[zombieCount + newEnemies.Count];
         int index = 0;
+        foreach (ZombieKind kind in newEnemies)
+        {
+            plan[index] = kind; // first, so the wave's other special kinds never crowd them out
+            index += 1;
+        }
         index = Fill(plan, index, ZombieKind.Explosive, CountForWave(wave, explosiveFirstWave, explosiveStartCount, explosivePerWave));
         index = Fill(plan, index, ZombieKind.Runner, CountForWave(wave, runnerFirstWave, runnerStartCount, runnersPerWave));
         Fill(plan, index, ZombieKind.Armored, CountForWave(wave, armoredFirstWave, armoredStartCount, armoredPerWave));
@@ -996,6 +1044,44 @@ public class WaveSpawner : MonoBehaviour
             plan[j] = swap;
         }
         return plan;
+    }
+
+    // The NEW ENEMIES of a wave (Splitter, Ghost, Brute, Spitter), on top of its
+    // zombies. A kind always comes in its first wave (so every kind gets shown);
+    // the first wave with any of them has 1 (or one per kind that starts
+    // there), and every later wave newEnemiesPerWave more, of kinds picked at
+    // random among those already seen.
+    private List<ZombieKind> NewEnemiesFor(int wave)
+    {
+        ZombieKind[] kinds = { ZombieKind.Splitter, ZombieKind.Ghost, ZombieKind.Brute, ZombieKind.Spitter };
+        int[] firstWaves = { splitterFirstWave, ghostFirstWave, bruteFirstWave, spitterFirstWave };
+
+        List<ZombieKind> result = new List<ZombieKind>();
+        List<ZombieKind> unlocked = new List<ZombieKind>();
+        int earliest = int.MaxValue;
+        for (int i = 0; i < kinds.Length; i++)
+        {
+            earliest = Mathf.Min(earliest, firstWaves[i]);
+            if (wave >= firstWaves[i])
+            {
+                unlocked.Add(kinds[i]);
+                if (wave == firstWaves[i])
+                {
+                    result.Add(kinds[i]); // its first appearance
+                }
+            }
+        }
+        if (unlocked.Count == 0)
+        {
+            return result;
+        }
+
+        int wanted = Mathf.Max(result.Count, 1 + newEnemiesPerWave * (wave - earliest));
+        while (result.Count < wanted)
+        {
+            result.Add(unlocked[Random.Range(0, unlocked.Count)]);
+        }
+        return result;
     }
 
     // Writes kind into plan from index on, count times (never past the end). Returns the next free index.
@@ -1071,8 +1157,9 @@ public class WaveSpawner : MonoBehaviour
     // kills both. Returns false if no pair of words fits right now.
     private bool SpawnChainPair(SpawnPoint point, List<SpawnPoint> areaPoints, float speed)
     {
-        if (HardLevel.Active != null) return false;
-        string[] words = WordBank.PickChainPair(UsedFirstLetters());
+        // Same case for both words, so the long one still starts with the short
+        // one; no chains on Hard / Extreme typing (punctuation would break them).
+        string[] words = TypingSettings.StyleChainPair(WordBank.PickChainPair(UsedFirstLetters()));
         if (words == null)
         {
             return false;
@@ -1107,8 +1194,8 @@ public class WaveSpawner : MonoBehaviour
         ChainLink.Create(shortOne, longOne);
 
         GameManager.Instance.RequestTip("word chain", "WORD CHAIN!",
-            "Two zombies are linked in PURPLE: \"" + words[0].ToLowerInvariant() + "\" and \""
-            + words[1].ToLowerInvariant() + "\".\n\n"
+            "Two zombies are linked in PURPLE: \"" + TypingSettings.Shown(words[0], TypingSettings.IsCaseSensitive)
+            + "\" and \"" + TypingSettings.Shown(words[1], TypingSettings.IsCaseSensitive) + "\".\n\n"
             + "The long word starts with the short one. Type the LONG word:\n"
             + "the short zombie dies on the way, then the long one.\n\n"
             + "One word, two kills - and a WORD CHAIN bonus!",
@@ -1168,8 +1255,13 @@ public class WaveSpawner : MonoBehaviour
     // offset up to spread metres), walks to exitAt, then at the player.
     private Zombie SpawnZombieAt(Vector3 spawnAt, Vector3 exitAt, float spread, ZombieKind kind, float speed, string forcedWord = null)
     {
-        if (HardLevel.Active != null && kind == ZombieKind.Normal && HardLevel.Active.NextIsShifter())
+        // Hard / Extreme typing: every few normal zombies is a SHIFTER (its word
+        // changes while nobody types it). Never one with a set word (a chain pair).
+        if (kind == ZombieKind.Normal && forcedWord == null && TypingSettings.HasShifters
+            && normalSpawns++ % TypingSettings.ShifterEvery == 1)
+        {
             kind = ZombieKind.Shifter;
+        }
         // A small random offset so a pack does not stand in one spot.
         Vector2 offset = Random.insideUnitCircle * spread;
         Vector3 side = new Vector3(offset.x, 0f, offset.y);
@@ -1180,8 +1272,24 @@ public class WaveSpawner : MonoBehaviour
         if (word == null)
         {
             List<char> used = UsedFirstLetters();
-            word = kind == ZombieKind.Armored ? WordBank.PickArmorWord(used)
-                : WordBank.PickWord(used, HardLevel.Active != null && kind != ZombieKind.Runner ? ZombieKind.Explosive : kind);
+            if (kind == ZombieKind.Armored)
+            {
+                word = WordBank.PickArmorWord(used);
+            }
+            else if (kind == ZombieKind.Brute)
+            {
+                word = WordBank.PickPhrase(used); // 2-3 words, typed with the spaces
+            }
+            else if (kind == ZombieKind.Splitter)
+            {
+                word = WordBank.PickSplitterWord(used); // a word that breaks in two
+            }
+            else
+            {
+                // The Hard forest gives normal zombies long words.
+                bool longWord = HardLevel.Active != null && (kind == ZombieKind.Normal || kind == ZombieKind.Shifter);
+                word = WordBank.PickWord(used, longWord ? ZombieKind.Explosive : kind);
+            }
         }
 
         Quaternion rotation = Quaternion.identity;
@@ -1205,7 +1313,7 @@ public class WaveSpawner : MonoBehaviour
         // The first time each special kind shows up, say what it does.
         if (kind == ZombieKind.Shifter)
         {
-            Tutorial.Once("shifter", "PURPLE SHIFTER: its word changes while idle. Type exact case and punctuation!", 6f);
+            Tutorial.Once("shifter", "PURPLE SHIFTER: its word CHANGES if you wait. Start typing it to lock the word!", 6f);
         }
         else if (kind == ZombieKind.Explosive)
         {
@@ -1218,6 +1326,22 @@ public class WaveSpawner : MonoBehaviour
         else if (kind == ZombieKind.Armored)
         {
             Tutorial.Once("armored", "ARMORED: the first word breaks its armor. Explosions kill it at once!", 6f);
+        }
+        else if (kind == ZombieKind.Splitter)
+        {
+            Tutorial.Once("splitter", "TEAL SPLITTER: its word BREAKS IN TWO. Each half hides in a new word (underlined)!", 6f);
+        }
+        else if (kind == ZombieKind.Ghost)
+        {
+            Tutorial.Once("ghost", "GHOST: slow, but its long word VANISHES - even while you type it. Memorize it!", 6f);
+        }
+        else if (kind == ZombieKind.Brute)
+        {
+            Tutorial.Once("brute", "BRUTE: type its whole PHRASE, SPACES included. Its bite hurts double!", 6f);
+        }
+        else if (kind == ZombieKind.Spitter)
+        {
+            Tutorial.Once("spitter", "SPITTER: it stays back and spits acid. Type the glob's word to pop it, then shoot the spitter!", 6f);
         }
         return zombie;
     }

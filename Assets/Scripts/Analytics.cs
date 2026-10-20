@@ -86,6 +86,7 @@ public static class Analytics
             e.Add("run_id", runId);
         }
         e.Add("level", SceneManager.GetActiveScene().name);
+        e.Add("typing_difficulty", TypingSettings.Name(TypingSettings.Difficulty));
         e.Add("t_real", Time.realtimeSinceStartup); // seconds since the page was loaded
 
         GameManager game = GameManager.Instance;
@@ -259,6 +260,9 @@ public static class Analytics
         e.Add("can_buy_frenzy", powers.CanBuyNow(false));
         e.Add("can_buy_rpg", powers.CanBuyNow(true));
         e.Add("frenzy_on", Powers.IsFrenzy);
+        e.Add("shield_on", Powers.IsShielded);
+        e.Add("shield_charges", powers.ShieldCharges);
+        e.Add("shield_word_open", ShieldWord.Current != null);
         e.Add("freeze_on", Powers.IsFrozen);
         e.Add("aiming_lure", powers.IsAiming);
 
@@ -371,6 +375,10 @@ public static class Analytics
         if (target is EnergyOrb)
         {
             return "orb";
+        }
+        if (target is ShieldWord)
+        {
+            return "shield_word";
         }
         if (target is QuizAnswer)
         {

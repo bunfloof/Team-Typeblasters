@@ -31,7 +31,8 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
         Lure,
         Freeze,
         Frenzy,
-        Rocket
+        Rocket,
+        Shield
     }
 
     private const float DragDeadZone = 35f;    // canvas units the finger must move before the drag steers
@@ -163,6 +164,11 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
                 statusText.text = Powers.IsFrozen ? "FROZEN!" : (powers.FreezeCharges > 0 ? "TAP" : "");
                 usable = powers.FreezeCharges > 0;
                 break;
+            case Power.Shield:
+                countText.text = "x" + powers.ShieldCharges;
+                statusText.text = Powers.IsShielded ? "ACTIVE" : (ShieldWord.Current != null ? "CANCEL" : "TAP: TYPE WORD");
+                usable = Powers.IsShielded || ShieldWord.Current != null || powers.ShieldCharges > 0;
+                break;
             default:
                 bool rocket = power == Power.Rocket;
                 int kept = rocket ? powers.RocketKept : powers.FrenzyKept;
@@ -217,8 +223,7 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
         transform.localScale = new Vector3(PressedScale, PressedScale, 1f);
 
         // The game only starts a hold while playing (not in the 3-2-1 countdown),
-        // and only while it reads the keys (not while the shield word is typed,
-        // see EasyShield).
+        // and only while it reads the keys.
         Powers powers = GameManager.Instance != null ? GameManager.Instance.Powers : null;
         bool playing = GameManager.Instance != null && GameManager.Instance.State == GameState.Playing;
         TypingController typing = FindFirstObjectByType<TypingController>();
@@ -238,6 +243,9 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
                 break;
             case Power.Rocket:
                 TouchInput.Press(Key.Digit4);
+                break;
+            case Power.Shield:
+                TouchInput.Press(Key.Tab);
                 break;
         }
     }
@@ -302,6 +310,9 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
                 break;
             case Power.Rocket:
                 TouchInput.Release(Key.Digit4);
+                break;
+            case Power.Shield:
+                TouchInput.Release(Key.Tab);
                 break;
         }
     }
