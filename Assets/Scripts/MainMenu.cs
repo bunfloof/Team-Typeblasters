@@ -160,7 +160,7 @@ public class MainMenu : MonoBehaviour
         {
             int levelIndex = i; // copy for the lambda
             string label = (i + 1) + ". " + GameManager.LevelName(i);
-            string[] maps = { "TRAINING ACADEMY", "CAMPUS", "HOLLOW FOREST" };
+            string[] maps = { "TUTORIAL", "CAMPUS", "HOLLOW FOREST" };
             label += "\n<size=55%>" + maps[i] + "</size>";
             float x = (i - (count - 1) * 0.5f) * 400f;
             levelButtons.Add((RectTransform)CreateButton(page.transform, "Level " + GameManager.LevelName(i), label,

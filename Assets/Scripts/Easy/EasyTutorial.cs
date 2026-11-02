@@ -1,147 +1,255 @@
-using TMPro;
+using System;
+using System.Collections;
+using System.Linq;
 using UnityEngine;
-using UnityEngine.UI;
 
-// Attached only to Easy: deterministic introductions, hands-on objectives and retry supplies.
+// One safe arena. Each tool is shown with the actual gameplay effect, then practised.
 public class EasyTutorial : MonoBehaviour
 {
     public static EasyTutorial Active { get; private set; }
-    public bool LessonComplete { get; private set; } = true;
-    public int CurrentLesson => wave;
-    public bool NeedsRocketTarget => wave == 4 && !LessonComplete;
-    private int wave;
-    private bool purchased;
+    public int CurrentLesson { get; private set; }
+    public bool IsDemonstrating { get; private set; }
+    public bool Finished { get; private set; }
+    public bool IsFinalWave { get; private set; }
+    public bool LessonComplete => Finished;
+    public bool AllowsTyping => !IsDemonstrating && !Finished &&
+        (IsFinalWave || CurrentLesson == 1 || CurrentLesson == 2 && ShieldWord.Current != null ||
+         CurrentLesson >= 4 && (used || CurrentLesson == 6 && Power.RocketLoaded));
+
+    private static readonly string[] Tools = { "", "", "shield", "lure", "freeze", "frenzy", "rpg" };
+    private static readonly string[] Names = { "", "", "SHIELD", "LURE BOMB", "FREEZE", "FRENZY", "RPG" };
+    private static readonly string[] Keys = { "", "", "TAB", "1", "2", "3", "4" };
+    private WaveSpawner spawner;
+    private TutorialCoachView view;
+    private bool used, blocked, scripted, replay;
     private float nextRefill;
-    private TMP_Text objective;
+    private Powers Power => GameManager.Instance.Powers;
 
-    private static readonly string[] Lessons =
-    {
-        "LURE BOMB / Normal + Runner\nType enemy words. HOLD 1 to aim, RELEASE to throw (phone: BOMB).",
-        "FREEZE / Armored + Explosive\nArmored needs two words; red enemies explode. Press 2 / FREEZE.",
-        "FRENZY / Shifter + Ghost\nShifters change words; ghosts hide them. HOLD 3 to BUY, then TAP 3 / FRENZY to use.",
-        "RPG / Splitter + Splitlings + Spitter\nHOLD 4 to BUY, TAP 4 / RPG to load, then FINISH a word to fire. Type acid orbs too.",
-        "SHIELD / Brute + Word Chain\nBrute phrases include SPACES. Type the longer linked word. TAB / SHIELD, then type its word.",
-        "FINAL PRACTICE / Boss\nUse everything you learned. Type boss targets; tools are available again."
-    };
-
-    private void OnEnable()
-    {
-        Active = this;
-        Powers.ActionPerformed += OnPower;
-    }
-
+    private void OnEnable() { Active = this; Powers.ActionPerformed += OnPower; }
     private void OnDisable()
     {
         Powers.ActionPerformed -= OnPower;
         if (Active == this) Active = null;
+        if (view != null) Destroy(view.gameObject);
     }
 
-    public static ZombieKind[] Plan(int wave)
+    public bool AllowsPower(string item)
     {
-        switch (wave)
-        {
-            case 1: return new[] { ZombieKind.Normal, ZombieKind.Normal, ZombieKind.Runner };
-            case 2: return new[] { ZombieKind.Armored, ZombieKind.Normal, ZombieKind.Explosive };
-            case 3: return new[] { ZombieKind.Shifter, ZombieKind.Ghost, ZombieKind.Normal };
-            case 4: return new[] { ZombieKind.Splitter, ZombieKind.Splitling, ZombieKind.Spitter };
-            default: return new[] { ZombieKind.Normal, ZombieKind.Normal, ZombieKind.Brute };
-        }
+        return scripted || !IsDemonstrating && !Finished && (IsFinalWave || CurrentLesson >= 2 && item == Tools[CurrentLesson]);
     }
 
-    public void BeginLesson(int number)
+    public bool AllowsTarget(ITypingTarget target)
     {
-        wave = number;
-        purchased = false;
-        LessonComplete = wave > 5;
-        GameManager.Instance.GrantTrainingCombo(GameManager.Instance.Combo + 25);
-        Refill();
-        if (objective == null) BuildObjective();
-        objective.transform.parent.gameObject.SetActive(true);
-        RefreshObjective();
-        AnalyticsEvent e = Analytics.NewEvent("tutorial_lesson_start");
-        e.Add("lesson", wave);
-        e.Add("combo_allowance", 25);
-        Analytics.Send(e);
+        return AllowsTyping && (CurrentLesson != 2 || target is ShieldWord);
     }
 
-    private void Refill()
-    {
-        GameManager.Instance.GrantTrainingCombo(25);
-        GameManager.Instance.Powers.RefillTrainingSupplies();
-        nextRefill = Time.time + 3f;
-    }
-
-    // Mistyping or buying the wrong weapon must never permanently block a lesson.
-    public void EnsureSupplies()
-    {
-        if (!LessonComplete && Time.time >= nextRefill) Refill();
-    }
+    public void ReplayDemo() { if (!IsFinalWave && !IsDemonstrating && CurrentLesson >= 3 && !Finished) replay = true; }
 
     private void OnPower(string action, string item)
     {
-        if (wave < 1 || wave > 5 || LessonComplete) return;
-        string required = new[] { "lure", "freeze", "frenzy", "rpg", "shield" }[wave - 1];
-        if (item != required) return;
-        if (action == "buy") purchased = true;
-        bool used = wave == 1 ? action == "throw" : wave == 4 ? action == "fire" : action == "use";
-        if (!used || ((wave == 3 || wave == 4) && !purchased)) return;
-        LessonComplete = true;
-        RefreshObjective();
-        AnalyticsEvent e = Analytics.NewEvent("tutorial_lesson_complete");
-        e.Add("lesson", wave);
-        e.Add("tool", item);
-        Analytics.Send(e);
+        if (IsFinalWave || IsDemonstrating || Finished || CurrentLesson < 2 || item != Tools[CurrentLesson]) return;
+
+        if (action == "block" && item == "shield") blocked = true;
+        if (action == (item == "lure" ? "throw" : item == "rpg" ? "fire" : "use")) used = true;
     }
 
-    public void EndLesson()
+    private void Execute(Action action)
     {
-        wave = 0;
-        if (objective != null) objective.transform.parent.gameObject.SetActive(false);
+        scripted = true;
+        try { action(); } finally { scripted = false; }
     }
 
-    private void Update()
+    private void ResetStage()
     {
-        if (objective != null)
-            objective.transform.parent.gameObject.SetActive(wave > 0 && GameManager.Instance.State == GameState.Playing);
+        GameManager.Instance.Typing.DropWord();
+        TouchInput.ReleaseAll();
+        spawner.ClearTrainingTargets();
+        foreach (LureBomb bomb in FindObjectsByType<LureBomb>(FindObjectsSortMode.None)) Destroy(bomb.gameObject);
+        foreach (Bullet bullet in FindObjectsByType<Bullet>(FindObjectsSortMode.None)) Destroy(bullet.gameObject);
+        Power.ResetTrainingState();
+        GameManager.Instance.GrantTrainingEnergy(25);
+        used = blocked = false;
+        nextRefill = Time.time + 3f;
     }
 
-    private void RefreshObjective()
+    private void SpawnGroup(bool demo)
     {
-        objective.rectTransform.parent.GetComponent<RectTransform>().anchoredPosition = new Vector2(0f, wave > 5 ? -235f : -110f);
-        objective.text = "<b>TRAINING " + wave + "/6</b>  |  +25 COMBO + TOOL SUPPLIES\n"
-            + Lessons[Mathf.Clamp(wave - 1, 0, Lessons.Length - 1)]
-            + (wave > 5 ? "" : LessonComplete ? "\n<color=#85FFB3>TOOL DONE - clear remaining enemies.</color>"
-                : "\n<color=#FFD98C>REQUIRED: use this tool to unlock the next station. Supplies refill while learning.</color>");
+        bool pair = CurrentLesson == 4 || CurrentLesson == 5;
+        string[] words = CurrentLesson == 5 ? new[] { "BUTTERFLY", "SUNSHINE" }
+            : pair ? new[] { "GO", "STOP" } : new[] { "CAT", "DOG", "SUN" };
+        for (int i = 0; i < words.Length; i++)
+        {
+            float speed = CurrentLesson == 3 ? 1.4f : CurrentLesson == 4 ? 0.7f : 0f;
+            spawner.SpawnTrainingTarget(words[i], 12f, (i - (words.Length - 1) * 0.5f) * 1.4f, speed);
+        }
     }
 
-    private void BuildObjective()
+    private void Log(string phase)
     {
-        // The word layer's parent is the camera's usable HUD area on phones,
-        // so the objective stays above the native keyboard as the view resizes.
-        Transform playArea = FindFirstObjectByType<HUD>().WordLayer.parent;
-        GameObject panel = new GameObject("Training Objective", typeof(RectTransform), typeof(Image));
-        panel.transform.SetParent(playArea, false);
-        RectTransform rect = (RectTransform)panel.transform;
-        rect.anchorMin = new Vector2(0.18f, 1f);
-        rect.anchorMax = new Vector2(0.82f, 1f);
-        rect.pivot = new Vector2(0.5f, 1f);
-        rect.anchoredPosition = new Vector2(0f, -110f);
-        rect.sizeDelta = new Vector2(0f, 164f);
-        Image bg = panel.GetComponent<Image>();
-        bg.color = new Color(0.025f, 0.08f, 0.12f, 0.94f);
-        bg.raycastTarget = false;
-        GameObject label = new GameObject("Objective", typeof(RectTransform), typeof(TextMeshProUGUI));
-        label.transform.SetParent(panel.transform, false);
-        objective = label.GetComponent<TMP_Text>();
-        objective.rectTransform.anchorMin = Vector2.zero;
-        objective.rectTransform.anchorMax = Vector2.one;
-        objective.rectTransform.offsetMin = new Vector2(12f, 8f);
-        objective.rectTransform.offsetMax = new Vector2(-12f, -8f);
-        objective.fontSize = 28f;
-        objective.enableAutoSizing = true;
-        objective.fontSizeMin = 22f;
-        objective.fontSizeMax = 28f;
-        objective.alignment = TextAlignmentOptions.Center;
-        objective.raycastTarget = false;
+        AnalyticsEvent e = Analytics.NewEvent("tutorial_step");
+        e.Add("step", CurrentLesson); e.Add("phase", phase); Analytics.Send(e);
+    }
+
+    public IEnumerator Run(WaveSpawner owner)
+    {
+        spawner = owner;
+        view = TutorialCoachView.Create(this, owner.Hud);
+        CurrentLesson = 1;
+        ResetStage();
+        view.Cue("TYPE THE WORD!", "KILL THE ENEMY", "", false);
+        Log("practice");
+        int kills = GameManager.Instance.Stats.Kills;
+        while (GameManager.Instance.Stats.Kills == kills)
+        {
+            if (spawner.AliveZombies.Count == 0) spawner.SpawnTrainingTarget("CAT", 12f, 0f, 0f);
+            yield return null;
+        }
+        yield return Success();
+
+        CurrentLesson = 2;
+        ResetStage(); Log("practice");
+        Zombie attacker = spawner.SpawnTrainingTarget("WAIT", 8f, 0f, 0f);
+        while (!Powers.IsShielded)
+        {
+            view.Cue("SHIELD", ShieldWord.Current == null ? "TAP TAB" : "TYPE THE SHIELD WORD!",
+                ShieldWord.Current == null ? "TAB" : "", false);
+            yield return null;
+        }
+        view.Cue("SHIELD UP", "", "TAB", false);
+        attacker.transform.position = owner.PlayerPosition + owner.CurrentEncounter.Facing * 4f;
+        attacker.SetTrainingSpeed(4f);
+        while (!blocked) yield return null;
+        view.Cue("BLOCKED!", "", "TAB", false);
+        yield return new WaitForSeconds(1f);
+        yield return Success();
+
+        for (int lesson = 3; lesson <= 6; lesson++)
+        {
+            CurrentLesson = lesson;
+            do
+            {
+                replay = false;
+                yield return Demonstrate();
+                ResetStage(); IsDemonstrating = false;
+                SpawnGroup(false); Log("practice");
+                int before = GameManager.Instance.Stats.Kills;
+                int wanted = lesson == 4 || lesson == 5 ? 2 : 3;
+                while (!used || GameManager.Instance.Stats.Kills - before < wanted || spawner.AliveZombies.Count > 0)
+                {
+                    if (replay) break;
+                    if (Time.time >= nextRefill)
+                    {
+                        Power.RefillTrainingSupplies(); GameManager.Instance.GrantTrainingEnergy(25); nextRefill = Time.time + 3f;
+                    }
+                    if (used && (lesson == 4 && !Powers.IsFrozen || lesson == 5 && !Powers.IsFrenzy))
+                        used = false;
+                    if (spawner.AliveZombies.Count == 0 && GameManager.Instance.Stats.Kills - before < wanted)
+                    {
+                        used = false;
+                        SpawnGroup(false);
+                    }
+                    string instruction = lesson < 5 ? "TAP " + Keys[lesson]
+                        : lesson == 6 && Power.RocketLoaded ? "TYPE A WORD!" : "TAP " + Keys[lesson];
+                    if (used && lesson == 4) instruction = "TYPE THE WORDS!";
+                    if (used && lesson == 5) instruction = "TYPE THE SHORT WORDS!";
+                    if (used && lesson == 6) instruction = "NICE SHOT!";
+                    view.Cue("YOUR TURN", instruction, used && lesson == 6 ? "" : Keys[lesson], false);
+                    yield return null;
+                }
+            } while (replay);
+            yield return Success();
+        }
+        ResetStage();
+        IsFinalWave = true;
+        CurrentLesson = 7;
+        view.gameObject.SetActive(false);
+        owner.Hud.RestoreTutorialCombatHud();
+        Log("final_wave");
+        yield return owner.RunTutorialFinalWave();
+        if (GameManager.Instance.State == GameState.Playing)
+        {
+            Log("complete");
+            Finished = true;
+            GameManager.Instance.WinGame();
+        }
+    }
+
+    private IEnumerator Success()
+    {
+        Log("complete");
+        spawner.ClearTrainingTargets();
+        view.Success(CurrentLesson);
+        yield return new WaitForSeconds(1f);
+    }
+
+    private IEnumerator ActivateDemo(bool rocket)
+    {
+        view.Cue("WATCH","TAP " + Keys[CurrentLesson],Keys[CurrentLesson],true);
+        view.DemoPressed = true;
+        Execute(() => Power.WeaponKeyDown(rocket));
+        yield return new WaitForSeconds(.18f);
+        Execute(() => Power.WeaponKeyUp(rocket));
+        view.DemoPressed = false;
+    }
+
+    private IEnumerator Demonstrate()
+    {
+        IsDemonstrating = true;
+        ResetStage(); SpawnGroup(true); Log("demo");
+        view.Cue("WATCH", Names[CurrentLesson], Keys[CurrentLesson], true);
+        yield return new WaitForSeconds(1.5f);
+        if (CurrentLesson == 3)
+        {
+            bool thrown;
+            do
+            {
+                view.DemoPressed = true;
+                Execute(Power.BeginLureAim);
+                yield return new WaitForSeconds(0.18f);
+                thrown = Power.IsAiming;
+                Execute(Power.ReleaseLureAim);
+            } while (!thrown);
+            view.DemoPressed = false;
+            yield return new WaitForSeconds(5.5f); // actual flight, attraction and explosion
+        }
+        else if (CurrentLesson == 4)
+        {
+            view.DemoPressed = true; Execute(Power.TryUseFreeze);
+            yield return new WaitForSeconds(0.2f); view.DemoPressed = false;
+            yield return new WaitForSeconds(2.5f); // watch walking enemies turn icy and stop
+        }
+        else
+        {
+            yield return ActivateDemo(CurrentLesson == 6);
+            if (CurrentLesson == 6)
+            {
+                yield return new WaitForSeconds(0.7f);
+                view.Cue("WATCH", "TYPE A WORD!", "", true);
+                Zombie target = spawner.AliveZombies.First(z => z != null && z.IsAlive);
+                while (!target.IsWordComplete)
+                {
+                    target.AdvanceProgress();
+                    Bullet.Fire(target, target.IsWordComplete, target.IsWordComplete && Power.ConsumeRocket());
+                    yield return new WaitForSeconds(0.22f);
+                }
+            }
+            yield return new WaitForSeconds(2.5f); // word transformation / real rocket area damage
+        }
+        view.DemoPressed = false;
+    }
+
+    public void ShowCompletion()
+    {
+        Finished = true;
+        if (view != null) { view.gameObject.SetActive(true); view.Complete(); }
+    }
+
+    private void LateUpdate()
+    {
+        if (view == null || spawner == null) return;
+        bool playing = GameManager.Instance.State == GameState.Playing;
+        view.gameObject.SetActive(!IsFinalWave && playing || Finished);
+        foreach (Zombie zombie in spawner.AliveZombies)
+            if (zombie != null && zombie.Label != null && CurrentLesson == 2) zombie.Label.enabled = false;
     }
 }

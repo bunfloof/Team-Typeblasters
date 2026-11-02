@@ -26,28 +26,7 @@
 //       and stays alive, so it can still be shot. While it is up, IsShielded
 //       is true and EnemySpeedFactor is below 1.
 //
-// COMBO WEAPONS: the combo (kills in a row without a mistake) buys them.
-// One key per weapon, two actions:
-//   HOLD the key (BuyHoldSeconds, a bar fills under its slots) to BUY one:
-//     the combo is spent and the weapon is KEPT in a slot (bottom-left, a lit
-//     square) until the player wants it;
-//   TAP the key (or click its slot) to USE a kept one.
-// So holding a FRENZY and reaching 10 combo is never a clash: tap uses the
-// one you have, hold buys another.
-//   [3] FRENZY - costs FrenzyCost combo: for frenzySeconds every enemy word
-//       becomes a TINY word (1 to 4 letters, random) in a vivid colour, drawn bigger;
-//       the real words come back when it ends.
-//   [4] RPG    - costs RocketCost combo: the next word the player finishes is
-//       shot with a rocket that explodes around its target (Bullet, Explosion).
-//   Two of each can be kept (MaxKept); one weapon can be BOUGHT per wave
-//   (oneWeaponPerWave). The line under the big COMBO on the HUD shows what the
-//   combo can buy.
-//
-// Lives on the GameManager object. TypingController calls BeginLureAim (1 down),
-// ReleaseLureAim (1 up), TryUseFreeze, WeaponKeyDown and WeaponKeyUp (3 / 4); the HUD calls
-// UseWeapon when a weapon slot is clicked; GameManager calls OnComboChanged
-// every time the combo changes, WaveSpawner OnWaveStart.
-// ---------------------------------------------------------------------------
+// Skills use independent energy: tap 3 (10) or 4 (15). Combo is only a score multiplier.
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -62,13 +41,15 @@ public class Powers : MonoBehaviour
     [Header("Charges")]
     [SerializeField] private int maxCharges = 3;
 
-    // Combo weapon costs (also shown in the COMBO WEAPONS tip).
-    public const int FrenzyCost = 10;                     // combo spent on a frenzy [3]
-    public const int RocketCost = 15;                     // combo spent on one RPG shot [4]
+    // Independent skill energy costs, displayed beside each action.
+    public const int FrenzyCost = 10;
+    public const int RocketCost = 15;
+    public const int LureCost = 4;
+    public const int FreezeCost = 5;
 
-    [Header("Combo weapons")]
+    [Header("Energy skills")]
     [SerializeField] private float frenzySeconds = 5f;    // enemy words are short this long
-    [SerializeField] private bool oneWeaponPerWave = true;
+
 
     [Header("Lure bomb")]
     [SerializeField] private float throwDistance = 9f;    // metres ahead of the player (a quick tap)
@@ -126,16 +107,31 @@ public class Powers : MonoBehaviour
 
     public void RefillTrainingSupplies()
     {
-        LureCharges = maxCharges;
-        FreezeCharges = maxCharges;
         ShieldCharges = Mathf.Max(ShieldCharges, 1);
-        weaponBoughtThisWave = false;
+
         RefreshHud();
         RefreshShieldHud();
         RefreshWeaponStatus();
     }
 
     private float shieldWordTimeLeft; // > 0 while the shield word is waiting to be typed
+
+    public void ResetTrainingState()
+    {
+        if (EasyTutorial.Active == null) return;
+        StopAiming();
+        if (IsFrenzy) RestoreRealWords();
+        freezeTimeLeft = frenzyTimeLeft = shieldTimeLeft = shieldWordTimeLeft = 0f;
+        shieldSlow = 1f;
+        ShieldWord.Close();
+        RocketLoaded = false;
+        FrenzyKept = RocketKept = 0;
+
+        RefreshWeaponSlots();
+        RefillTrainingSupplies();
+    }
+
+
 
     // Combo weapons. Static like the freeze (reset in Awake).
     private static float frenzyTimeLeft;
@@ -149,14 +145,13 @@ public class Powers : MonoBehaviour
     // True once a kept RPG is used (loaded) and not fired yet.
     public bool RocketLoaded { get; private set; }
 
-    // Combo weapons bought and kept for later (MaxKept of each at most), shown
-    // bottom-left as lit squares; the key (or a click) uses them.
+    // Legacy telemetry/scene compatibility. Inventory is no longer awarded or displayed.
     public const int MaxKept = 2;         // slots per weapon
     public int FrenzyKept { get; private set; }
     public int RocketKept { get; private set; }
 
-    private int combo = 1;               // the combo now (GameManager tells us)
-    private bool weaponBoughtThisWave;
+    // Skill energy is owned by GameManager.
+
     private string lastWeaponStatus;     // what the HUD shows now, so it is only rebuilt when it changes
 
     public int LureCharges { get; private set; }
@@ -196,7 +191,7 @@ public class Powers : MonoBehaviour
     private void Update()
     {
         UpdateAim();
-        UpdateWeaponHolds();
+
 
         if (GameManager.Instance.State == GameState.Playing && frenzyTimeLeft > 0f)
         {
@@ -236,27 +231,11 @@ public class Powers : MonoBehaviour
     // player is not typing or aiming, and never opens while tips are turned off).
     public bool AddCharge(PowerKind kind)
     {
-        if (kind == PowerKind.Lure)
-        {
-            if (LureCharges >= maxCharges)
-            {
-                return false;
-            }
-            LureCharges += 1;
-        }
-        else
-        {
-            if (FreezeCharges >= maxCharges)
-            {
-                return false;
-            }
-            FreezeCharges += 1;
-        }
-
+        int gained = kind == PowerKind.Lure ? LureCost : FreezeCost;
+        if (!GameManager.Instance.AddSkillEnergy(gained)) return false;
         RefreshHud();
         hud.PulsePower(kind);
-        hud.ShowPowerGain(kind);
-        GameManager.Instance.RequestPowerTip(kind, TipTitle(kind), TipText(kind));
+        hud.ShowHint("+" + gained + " ENERGY",2f);
         return true;
     }
 
@@ -267,51 +246,34 @@ public class Powers : MonoBehaviour
         return kind == PowerKind.Lure ? "YOU GOT A LURE BOMB!" : "YOU GOT A FREEZE!";
     }
 
-    private string TipText(PowerKind kind)
-    {
-        if (kind == PowerKind.Lure)
-        {
-            return "Zombies near it walk to it and crowd around it, then it explodes.\n\n"
-                + "HOLD 1 to aim: a dashed arc shows where it will land.\n"
-                + "ARROW KEYS steer it: LEFT / RIGHT = direction, UP / DOWN = distance.\n"
-                + "RELEASE 1 to throw. (A quick tap throws it straight ahead.)";
-        }
-        return "Press 2 to freeze every zombie, energy orb and the boss for "
-            + freezeSeconds.ToString("0.#") + " seconds.\n\n"
-            + "Keep typing while they cannot move!";
-    }
-
     // Called by GameManager whenever the combo changes (up by one per kill, back
     // to 1 on a mistake, down when spent on a weapon).
     public void OnComboChanged(int newCombo)
     {
-        combo = newCombo;
+
         RefreshWeaponStatus();
     }
 
-    // Called by WaveSpawner when a fight starts: a new weapon can be bought.
+    // Refresh availability at the start of a fight; energy carries between waves.
     public void OnWaveStart()
     {
-        weaponBoughtThisWave = false;
+
         RefreshWeaponStatus();
     }
 
-    // Could a weapon be bought right now (a full hold of its key would work)?
-    // Shows nothing; used by Analytics. Keep it in step with BuyWeapon's rules.
-    public bool CanBuyNow(bool rocket)
+    // Availability uses independent energy and refuses to charge an active skill.
+    public bool CanUseNow(bool rocket)
     {
-        int cost = rocket ? RocketCost : FrenzyCost;
-        return !(oneWeaponPerWave && weaponBoughtThisWave) && combo >= cost && Kept(rocket) < MaxKept;
+        return GameManager.Instance.State == GameState.Playing
+            && !(rocket ? RocketLoaded : IsFrenzy)
+            && GameManager.Instance.SkillEnergy >= (rocket ? RocketCost : FrenzyCost);
     }
 
     // ---- Analytics: one "power" event per thing done with a power or weapon ----
-    //   action: throw / use / empty (key pressed with nothing to use) / buy /
-    //           buy_refused / tap_empty / hold_released (let go before a buy) /
-    //           use_refused / aim_cancelled / frenzy_end
+    //   action: throw / use / empty / use_refused / aim_cancelled / frenzy_end
     //   item:   lure / freeze / frenzy / rpg
-    // Lure and freeze GAINS are in the "crate" event (power_gained); weapon
-    // gains are "buy". The player's state (charges, combo...) is added as it
-    // is AFTER the action.
+    // Skill uses include energy before, cost and energy after. Other player
+    // state is added after the action; no purchase events are emitted.
 
     private float aimStartTime;      // game time the 1 key went down (aiming)
     private int killsAtFrenzyStart;  // kills before the current frenzy began
@@ -322,6 +284,7 @@ public class Powers : MonoBehaviour
         AnalyticsEvent e = Analytics.NewEvent("power");
         e.Add("action", action);
         e.Add("item", item);
+        if (EasyTutorial.Active != null) e.Add("tutorial_demo", EasyTutorial.Active.IsDemonstrating);
         return e;
     }
 
@@ -333,198 +296,37 @@ public class Powers : MonoBehaviour
 
     // ---- Combo weapons (called by TypingController) ----
 
-    // Key 3 (rocket = false) or key 4 (rocket = true), one key for two actions:
-    //   RELEASE before BuyHoldSeconds -> USE a kept weapon
-    //   HOLD (kept down for BuyHoldSeconds)   -> BUY one with the combo
-    // While it is held, a bar under the weapon's slots fills up (HUD); let go
-    // before it is full (and after a tap) and nothing happens. A click on a
-    // slot always uses.
-    public const float BuyHoldSeconds = 0.6f;
-    private const float HoldBarDelay = 0.1f;    // the bar only shows after this (a tap never flashes it)
-
-    private readonly float[] weaponHold = { -1f, -1f }; // seconds held: [0] = 3 FRENZY, [1] = 4 RPG; -1 = not held
-
-    public void WeaponKeyDown(bool rocket)
-    {
-        weaponHold[rocket ? 1 : 0] = 0f;
-        hud.ShowHint((rocket ? "RPG [4]" : "FRENZY [3]")
-            + ": release to USE; hold " + BuyHoldSeconds.ToString("0.0") + "s to BUY ("
-            + (rocket ? RocketCost : FrenzyCost) + " combo).", 2f);
-    }
-
-    public void WeaponKeyUp(bool rocket)
-    {
-        int index = rocket ? 1 : 0;
-        float held = weaponHold[index];
-        weaponHold[index] = -1f;
-        hud.SetWeaponHold(rocket, 0f);
-        if (held >= 0f && held < BuyHoldSeconds)
-        {
-            TapWeapon(rocket);
-        }
-    }
-
-    // Every frame: count the keys held down; a full hold buys.
-    private void UpdateWeaponHolds()
-    {
-        for (int index = 0; index < 2; index++)
-        {
-            if (weaponHold[index] < 0f)
-            {
-                continue;
-            }
-            bool rocket = index == 1;
-            if (GameManager.Instance.State != GameState.Playing)
-            {
-                weaponHold[index] = -1f; // paused or game over: the hold is cancelled
-                hud.SetWeaponHold(rocket, 0f);
-                continue;
-            }
-
-            weaponHold[index] += Time.deltaTime;
-            float shown = weaponHold[index] < HoldBarDelay ? 0f : weaponHold[index] / BuyHoldSeconds;
-            hud.SetWeaponHold(rocket, Mathf.Clamp01(shown));
-            if (weaponHold[index] >= BuyHoldSeconds)
-            {
-                weaponHold[index] = -1f; // done: letting go of the key now does nothing
-                hud.SetWeaponHold(rocket, 0f);
-                BuyWeapon(rocket);
-            }
-        }
-    }
-
-    // A tap: use a kept weapon, or say how to get one.
-    private void TapWeapon(bool rocket)
-    {
-        if (rocket ? RocketLoaded : IsFrenzy)
-        {
-            UseWeapon(rocket, "key"); // report ACTIVE / LOADED, even with no spare inventory
-            return;
-        }
-        if (Kept(rocket) > 0)
-        {
-            UseWeapon(rocket, "key");
-            return;
-        }
-
-        AnalyticsEvent e = PowerEvent("tap_empty", rocket ? "rpg" : "frenzy");
-        e.Add("could_buy", CanBuyNow(rocket));
-        SendPowerEvent(e);
-
-        int cost = rocket ? RocketCost : FrenzyCost;
-        string weaponName = rocket ? "RPG" : "FRENZY";
-        if (CanBuyWeapon(cost, weaponName)) // (if not, it shows why)
-        {
-            hud.ShowHint("HOLD " + (rocket ? "4" : "3") + " to get " + (rocket ? "an RPG" : "a FRENZY")
-                + ": hold " + BuyHoldSeconds.ToString("0.0") + "s to BUY; release sooner to USE a kept one.", 2.5f);
-        }
-    }
-
-    private int Kept(bool rocket)
-    {
-        return rocket ? RocketKept : FrenzyKept;
-    }
-
-    // Spends the combo on a weapon and keeps it in a free slot (bottom-left).
-    private void BuyWeapon(bool rocket)
-    {
-        int cost = rocket ? RocketCost : FrenzyCost;
-        string weaponName = rocket ? "RPG" : "FRENZY";
-        string item = rocket ? "rpg" : "frenzy";
-        if (Kept(rocket) >= MaxKept)
-        {
-            hud.ShowHint("Your " + weaponName + " slots are full: use one first.", 2f);
-            AnalyticsEvent full = PowerEvent("buy_refused", item);
-            full.Add("reason", "slots_full");
-            SendPowerEvent(full);
-            return;
-        }
-        if (!CanBuyWeapon(cost, weaponName))
-        {
-            AnalyticsEvent refused = PowerEvent("buy_refused", item);
-            refused.Add("reason", oneWeaponPerWave && weaponBoughtThisWave ? "one_per_wave" : "not_enough_combo");
-            SendPowerEvent(refused);
-            return;
-        }
-        int comboBefore = combo;
-        GameManager.Instance.SpendCombo(cost);
-        weaponBoughtThisWave = true;
-        if (rocket)
-        {
-            RocketKept += 1;
-        }
-        else
-        {
-            FrenzyKept += 1;
-        }
-        RefreshWeaponSlots();
-        hud.PulseWeapon(rocket);
-        hud.ShowWeaponGain(rocket);
-        hud.ShowBigMessage("GOT " + weaponName + "!",
-            "kept bottom-left - TAP " + (rocket ? "4" : "3") + " (or click it) when you want to use it");
-        RefreshWeaponStatus();
-
-        AnalyticsEvent e = PowerEvent("buy", item);
-        e.Add("combo_before", comboBefore);
-        SendPowerEvent(e);
-    }
-
-    // Uses a kept weapon: a click on its slot (HUD).
-    public void UseWeapon(bool rocket)
-    {
-        UseWeapon(rocket, "click");
-    }
-
-    // Uses a kept weapon. via (for analytics): "key" (tap 3 / 4) or "click".
+    // One press spends energy and activates. Release/holding never repeats a use.
+    public void WeaponKeyDown(bool rocket) { UseWeapon(rocket,"key"); }
+    public void WeaponKeyUp(bool rocket) { }
+    public void UseWeapon(bool rocket) { UseWeapon(rocket,"click"); }
     private void UseWeapon(bool rocket, string via)
     {
+        GameManager game = GameManager.Instance;
+        if (game.State != GameState.Playing) return;
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower(rocket ? "rpg" : "frenzy")) return;
         string item = rocket ? "rpg" : "frenzy";
         if (rocket ? RocketLoaded : IsFrenzy)
         {
-            hud.ShowHint(rocket ? "RPG LOADED: finish a word to fire. It has not been cancelled."
-                : "FRENZY ACTIVE: keep typing the shortened words.", 2.5f);
-            LogUseRefused(item, rocket ? "already_loaded" : "frenzy_on", via);
+            hud.ShowHint(rocket ? "RPG LOADED" : "FRENZY ACTIVE",1.5f);
+            LogUseRefused(item,"already_active",via);
             return;
         }
-        if (Kept(rocket) <= 0)
+        int cost = rocket ? RocketCost : FrenzyCost;
+        int before = game.SkillEnergy;
+        if (!game.TrySpendSkillEnergy(cost))
         {
-            hud.ShowHint("No " + (rocket ? "RPG" : "FRENZY") + " kept. HOLD " + (rocket ? "4" : "3")
-                + " to buy one with your combo.", 2.5f);
-            LogUseRefused(item, "none_kept", via);
+            hud.ShowHint(cost + " ENERGY NEEDED  |  ENERGY " + before,2f);
+            LogUseRefused(item,"not_enough_energy",via);
             return;
         }
-        if (rocket)
-        {
-            if (RocketLoaded)
-            {
-                hud.ShowHint("The RPG is already loaded: finish a word to fire it.", 2f);
-                LogUseRefused(item, "already_loaded", via);
-                return;
-            }
-            RocketKept -= 1;
-            RocketLoaded = true;
-            hud.ShowBigMessage("RPG LOADED!", "finish a word to fire the rocket");
-        }
-        else
-        {
-            if (IsFrenzy)
-            {
-                hud.ShowHint("A frenzy is already on.", 2f);
-                LogUseRefused(item, "frenzy_on", via);
-                return;
-            }
-            FrenzyKept -= 1;
-            StartFrenzy();
-        }
-        RefreshWeaponSlots();
-        hud.PulseWeapon(rocket);
-        RefreshWeaponStatus();
-
-        AnalyticsEvent e = PowerEvent("use", item);
-        e.Add("via", via);
+        if (rocket) { RocketLoaded = true; hud.ShowBigMessage("RPG LOADED!","TYPE A WORD"); }
+        else StartFrenzy();
+        RefreshWeaponSlots(); hud.PulseWeapon(rocket); RefreshWeaponStatus();
+        AnalyticsEvent e = PowerEvent("use",item);
+        e.Add("via",via); e.Add("energy_before",before); e.Add("energy_spent",cost); e.Add("energy_after",game.SkillEnergy);
         SendPowerEvent(e);
     }
-
     private static void LogUseRefused(string item, string reason, string via)
     {
         AnalyticsEvent e = PowerEvent("use_refused", item);
@@ -537,8 +339,8 @@ public class Powers : MonoBehaviour
     private void StartFrenzy()
     {
         killsAtFrenzyStart = GameManager.Instance.Stats.Kills;
-        frenzyTimeLeft = frenzySeconds;
-        frenzyDuration = frenzySeconds;
+        frenzyTimeLeft = EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave && !EasyTutorial.Active.IsDemonstrating ? 15f : frenzySeconds;
+        frenzyDuration = frenzyTimeLeft;
         GiveShortWords();
         hud.ShowBigMessage("FRENZY!", "every enemy word is SHORT for " + frenzySeconds.ToString("0.#") + "s");
         CameraDirector.Shake(0.25f);
@@ -654,103 +456,34 @@ public class Powers : MonoBehaviour
         return true;
     }
 
-    // Says why a weapon cannot be bought right now (hint), or returns true.
-    private bool CanBuyWeapon(int cost, string weaponName)
-    {
-        if (oneWeaponPerWave && weaponBoughtThisWave)
-        {
-            hud.ShowHint("Only one weapon per wave.", 2f);
-            return false;
-        }
-        if (combo < cost)
-        {
-            hud.ShowHint(weaponName + " needs " + cost + " combo (you have " + combo + ").", 2.5f);
-            return false;
-        }
-        return true;
-    }
-
-    // The line under the big COMBO: the weapon in use, or what the combo can buy.
     private void RefreshWeaponStatus()
     {
-        string text;
-        float progress;
-        Color color;
-        Color grey = new Color(0.6f, 0.62f, 0.66f);
-        bool canBuyFrenzy = FrenzyKept < MaxKept;   // MaxKept of each can be kept
-        bool canBuyRocket = RocketKept < MaxKept;
-        if (IsFrenzy)
-        {
-            text = "FRENZY!  " + frenzyTimeLeft.ToString("0.0") + "s";
-            progress = frenzyTimeLeft / Mathf.Max(0.01f, frenzySeconds);
-            color = Palette.WeaponFrenzy;
-        }
-        else if (RocketLoaded)
-        {
-            text = "RPG LOADED - finish a word";
-            progress = 1f;
-            color = Palette.BlastOrange;
-        }
-        else if (oneWeaponPerWave && weaponBoughtThisWave)
-        {
-            text = "Next weapon: next wave";
-            progress = 0f;
-            color = grey;
-        }
-        else if (!canBuyFrenzy && !canBuyRocket)
-        {
-            text = "Weapon slots full - use them!";
-            progress = 1f;
-            color = grey;
-        }
-        else if (canBuyRocket && combo >= RocketCost)
-        {
-            text = canBuyFrenzy ? "HOLD [3] FRENZY or [4] RPG to get one!" : "HOLD [4] to get an RPG!";
-            progress = 1f;
-            color = Palette.BlastOrange;
-        }
-        else if (canBuyFrenzy && combo >= FrenzyCost)
-        {
-            text = "HOLD [3] to get a FRENZY!" + (canBuyRocket ? "   RPG in " + (RocketCost - combo) + " combo" : "");
-            progress = canBuyRocket ? (float)combo / RocketCost : 1f;
-            color = Palette.WeaponFrenzy;
-        }
-        else if (canBuyFrenzy)
-        {
-            text = "FRENZY in " + (FrenzyCost - combo) + " combo";
-            progress = (float)combo / FrenzyCost;
-            color = new Color(0.8f, 0.82f, 0.86f);
-        }
-        else
-        {
-            text = "RPG in " + (RocketCost - combo) + " combo";
-            progress = (float)combo / RocketCost;
-            color = new Color(0.8f, 0.82f, 0.86f);
-        }
-
-        if (text != lastWeaponStatus || IsFrenzy)
-        {
-            lastWeaponStatus = text;
-            hud.SetWeaponStatus(text, progress, color);
-        }
+        int energy = GameManager.Instance.SkillEnergy;
+        string text = "<size=65%>ENERGY</size> " + energy;
+        if (text == lastWeaponStatus) return;
+        lastWeaponStatus = text;
+        hud.SetWeaponStatus(text,Mathf.Clamp01((float)energy / RocketCost),new Color(.3f,.9f,.88f));
+        RefreshHud();
+        RefreshWeaponSlots();
     }
-
     // ---- Using charges (called by TypingController) ----
 
     // The 1 key went down: start aiming (the dashed arc shows at once).
     public void BeginLureAim()
     {
-        if (LureCharges <= 0)
+        if (GameManager.Instance.State != GameState.Playing || aiming) return;
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower("lure")) return;
+        if (GameManager.Instance.SkillEnergy < LureCost)
         {
-            hud.ShowHint("No lure bombs. Find them in supply crates (orange).", 3f);
-            SendPowerEvent(PowerEvent("empty", "lure"));
+            hud.ShowHint(LureCost + " ENERGY NEEDED",2f);
+            LogUseRefused("lure","not_enough_energy","key");
             return;
         }
 
         aimStartTime = Time.time;
         aiming = true;
         aimTurn = 0f;                 // every aim starts straight ahead...
-        aimDistance = throwDistance;  // ...at the usual distance
+        aimDistance = EasyTutorial.Active != null ? 12f : throwDistance;
         if (arc == null)
         {
             arc = ThrowArc.Create();
@@ -770,13 +503,18 @@ public class Powers : MonoBehaviour
 
         Vector3 landing = LandingPoint(aimDistance);
         StopAiming();
-
-        LureCharges -= 1;
+        int before = GameManager.Instance.SkillEnergy;
+        if (!GameManager.Instance.TrySpendSkillEnergy(LureCost))
+        {
+            LogUseRefused("lure","not_enough_energy_or_not_playing","key");
+            return;
+        }
         RefreshHud();
         hud.PulsePower(PowerKind.Lure);
         LureBomb.Throw(Hand(), landing);
 
         AnalyticsEvent e = PowerEvent("throw", "lure");
+        e.Add("energy_before",before); e.Add("energy_spent",LureCost); e.Add("energy_after",GameManager.Instance.SkillEnergy);
         e.Add("aim_seconds", Time.time - aimStartTime); // under 0.3 = a quick tap
         e.Add("turned_degrees", aimTurn);               // steered with Left / Right
         e.Add("distance", aimDistance);                 // metres wanted (Up / Down)
@@ -833,20 +571,28 @@ public class Powers : MonoBehaviour
 
     public void TryUseFreeze()
     {
-        if (FreezeCharges <= 0)
+        if (GameManager.Instance.State != GameState.Playing) return;
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower("freeze")) return;
+        if (IsFrozen)
         {
-            hud.ShowHint("No freeze left. Find them in supply crates (blue).", 3f);
-            SendPowerEvent(PowerEvent("empty", "freeze"));
+            hud.ShowHint("FREEZE ACTIVE",1.5f);
+            return;
+        }
+        int before = GameManager.Instance.SkillEnergy;
+        if (!GameManager.Instance.TrySpendSkillEnergy(FreezeCost))
+        {
+            hud.ShowHint(FreezeCost + " ENERGY NEEDED",2f);
+            LogUseRefused("freeze","not_enough_energy","key");
             return;
         }
 
         bool alreadyFrozen = IsFrozen;
-        FreezeCharges -= 1;
         RefreshHud();
         hud.PulsePower(PowerKind.Freeze);
-        freezeTimeLeft = freezeSeconds;
+        freezeTimeLeft = EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave && !EasyTutorial.Active.IsDemonstrating ? 15f : freezeSeconds;
 
         AnalyticsEvent e = PowerEvent("use", "freeze");
+        e.Add("energy_before",before); e.Add("energy_spent",FreezeCost); e.Add("energy_after",GameManager.Instance.SkillEnergy);
         e.Add("while_frozen", alreadyFrozen); // used again before the last one ran out
         SendPowerEvent(e);
     }
@@ -857,6 +603,7 @@ public class Powers : MonoBehaviour
     // WORD to type (or closes it again if it is already up).
     public void TryUseShield()
     {
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower("shield")) return;
         if (GameManager.Instance.State != GameState.Playing)
         {
             return;
@@ -888,9 +635,9 @@ public class Powers : MonoBehaviour
         ShieldWord.Open(word, this, hud);
         AnalyticsEvent started = PowerEvent("word_started", "shield");
         started.Add("word", word);
-        started.Add("time_limit", shieldWordSeconds);
+        started.Add("time_limit", EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave ? 30f : shieldWordSeconds);
         SendPowerEvent(started);
-        shieldWordTimeLeft = shieldWordSeconds;
+        shieldWordTimeLeft = EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave ? 30f : shieldWordSeconds;
         hud.SetShieldPromptTime(1f);
     }
 
@@ -948,7 +695,8 @@ public class Powers : MonoBehaviour
             else if (state == GameState.Playing)
             {
                 shieldWordTimeLeft -= Time.deltaTime;
-                hud.SetShieldPromptTime(shieldWordSeconds > 0f ? shieldWordTimeLeft / shieldWordSeconds : 0f);
+                hud.SetShieldPromptTime(EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave ? shieldWordTimeLeft / 30f
+                    : shieldWordSeconds > 0f ? shieldWordTimeLeft / shieldWordSeconds : 0f);
                 if (shieldWordTimeLeft <= 0f)
                 {
                     SendPowerEvent(PowerEvent("word_timeout", "shield"));

@@ -88,7 +88,7 @@ public class TouchControls : MonoBehaviour
     // MinPlayScale). ComboBand: the combo plate at the top of the play area.
     private const float MinPlayHeight = 700f;
     private const float MinPlayScale = 0.5f;
-    private const float ComboBand = 140f;
+    private const float ComboBand = 200f;
     private const float BossBand = 230f;           // ...and the boss's health bar below it, in a boss fight
 
     // The enemy words are never drawn smaller than readable: the smallest

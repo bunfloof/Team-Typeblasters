@@ -555,7 +555,56 @@ public class WaveSpawner : MonoBehaviour
         {
             return;
         }
+        if (EasyTutorial.Active != null)
+        {
+            CurrentEncounter = level.Encounters[0];
+            CurrentWave = 1;
+            rail.PlaceAt(CurrentEncounter.StopPosition, CurrentEncounter.Facing);
+            StartCoroutine(EasyTutorial.Active.Run(this));
+            return;
+        }
         StartCoroutine(RunLevel());
+    }
+
+    public IEnumerator RunTutorialFinalWave()
+    {
+        CurrentWave = 1;
+        hud.SetWave(1, 1);
+        hud.ShowBanner("WAVE 1 / 1");
+        yield return new WaitForSeconds(BannerSeconds);
+        hud.HideBanner();
+        GameManager game = GameManager.Instance;
+        game.Powers.OnWaveStart();
+        RunStats stats = game.Stats;
+        float start = stats.Seconds;
+        int kills = stats.Kills, correct = stats.CorrectKeys, wrong = stats.WrongKeys, health = game.Health;
+        yield return RunZombieWave(1, CurrentEncounter);
+        if (game.State != GameState.Playing) yield break;
+        AnalyticsEvent end = Analytics.NewEvent("wave_end");
+        end.Add("boss_fight", false);
+        end.Add("seconds", stats.Seconds - start);
+        end.Add("kills", stats.Kills - kills);
+        end.Add("correct_keys", stats.CorrectKeys - correct);
+        end.Add("wrong_keys", stats.WrongKeys - wrong);
+        end.Add("health_at_start", health);
+        end.Add("dda_extra_zombies", extraZombiesThisWave);
+        Analytics.AddPlayerState(end);
+        Analytics.Send(end);
+        Analytics.FlushSoon();
+    }
+
+    public Zombie SpawnTrainingTarget(string word, float distance, float lane, float speed)
+    {
+        Vector3 forward = CurrentEncounter.Facing;
+        Vector3 right = Vector3.Cross(Vector3.up, forward);
+        Vector3 at = player.position + forward * distance + right * lane;
+        return SpawnZombieAt(at, at, 0f, ZombieKind.Normal, speed, word);
+    }
+
+    public void ClearTrainingTargets()
+    {
+        foreach (Zombie zombie in aliveZombies.ToArray())
+            if (zombie != null && zombie.IsAlive) zombie.Despawn();
     }
 
     // Called by GameManager when the player dies.
@@ -646,7 +695,6 @@ public class WaveSpawner : MonoBehaviour
             yield return new WaitForSeconds(BannerSeconds);
             hud.HideBanner();
             GameManager.Instance.Powers.OnWaveStart(); // a new combo weapon can be bought
-            EasyTutorial.Active?.BeginLesson(wave);
             ActivateProps(encounter);
             StartCoroutine(ShowPropHints());
 
@@ -664,20 +712,6 @@ public class WaveSpawner : MonoBehaviour
             {
                 yield return RunZombieWave(wave, encounter);
             }
-
-            // Clearing enemies alone cannot skip the hands-on tool lesson.
-            while (EasyTutorial.Active != null && !EasyTutorial.Active.LessonComplete)
-            {
-                EasyTutorial.Active.EnsureSupplies();
-                if (EasyTutorial.Active.NeedsRocketTarget && aliveZombies.Count == 0)
-                {
-                    SpawnZombie(encounter.SpawnPoints[0], ZombieKind.Normal, 0.35f, "PRACTICE");
-                }
-                yield return null;
-            }
-            // A replacement RPG target must also be cleared before moving on.
-            while (aliveZombies.Count > 0) yield return null;
-            EasyTutorial.Active?.EndLesson();
 
             // Analytics: the fight is won (a death ends the run instead, see "run_end").
             AnalyticsEvent waveEnd = Analytics.NewEvent("wave_end");
@@ -929,16 +963,7 @@ public class WaveSpawner : MonoBehaviour
 
         // The WORD CHAIN pairs come on top of the wave's zombies (2 more each).
         HashSet<int> pairStarts;
-        ZombieKind[] plan;
-        if (EasyTutorial.Active != null)
-        {
-            plan = EasyTutorial.Plan(wave);
-            pairStarts = new HashSet<int>();
-            if (wave == 5) pairStarts.Add(0);
-            speed = 0.7f;
-            interval = 2.8f;
-        }
-        else plan = AddChainPairs(PlanKinds(zombiesThisWave, wave), wave, out pairStarts);
+        ZombieKind[] plan = AddChainPairs(PlanKinds(zombiesThisWave, wave), wave, out pairStarts);
         zombiesThisWave = plan.Length;
         Tutorial.Once("type", "Type the word above a zombie to shoot it. Every letter is a bullet!", 6f);
         LogWaveStart(plan, pairStarts.Count, speed, interval, encounter); // the level's own numbers (the "dda_" fields say how they were scaled)
@@ -1035,7 +1060,6 @@ public class WaveSpawner : MonoBehaviour
         // 3. Wait until every zombie of this wave is dead or removed.
         while (aliveZombies.Count > 0)
         {
-            EasyTutorial.Active?.EnsureSupplies();
             yield return null;
         }
     }
@@ -1255,11 +1279,7 @@ public class WaveSpawner : MonoBehaviour
         ChainLink.Create(shortOne, longOne);
 
         GameManager.Instance.RequestTip("word chain", "WORD CHAIN!",
-            "Two zombies are linked in PURPLE: \"" + TypingSettings.Shown(words[0], TypingSettings.IsCaseSensitive)
-            + "\" and \"" + TypingSettings.Shown(words[1], TypingSettings.IsCaseSensitive) + "\".\n\n"
-            + "The long word starts with the short one. Type the LONG word:\n"
-            + "the short zombie dies on the way, then the long one.\n\n"
-            + "One word, two kills - and a WORD CHAIN bonus!",
+            "",
             Palette.WordChain);
         return true;
     }

@@ -12,8 +12,8 @@
 //
 // THE COMBO: +1 for every kill, -1 on a wrong key, back to 1 when you get hurt
 // (only -1 for a bite from a zombie met on the run between two fights).
-// Each kill is worth 10 x combo points, and the combo buys the combo weapons
-// (FRENZY and RPG, see Powers). So clean typing pays twice.
+// Each kill is worth 10 x combo points and earns one independent skill energy.
+// Skills spend energy; the scoring combo is never charged.
 //
 // Other scripts reach it through GameManager.Instance, for example:
 //   GameManager.Instance.AddKill();
@@ -52,8 +52,8 @@ public class GameManager : MonoBehaviour
     [Header("Tuning")]
     [SerializeField] private int startingHealth = 100;
 
-    [Header("Difficulty")]
-    [SerializeField] private bool showComboWeaponsTip = true;
+
+
 
     [Header("References (wired in the scene)")]
     [SerializeField] private HUD hud;
@@ -68,6 +68,7 @@ public class GameManager : MonoBehaviour
     public GameState State { get; private set; }
     public int Score { get; private set; }
     public int Combo { get; private set; }
+    public int SkillEnergy { get; private set; }
     public int Health { get; private set; }
 
     // The numbers shown on the end screen.
@@ -129,126 +130,30 @@ public class GameManager : MonoBehaviour
         Stats.Seconds += Time.deltaTime;
     }
 
-    // Tips are opened here, at the END of the frame, so everything that was
-    // already happening this frame (bullets landing, a chain of kills) finishes
-    // first. A tip also waits while the player is busy (see PlayerIsBusy).
-    private void LateUpdate()
-    {
-        if (State == GameState.Playing && pendingTips.Count > 0 && !PlayerIsBusy())
-        {
-            ShowNextTip();
-        }
-    }
-
-    // ---- First-time tips ----
-    // Something new the first time (the first lure bomb, the first freeze, the
-    // first WORD CHAIN pair) pauses the game with a box that explains it (built
-    // by HUD). Enter or the OK button continues. Static, like Tutorial: after a
-    // Restart they are not shown again.
-    //
-    // A tip never cuts into typing: it waits until no word is half-typed, no
-    // lure bomb is being aimed, and nothing was typed for TipWaitSeconds (so
-    // it does not pop up between two words typed one after the other). A tip
-    // still waiting when the run ends is shown in the next run (RestartGame).
-    //
-    // The "Show tips" toggle on the Start panel turns them off (SetTipsEnabled).
-
-    private const float TipWaitSeconds = 0.75f;
-
-    private struct PendingTip
-    {
-        public string Key;
-        public string Title;
-        public string Text;
-        public Color Color;
-    }
-
+    // Optional first-time cues never pause the game or open an instruction panel.
     private static readonly HashSet<string> tipsShown = new HashSet<string>();
-    private static bool tipsEnabled = true; // static: the choice survives a Restart
-    private readonly Queue<PendingTip> pendingTips = new Queue<PendingTip>();
-
-    // Called by the "Show tips" toggle on the Start panel (wired in the scene).
+    private static bool tipsEnabled = true;
     public void SetTipsEnabled(bool on)
     {
         tipsEnabled = on;
-
-        AnalyticsEvent e = Analytics.NewEvent("tips_toggle");
-        e.Add("on", on);
-        Analytics.Send(e);
+        AnalyticsEvent e = Analytics.NewEvent("tips_toggle"); e.Add("on",on); Analytics.Send(e);
     }
-
-    // True while the player is in the middle of something a tip box would
-    // interrupt (see the note above).
-    private bool PlayerIsBusy()
-    {
-        return typing.IsTypingWord
-            || typing.SecondsSinceTyping < TipWaitSeconds
-            || powers.IsAiming;
-    }
-
-    // Shows the tip called key once (it opens as soon as the player is not busy).
-    // With tips turned off, nothing is shown (and nothing is marked as shown).
     public void RequestTip(string key, string title, string text, Color titleColor)
     {
-        if (!tipsEnabled)
-        {
-            return;
-        }
-        if (!tipsShown.Add(key))
-        {
-            return; // already explained
-        }
-        PendingTip tip;
-        tip.Key = key;
-        tip.Title = title;
-        tip.Text = text;
-        tip.Color = titleColor;
-        pendingTips.Enqueue(tip);
+        if (EasyTutorial.Active != null || !tipsEnabled || !tipsShown.Add(key)) return;
+        hud.ShowHint(title,2f);
+        AnalyticsEvent e = Analytics.NewEvent("hint"); e.Add("key",key); e.Add("nonblocking",true); Analytics.Send(e);
     }
-
-    // Called by Powers when a charge is gained. Only the first one of each kind shows a tip.
     public void RequestPowerTip(PowerKind kind, string title, string text)
     {
-        RequestTip("power " + kind, title, text, kind == PowerKind.Lure ? Palette.LureCrate : Palette.FreezeCrate);
+        RequestTip("power " + kind,title,"",Color.white);
     }
-
-    // The tip box on screen now, and when it opened (real time), for analytics.
-    private string openTipKey;
-    private float openTipSince;
-
-    private void ShowNextTip()
-    {
-        PendingTip tip = pendingTips.Dequeue();
-        State = GameState.Tip;
-        Time.timeScale = 0f; // everything waits for the player
-        hud.ShowPowerTip(tip.Title, tip.Text, tip.Color);
-        openTipKey = tip.Key;
-        openTipSince = Time.realtimeSinceStartup;
-    }
-
-    // Called by the tip box's OK button and by Enter (TypingController).
+    // Kept for existing serialized OK-button bindings in older scenes.
     public void ConfirmTip()
     {
-        if (State != GameState.Tip)
-        {
-            return;
-        }
-
-        AnalyticsEvent e = Analytics.NewEvent("tip");
-        e.Add("key", openTipKey);
-        e.Add("seconds_open", Time.realtimeSinceStartup - openTipSince);
-        Analytics.Send(e);
-
-        hud.HidePowerTip();
-        if (pendingTips.Count > 0)
-        {
-            ShowNextTip(); // got both powers at once: explain the next one too
-            return;
-        }
-        State = GameState.Playing;
-        Time.timeScale = 1f;
+        if (State != GameState.Tip) return;
+        hud.HidePowerTip(); State = GameState.Playing; Time.timeScale = 1f;
     }
-
     // Called by the Start button (wired in the scene) and by StartOrRestart().
     public void StartGame()
     {
@@ -274,26 +179,6 @@ public class GameManager : MonoBehaviour
 
         spawner.BeginWaves();
 
-        // Before anything happens, explain what the combo buys (a tip box; the
-        // game waits for Enter / OK). Shown once, not again after a Restart.
-        if (showComboWeaponsTip)
-        {
-        RequestTip("combo weapons", "COMBO WEAPONS",
-            "Type without mistakes to build your COMBO (top of the screen), then SPEND it on a weapon:\n\n"
-            + "<color=#FF4D33>[3] FRENZY</color> - costs " + Powers.FrenzyCost + " combo: for 5 seconds every enemy word\n"
-            + "turns into a TINY red word (1 to 4 letters - even a single letter!).\n"
-            + "<color=#FF8C1A>[4] RPG</color> - costs " + Powers.RocketCost + " combo: your next finished word fires a rocket\n"
-            + "that blows up everything around its target (it hurts the boss too).\n\n"
-            + "HOLD 3 / 4 to GET a weapon (a bar fills under its slots): it is kept bottom-left,\n"
-            + "2 slots each, until you want it. TAP 3 / 4 (or click its slot) to USE one.\n"
-            + "Weaker against the boss!\n"
-            + "One weapon per wave. A wrong key costs 1 combo; a bite resets it\n"
-            + "(a bite on the run between two fights only costs 1).\n"
-            + "Lure bombs [1] and freezes [2] come from supply crates.\n\n"
-            + "<color=#59F2D9>[TAB] SHIELD</color> - once per level: press Tab, then TYPE the shield word\n"
-            + "in time. No damage for a few seconds and every enemy slows down!",
-            Palette.BlastOrange);
-        }
     }
 
     // ---- Typing difficulty (picked on the Start panel, see TypingSettings) ----
@@ -302,7 +187,7 @@ public class GameManager : MonoBehaviour
     // the run starts: every word is styled when its enemy appears.
     public void SetTypingDifficulty(TypingDifficulty level)
     {
-        if (State != GameState.Start)
+        if (State != GameState.Start || EasyTutorial.Active != null)
         {
             return;
         }
@@ -318,19 +203,27 @@ public class GameManager : MonoBehaviour
         SetTypingDifficulty((TypingDifficulty)next);
     }
 
-    // Spends combo on a weapon (Powers): the combo goes down by 'amount' (never below 1).
-    public void SpendCombo(int amount)
+    // Skills spend independent energy; the scoring combo is never charged.
+    public bool TrySpendSkillEnergy(int amount)
     {
-        Combo = Mathf.Max(1, Combo - amount);
-        hud.SetCombo(Combo);
+        if (State != GameState.Playing || amount <= 0 || SkillEnergy < amount) return false;
+        SkillEnergy -= amount;
         powers.OnComboChanged(Combo);
+        return true;
     }
 
-    // A teaching allowance is spendable combo, never score or earned kill statistics.
-    public void GrantTrainingCombo(int minimum)
+    // Practice energy never increases combo, score, or earned kill statistics.
+    public bool AddSkillEnergy(int amount)
     {
-        Combo = Mathf.Max(Combo, minimum);
-        hud.SetCombo(Combo);
+        if (State != GameState.Playing || amount <= 0) return false;
+        SkillEnergy += amount;
+        powers.OnComboChanged(Combo);
+        return true;
+    }
+
+    public void GrantTrainingEnergy(int minimum)
+    {
+        SkillEnergy = Mathf.Max(SkillEnergy, minimum);
         powers.OnComboChanged(Combo);
     }
 
@@ -381,13 +274,6 @@ public class GameManager : MonoBehaviour
         if (State == GameState.Playing || State == GameState.Paused || State == GameState.Tip)
         {
             LogRunEnd("restart");
-        }
-
-        // Tips still waiting (the player was busy until the end) were never
-        // seen: forget them, so they are shown in the next run.
-        foreach (PendingTip tip in pendingTips)
-        {
-            tipsShown.Remove(tip.Key);
         }
 
         Time.timeScale = 1f; // in case we restart from the pause panel
@@ -582,6 +468,7 @@ public class GameManager : MonoBehaviour
     // Returns the points gained.
     public int AddKills(int count)
     {
+        if (EasyTutorial.Active != null && EasyTutorial.Active.IsDemonstrating) return 0;
         if (count <= 0 || State == GameState.Lost)
         {
             return 0;
@@ -593,6 +480,7 @@ public class GameManager : MonoBehaviour
         {
             gained += PointsPerKill * Combo * multiplier;
             Combo += 1;
+            SkillEnergy += 1;
             powers.OnComboChanged(Combo); // the combo weapons line on the HUD follows the combo
         }
 
@@ -672,6 +560,7 @@ public class GameManager : MonoBehaviour
             Analytics.AddPlayerState(hit, attacker); // health, combo... before the hit
         }
 
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave) return;
         DynamicDifficulty.OnDamage(amount); // getting hurt eases the adaptive difficulty a little, for a while
 
         Health -= amount;

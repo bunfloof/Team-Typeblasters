@@ -249,6 +249,7 @@ public static class Analytics
 
         e.Add("health", game.Health);
         e.Add("combo", game.Combo);
+        e.Add("skill_energy", game.SkillEnergy);
         e.Add("score", game.Score);
 
         Powers powers = game.Powers;
@@ -257,8 +258,10 @@ public static class Analytics
         e.Add("frenzy_kept", powers.FrenzyKept);
         e.Add("rpg_kept", powers.RocketKept);
         e.Add("rpg_loaded", powers.RocketLoaded);
-        e.Add("can_buy_frenzy", powers.CanBuyNow(false));
-        e.Add("can_buy_rpg", powers.CanBuyNow(true));
+        e.Add("can_buy_frenzy",false); // legacy field: purchasing is retired
+        e.Add("can_use_frenzy",powers.CanUseNow(false));
+        e.Add("can_buy_rpg",false); // legacy field
+        e.Add("can_use_rpg",powers.CanUseNow(true));
         e.Add("frenzy_on", Powers.IsFrenzy);
         e.Add("shield_on", Powers.IsShielded);
         e.Add("shield_charges", powers.ShieldCharges);

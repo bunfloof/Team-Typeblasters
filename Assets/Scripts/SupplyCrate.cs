@@ -114,14 +114,14 @@ public class SupplyCrate : MonoBehaviour, ITypingTarget
         {
             if (GameManager.Instance.Powers.AddCharge(PowerKind.Lure))
             {
-                text = "+1 LURE BOMB";
+                text = "+" + Powers.LureCost + " ENERGY";
             }
         }
         else
         {
             if (GameManager.Instance.Powers.AddCharge(PowerKind.Freeze))
             {
-                text = "+1 FREEZE";
+                text = "+" + Powers.FreezeCost + " ENERGY";
             }
         }
         if (text != null)
@@ -130,6 +130,7 @@ public class SupplyCrate : MonoBehaviour, ITypingTarget
         }
 
         e.Add("power_gained", Kind != SupplyKind.Health && text != null); // false: that power was full
+        e.Add("energy_gained", Kind == SupplyKind.Lure ? Powers.LureCost : Kind == SupplyKind.Freeze ? Powers.FreezeCost : 0);
         Analytics.AddPlayerState(e); // health after, charges after...
         Analytics.Send(e);
     }

@@ -163,7 +163,7 @@ public class HUD : MonoBehaviour
 
     private void UpdateAdaptiveReadout()
     {
-        if (!Application.isEditor)
+        if (!Application.isEditor || EasyTutorial.Active != null)
         {
             return;
         }
@@ -193,9 +193,36 @@ public class HUD : MonoBehaviour
         // After every Update, so the camera has already moved this frame and the
         // texts sit exactly on their world points.
         UpdateFloatingTexts();
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave)
+        {
+            waveText.gameObject.SetActive(false);
+            scoreText.gameObject.SetActive(false);
+            healthBar.gameObject.SetActive(false);
+            Transform healthLabel = wordLayer.parent.Find("Health Label");
+            if (healthLabel != null) healthLabel.gameObject.SetActive(false);
+            if (comboPlate != null) comboPlate.gameObject.SetActive(false);
+            if (powersPanel != null) powersPanel.gameObject.SetActive(false);
+            if (shieldRow != null) shieldRow.gameObject.SetActive(false);
+            targetWordText.transform.parent.gameObject.SetActive(EasyTutorial.Active.AllowsTyping
+                && EasyTutorial.Active.CurrentLesson != 2 && !string.IsNullOrEmpty(targetWordText.text));
+            tipsToggle.gameObject.SetActive(false);
+        }
     }
 
     // ---- Readouts ----
+
+    public void RestoreTutorialCombatHud()
+    {
+        waveText.gameObject.SetActive(true);
+        scoreText.gameObject.SetActive(true);
+        healthBar.gameObject.SetActive(true);
+        Transform label = wordLayer.parent.Find("Health Label");
+        if (label != null) label.gameObject.SetActive(true);
+        if (comboPlate != null) comboPlate.gameObject.SetActive(true);
+        if (powersPanel != null) powersPanel.gameObject.SetActive(!TouchControls.Active);
+        if (shieldRow != null) shieldRow.gameObject.SetActive(true);
+        targetWordText.transform.parent.gameObject.SetActive(true);
+    }
 
     public void SetHealth(int health, int maxHealth)
     {
@@ -221,7 +248,7 @@ public class HUD : MonoBehaviour
     // just under it on the same plate (SetWeaponStatus).
 
     private const float ComboPlateTop = 6f;          // canvas units below the top edge
-    private static readonly Vector2 ComboPlateSize = new Vector2(560f, 128f);
+    private static readonly Vector2 ComboPlateSize = new Vector2(560f, 184f);
     private const float ComboTextTop = 10f;
     private const float ComboFontSize = 64f;
     private const float ComboPopScale = 1.35f;
@@ -473,6 +500,7 @@ public class HUD : MonoBehaviour
     // The big popup above the middle of the screen: a title, and a smaller line under it.
     private void ShowBigPopup(string title, string subtitle)
     {
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave) return;
         multiKillText.text = title + "\n<size=55%>" + subtitle + "</size>";
         multiKillText.gameObject.SetActive(true);
         multiKillAge = 0f;
@@ -514,7 +542,7 @@ public class HUD : MonoBehaviour
         BuildMenuButtons();
         BuildSettingsButtons();
         startPanel.SetActive(true);
-        RefreshDifficulty();
+        if (EasyTutorial.Active == null) RefreshDifficulty();
     }
 
     // ---- Typing difficulty (Start panel, under the "Show tips" toggle) ----
@@ -935,7 +963,7 @@ public class HUD : MonoBehaviour
         powerCharges[(int)PowerKind.Freeze] = freezeCharges;
         for (int row = 0; row < FrenzyRow; row++)
         {
-            ShowPips(row, maxCharges);
+            powerPipStrips[row].gameObject.SetActive(false);
             if (powerPulseTimers[row] <= 0f)
             {
                 ApplyPowerRowLook(row, 0f, 0f); // a pulsing row is updated by UpdatePowerPulses
@@ -1027,12 +1055,14 @@ public class HUD : MonoBehaviour
 
         Color color = PowerColor(row);
         bool active = IsPowerRowActive(row);
+        bool ready = row >= FrenzyRow && GameManager.Instance.Powers.CanUseNow(row == RocketRow);
         flash = Mathf.Max(flash, active ? 0.7f : 0f);
         powerKeyCaps[row].color = Color.Lerp(Color.white, color, flash);
         powerNames[row].color = Color.Lerp(Color.white, color, flash);
 
         // No charges: the whole row is dimmed (but fully visible while it flashes).
-        float restAlpha = active || powerCharges[row] > 0 ? 1f : powerEmptyAlpha;
+        bool energyReady = row < FrenzyRow && GameManager.Instance.SkillEnergy >= (row == 0 ? Powers.LureCost : Powers.FreezeCost);
+        float restAlpha = active || ready || energyReady || powerCharges[row] > 0 ? 1f : powerEmptyAlpha;
         powerRowGroups[row].alpha = Mathf.Lerp(restAlpha, 1f, flash);
     }
 
@@ -1139,6 +1169,8 @@ public class HUD : MonoBehaviour
             keyText.fontStyle = FontStyles.Bold;
 
             TMP_Text nameText = CreateText(rowRect, "Name", powerName, 30f, Vector2.zero);
+            int cost = row == 0 ? Powers.LureCost : row == 1 ? Powers.FreezeCost : row == FrenzyRow ? Powers.FrenzyCost : Powers.RocketCost;
+            nameText.text += " <size=60%>" + cost + " ENERGY</size>";
             PlaceRect(nameText.rectTransform, LeftMiddle, LeftMiddle, new Vector2(PowerNameX, 0f),
                 new Vector2(PowerNameWidth, PowerRowHeight));
             nameText.alignment = TextAlignmentOptions.Left;
@@ -1177,6 +1209,7 @@ public class HUD : MonoBehaviour
             Image square = CreateImage("Square", slot.rectTransform, EmptyPipColor);
             PlaceRect(square.rectTransform, Centre, Centre, Vector2.zero, new Vector2(WeaponSquareSize, WeaponSquareSize));
             weaponSquares[row, i] = square;
+            slot.gameObject.SetActive(false); // no inventory: the whole row is a direct skill button
         }
 
         // The HOLD bar just under the slots: fills while 3 / 4 is held to buy
@@ -1528,6 +1561,7 @@ public class HUD : MonoBehaviour
     // see-through black box, sized to fit the text.
     public void SetAimHint(bool show)
     {
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave) show = false;
         if (!show)
         {
             if (aimHintBox != null)
@@ -1708,7 +1742,7 @@ public class HUD : MonoBehaviour
     // ---- Combo reward (top-centre, on the combo plate, under the big COMBO) ----
 
     private const float ComboRewardTop = 82f;     // canvas units below the top of the combo plate
-    private const float ComboBarTop = 114f;
+    private const float ComboBarTop = 168f;
     private const float ComboBarSpeed = 2.5f;     // the bar fills / empties at up to 2.5 whole bars per second
     private static readonly Vector2 ComboBarSize = new Vector2(380f, 8f);
     private static readonly Color SmallTextColor = new Color(0.8f, 0.82f, 0.86f); // light grey
@@ -1753,9 +1787,9 @@ public class HUD : MonoBehaviour
         {
             BuildComboPlate();
         }
-        comboRewardText = CreateText(comboPlate, "ComboReward", "", 24f, Vector2.zero);
+        comboRewardText = CreateText(comboPlate, "ComboReward", "", 56f, Vector2.zero);
         PlaceRect(comboRewardText.rectTransform, TopCentre, TopCentre, new Vector2(0f, -ComboRewardTop),
-            new Vector2(ComboPlateSize.x - 20f, 30f));
+            new Vector2(ComboPlateSize.x - 20f, 76f));
         comboRewardText.alignment = TextAlignmentOptions.Center;
         comboRewardText.fontStyle = FontStyles.Bold;
         comboRewardText.textWrappingMode = TextWrappingModes.NoWrap;
@@ -1797,6 +1831,7 @@ public class HUD : MonoBehaviour
     // (game time). Newer hints replace older ones. "" fades the current hint out.
     public void ShowHint(string text, float seconds)
     {
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave) return;
         if (string.IsNullOrEmpty(text))
         {
             hintTimeLeft = 0f;
@@ -2031,6 +2066,7 @@ public class HUD : MonoBehaviour
     // rises and fades out.
     public void ShowFloatingText(Vector3 worldPosition, string text, Color color)
     {
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave && text != null && text.StartsWith("+")) return;
         if (floatingTexts[0] == null)
         {
             BuildFloatingTexts();
@@ -2290,6 +2326,7 @@ public class HUD : MonoBehaviour
     // using the existing panels and their Restart buttons.
     public void ShowResults(bool won, RunStats stats)
     {
+        if (EasyTutorial.Active != null && won) { HideAllPanels(); EasyTutorial.Active.ShowCompletion(); return; }
         if (stats == null)
         {
             stats = new RunStats(); // nothing was counted: show zeros rather than nothing
@@ -2419,6 +2456,7 @@ public class HUD : MonoBehaviour
     // top-right of the Start and pause panels, just under Wave / Score.
     private void BuildSettingsButtons()
     {
+        if (EasyTutorial.Active != null) return;
         if (settingsButtonsBuilt)
         {
             return;

@@ -8,8 +8,8 @@
 //                   (drag left / right = direction, up / down = distance) and
 //                   let go to throw. The drag works like the arrow keys.
 //   [2] FREEZE      TAP to freeze every enemy.
-//   [3] FRENZY      TAP to use a kept FRENZY, HOLD to buy one with the combo.
-//   [4] RPG         the same for the RPG.
+//   [3] FRENZY      TAP to spend 10 energy and activate.
+//   [4] RPG         TAP to spend 15 energy and load a rocket.
 //
 // The button shows what the player has (charges, weapons kept), lights up
 // while touched, fills up while a weapon is being bought, and is dimmed when
@@ -48,8 +48,8 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
     private Image fill;            // grows from the left while a weapon is being bought
     private RectTransform cap;     // the key cap: the power's key in a white square
     private TMP_Text nameText;
-    private TMP_Text countText;    // "x2", "1 / 2"...
-    private TMP_Text statusText;   // "HOLD: BUY", "LOADED"...
+    private TMP_Text countText;    // charges or energy cost
+    private TMP_Text statusText;   // TAP, LOW ENERGY, ACTIVE, LOADED
     private Vector2 laidOutSize;   // the button size the texts were last laid out for
     private CanvasGroup group;
     private Color color;
@@ -58,8 +58,6 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
     // touching the button meanwhile are ignored (they must not steer the aim).
     private const int NoFinger = int.MinValue;
     private int ownerFinger = NoFinger;
-    private float pressTime;       // game time the button went down
-    private bool couldBuyAtPress;  // a hold would buy a weapon (decided when the finger went down)
     private Vector2 pressPosition; // screen pixels where the finger went down (lure aiming)
 
     // Called once by TouchControls right after it creates the button.
@@ -72,6 +70,7 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
         background = gameObject.AddComponent<Image>();
         background.color = Color.Lerp(Color.black, color, 0.35f);
         group = gameObject.AddComponent<CanvasGroup>();
+        if (EasyTutorial.Active != null) { group.alpha = 0f; group.blocksRaycasts = false; }
 
         // The buying bar fills the button from the left (behind the texts).
         fill = TouchUI.CreateImage("Buy Fill", rect, new Color(color.r, color.g, color.b, 0.55f));
@@ -139,6 +138,13 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
 
     private void Update()
     {
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave)
+        {
+            group.alpha = 0f;
+            group.blocksRaycasts = false;
+            return; // the contextual key card replaces the five-button toolbar
+        }
+        group.blocksRaycasts = true;
         // The button changed size (the phone turned): lay the texts out again.
         if (((RectTransform)transform).rect.size != laidOutSize)
         {
@@ -155,14 +161,14 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
         switch (power)
         {
             case Power.Lure:
-                countText.text = "x" + powers.LureCharges;
-                statusText.text = powers.IsAiming ? "DRAG TO AIM" : (powers.LureCharges > 0 ? "TAP / DRAG" : "");
-                usable = powers.LureCharges > 0;
+                countText.text = Powers.LureCost + " E";
+                usable = GameManager.Instance.SkillEnergy >= Powers.LureCost || powers.IsAiming;
+                statusText.text = powers.IsAiming ? "DRAG TO AIM" : usable ? "TAP / DRAG" : "LOW ENERGY";
                 break;
             case Power.Freeze:
-                countText.text = "x" + powers.FreezeCharges;
-                statusText.text = Powers.IsFrozen ? "FROZEN!" : (powers.FreezeCharges > 0 ? "TAP" : "");
-                usable = powers.FreezeCharges > 0 || Powers.IsFrozen;
+                countText.text = Powers.FreezeCost + " E";
+                usable = GameManager.Instance.SkillEnergy >= Powers.FreezeCost || Powers.IsFrozen;
+                statusText.text = Powers.IsFrozen ? "ACTIVE" : usable ? "TAP" : "LOW ENERGY";
                 break;
             case Power.Shield:
                 countText.text = "x" + powers.ShieldCharges;
@@ -171,27 +177,12 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
                 break;
             default:
                 bool rocket = power == Power.Rocket;
-                int kept = rocket ? powers.RocketKept : powers.FrenzyKept;
-                bool canBuy = powers.CanBuyNow(rocket);
-                countText.text = kept + " / " + Powers.MaxKept;
-                if (rocket && powers.RocketLoaded)
-                {
-                    statusText.text = "LOADED";
-                }
-                else if (!rocket && Powers.IsFrenzy)
-                {
-                    statusText.text = "ACTIVE";
-                }
-                else if (canBuy)
-                {
-                    statusText.text = kept > 0 ? "TAP: USE HOLD: BUY" : "HOLD: BUY";
-                }
-                else
-                {
-                    statusText.text = kept > 0 ? "TAP: USE" : "";
-                }
-                usable = kept > 0 || canBuy || (rocket ? powers.RocketLoaded : Powers.IsFrenzy);
-                break;
+                bool ready = powers.CanUseNow(rocket);
+                int cost = rocket ? Powers.RocketCost : Powers.FrenzyCost;
+                bool running = rocket ? powers.RocketLoaded : Powers.IsFrenzy;
+                countText.text = cost + " E";
+                statusText.text = running ? (rocket ? "LOADED" : "ACTIVE") : ready ? "TAP" : "LOW ENERGY";
+                usable = ready || running;                break;
         }
         bool pressed = ownerFinger != NoFinger;
         bool active = power == Power.Lure ? powers.IsAiming : power == Power.Freeze ? Powers.IsFrozen
@@ -199,16 +190,7 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
         background.color = Color.Lerp(Color.black, color, pressed ? 0.7f : active ? 0.6f : 0.35f);
         group.alpha = usable || pressed ? 1f : DimmedAlpha;
 
-        // While a weapon button is held and a hold would buy: fill it like the
-        // key's bar (Powers buys after BuyHoldSeconds of game time, and only
-        // counts while playing).
-        float filled = 0f;
-        bool playing = GameManager.Instance.State == GameState.Playing;
-        if (pressed && playing && couldBuyAtPress && (power == Power.Frenzy || power == Power.Rocket))
-        {
-            filled = Mathf.Clamp01((Time.time - pressTime) / Powers.BuyHoldSeconds);
-        }
-        fill.rectTransform.anchorMax = new Vector2(filled, 1f);
+        fill.rectTransform.anchorMax = new Vector2(active ? 1f : 0f,1f);
     }
 
     // The drag starts at once (no threshold), so aiming reacts immediately.
@@ -224,18 +206,10 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
             return; // a second finger on the same button changes nothing
         }
         ownerFinger = eventData.pointerId;
-        pressTime = Time.time;
+
         pressPosition = eventData.position;
         background.color = Color.Lerp(Color.black, color, 0.7f);
         transform.localScale = new Vector3(PressedScale, PressedScale, 1f);
-
-        // The game only starts a hold while playing (not in the 3-2-1 countdown),
-        // and only while it reads the keys.
-        Powers powers = GameManager.Instance != null ? GameManager.Instance.Powers : null;
-        bool playing = GameManager.Instance != null && GameManager.Instance.State == GameState.Playing;
-        TypingController typing = FindFirstObjectByType<TypingController>();
-        bool readingKeys = typing != null && typing.enabled;
-        couldBuyAtPress = playing && readingKeys && powers != null && powers.CanBuyNow(power == Power.Rocket);
 
         switch (power)
         {

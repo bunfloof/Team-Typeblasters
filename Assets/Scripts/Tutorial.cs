@@ -21,6 +21,7 @@ public static class Tutorial
     // Shows text (for seconds) if the hint called key was never shown before.
     public static void Once(string key, string text, float seconds = DefaultSeconds)
     {
+        if (EasyTutorial.Active != null) return;
         if (shown.Contains(key))
         {
             return;

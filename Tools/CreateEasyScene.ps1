@@ -11,7 +11,7 @@ foreach($b in @($blocks.Values)) {
     }
 }
 $scene=$scene.Replace('bossName: SUBJECT ZERO','bossName: TRAINING SENTINEL')
-$scene=$scene.Replace('m_text: USC Campus','m_text: Training Academy').Replace('m_text: Wave 1 / 5','m_text: Wave 1 / 6')
+$scene=$scene.Replace('m_text: USC Campus','m_text: Tutorial').Replace('m_text: Wave 1 / 5','m_text: Wave 1 / 1')
 $scene=[regex]::Replace($scene,'(?m)^  mapViewWaves:.*$','  mapViewWaves: ')
 $scene=$scene.Replace('  labelTopMargin: 150','  labelTopMargin: 300').Replace('  bossLabelTopMargin: 235','  bossLabelTopMargin: 435')
 $materials=@{
@@ -37,21 +37,16 @@ $writerStart=$forest.IndexOf('$records=')
 $writerEnd=$forest.IndexOf('$root=Node')
 Invoke-Expression $forest.Substring($writerStart,$writerEnd-$writerStart)
 $script:next=3300000000L
-$root=Node 'Easy - Training Academy'
+$root=Node 'Easy - Training Arena'
 Script $root '50d9298a3d3e4f07b6ac41d0aa839285' ''
-$land=Node 'Academy - Open Training Courts' -parent $root.transform
-$fights=Node 'Academy - Six Lessons' -parent $root.transform
-[void](Shape 'Academy Foundation' 'x: 0, y: -0.3, z: 0' 'x: 240, y: 0.6, z: 210' 'TrainingFloor' $land.transform -collider $true)
-$start=Node 'Academy Entrance' 'x: -100, y: 0, z: -85' -parent $root.transform
+$land=Node 'Tutorial - Fixed Arena' -parent $root.transform
+$fights=Node 'Tutorial - Single Encounter' -parent $root.transform
+[void](Shape 'Arena Foundation' 'x: 0, y: -0.3, z: 8' 'x: 52, y: 0.6, z: 56' 'TrainingFloor' $land.transform -collider $true)
+$start=Node 'Stationary Player' 'x: 0, y: 0, z: 0' -parent $root.transform
 $plans=@(
-    @{name='01 - Bomb Range'; stop=@(-80,-60); route=@(,@(-80,-85)); color='TrainingOrange'; boss=$false},
-    @{name='02 - Freeze Lab'; stop=@(-10,-60); route=@(@(-80,-75),@(-10,-75)); color='TrainingBlue'; boss=$false},
-    @{name='03 - Frenzy Hall'; stop=@(60,-60); route=@(@(-10,-75),@(60,-75)); color='TrainingPurple'; boss=$false},
-    @{name='04 - Rocket Yard'; stop=@(60,30); route=@(@(95,-60),@(95,15),@(60,15)); color='TrainingOrange'; boss=$false},
-    @{name='05 - Shield Court'; stop=@(-10,30); route=@(@(60,15),@(-10,15)); color='TrainingGreen'; boss=$false},
-    @{name='06 - Graduation Arena'; stop=@(-80,30); route=@(@(-10,15),@(-80,15)); color='TrainingPurple'; boss=$true}
+    @{name='Single Station - Guided Practice'; stop=@(0,0); route=@(); color='TrainingFloor'; boss=$false}
 )
-$encounters=@(); $from=@(-100,-85)
+$encounters=@(); $from=@(0,0)
 foreach($plan in $plans) {
     $fight=Node $plan.name -parent $fights.transform
     $route=Node 'Academy Route' -parent $fight.transform
@@ -67,22 +62,22 @@ foreach($plan in $plans) {
     $p=$plan.stop
     $stop=Node 'Academy Stop' "x: $($p[0]), y: 0, z: $($p[1])" -parent $fight.transform
     $bossStand=Node 'Sentinel Stand' "x: $($p[0]), y: 0, z: $($p[1]+27)" -parent $fight.transform
-    foreach($offset in -8,0,8) {
-        $spawn=Node 'Training Deployment' "x: $($p[0]+$offset), y: 0, z: $($p[1]+30)" -parent $fight.transform
-        $exit=Node 'Clear Training Approach' "x: $($p[0]+$offset), y: 0, z: $($p[1]+27)" -parent $fight.transform
+    foreach($offset in -1.4,0,1.4) {
+        $spawn=Node 'Training Deployment' "x: $($p[0]+$offset), y: 0, z: $($p[1]+12)" -parent $fight.transform
+        $exit=Node 'Clear Training Approach' "x: $($p[0]+$offset), y: 0, z: $($p[1]+12)" -parent $fight.transform
         Script $spawn '45c6fbc59f09d6d47a56890fea2d098f' "  exit: {fileID: $($exit.transform)}`n  door: {fileID: 0}`n  spread: 0.3"
     }
     Script $fight '2043d301c960d2844a39bdc259577d48' "  route: {fileID: $($route.transform)}`n  stop: {fileID: $($stop.transform)}`n  groupSize: 1`n  exitGate: {fileID: 0}`n  isBossFight: $([int]$plan.boss)`n  bossStand: {fileID: $($bossStand.transform)}"
     $encounters+="  - {fileID: $($fight.component)}"
-    [void](Shape 'Colored Training Court' "x: $($p[0]), y: 0.04, z: $($p[1]+15)" 'x: 40, y: 0.04, z: 40' $plan.color $land.transform)
+    [void](Shape 'Practice Circle' 'x: 0, y: 0.03, z: 12' 'x: 14, y: 0.025, z: 14' 'TrainingPath' $land.transform 10206)
     # Tall color-coded pylons and backstops stay outside both spawn-to-stop lanes and routes.
     foreach($side in -1,1) {
-        [void](Shape 'Academy Pylon' "x: $($p[0]+$side*22), y: 5, z: $($p[1]+22)" 'x: 2, y: 10, z: 2' 'TrainingWall' $land.transform -collider $true)
-        [void](Shape 'Lesson Color Marker' "x: $($p[0]+$side*22), y: 10.5, z: $($p[1]+22)" 'x: 3, y: 1, z: 3' $plan.color $land.transform)
+        [void](Shape 'Arena Pylon' "x: $($side*17), y: 3, z: 19" 'x: 1.2, y: 6, z: 1.2' 'TrainingWall' $land.transform -collider $true)
+        [void](Shape 'Arena Marker' "x: $($side*17), y: 6.1, z: 19" 'x: 1.5, y: 0.25, z: 1.5' 'TrainingPath' $land.transform)
     }
-    [void](Shape 'Academy Backstop' "x: $($p[0]), y: 3, z: $($p[1]+39)" 'x: 42, y: 6, z: 1' 'TrainingWall' $land.transform -collider $true)
+    [void](Shape 'Arena Backstop' 'x: 0, y: 2, z: 24' 'x: 36, y: 4, z: 1' 'TrainingWall' $land.transform -collider $true)
     foreach($stripe in -12,-6,0,6,12) {
-        [void](Shape 'Backstop Color Stripe' "x: $($p[0]+$stripe), y: 3, z: $($p[1]+38.4)" 'x: 0.7, y: 5, z: 0.1' $plan.color $land.transform)
+        [void](Shape 'Backstop Inset' "x: $stripe, y: 2, z: 23.4" 'x: 0.4, y: 2.5, z: 0.1' 'TrainingFloor' $land.transform)
     }
 }
 $level=$blocks['1968236269']
@@ -104,4 +99,4 @@ foreach($m in [regex]::Matches($scene,'(?m)^--- !u!\d+ &(\d+)')) { if(!$ids.Add(
 foreach($m in [regex]::Matches($scene,'\{fileID: (\d+)\}')) { if($m.Groups[1].Value -ne '0' -and !$ids.Contains($m.Groups[1].Value)){throw "Missing reference $($m.Value)"} }
 $scene=[regex]::Replace($scene,'(?m)[ \t]+$','')
 Save 'Assets/Scenes/Easy.unity' $scene
-Write-Output 'Easy created: six independent academy stations, 18 spawn points, U-shaped return route. Normal and Hard unchanged.'
+Write-Output 'Tutorial created: one fixed arena, no route, three target positions. Normal and Hard unchanged.'

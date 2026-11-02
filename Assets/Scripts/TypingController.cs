@@ -280,6 +280,19 @@ public class TypingController : MonoBehaviour
         }
 
         // ---- 5a. Tab: raise the shield ----
+        EasyTutorial coach = EasyTutorial.Active;
+        if (coach != null)
+        {
+            shieldPressed &= coach.AllowsPower("shield");
+            lureDown &= coach.AllowsPower("lure");
+            lureUp &= coach.AllowsPower("lure");
+            frenzyDown &= coach.AllowsPower("frenzy");
+            frenzyUp &= coach.AllowsPower("frenzy");
+            rocketDown &= coach.AllowsPower("rpg");
+            rocketUp &= coach.AllowsPower("rpg");
+            if (!coach.AllowsTyping)
+                typedText = coach.AllowsPower("freeze") && typedText.IndexOf('2') >= 0 ? "2" : "";
+        }
         if (shieldPressed)
         {
             GameManager.Instance.Powers.TryUseShield();
@@ -335,7 +348,7 @@ public class TypingController : MonoBehaviour
             }
             if (character == FreezeKey)
             {
-                GameManager.Instance.Powers.TryUseFreeze();
+                if (coach == null || coach.AllowsPower("freeze")) GameManager.Instance.Powers.TryUseFreeze();
                 continue;
             }
             // No word ever contains a digit (the number keys are the powers),
@@ -436,6 +449,7 @@ public class TypingController : MonoBehaviour
         }
         foreach (ITypingTarget candidate in spawner.GetTypingTargets())
         {
+            if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsTarget(candidate)) continue;
             if (candidate.IsCaseSensitive)
             {
                 return true;
@@ -741,6 +755,7 @@ public class TypingController : MonoBehaviour
         found.Clear();
         foreach (ITypingTarget candidate in spawner.GetTypingTargets())
         {
+            if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsTarget(candidate)) continue;
             // Skip a target whose word is already done: a bullet is on its way to it.
             if (candidate.IsWordComplete || !Matches(candidate, typed, candidate.Word[0]))
             {

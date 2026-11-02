@@ -495,6 +495,11 @@ public class Zombie : MonoBehaviour, ITypingTarget
         }
     }
 
+    public void SetTrainingSpeed(float value)
+    {
+        if (EasyTutorial.Active != null) speed = Mathf.Max(0f, value);
+    }
+
     // Sum of "step away" directions from every zombie that is too close. Each
     // push is stronger the closer the other zombie is (0 at the wanted distance).
     private Vector3 SeparationPush()

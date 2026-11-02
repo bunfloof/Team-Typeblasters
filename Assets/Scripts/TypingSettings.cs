@@ -51,6 +51,7 @@ public static class TypingSettings
     {
         get
         {
+            if (EasyTutorial.Active != null) return TypingDifficulty.Easy;
             if (!loaded)
             {
                 loaded = true;

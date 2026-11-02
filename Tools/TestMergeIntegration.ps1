@@ -57,6 +57,7 @@ namespace UnityEngine {
  public static class Object {public static T FindFirstObjectByType<T>() where T:class{return null;} }
 }
 public enum GameState {Start,Playing,Paused,Tip,Won,Lost}
+public class EasyTutorial {public static EasyTutorial Active;public bool IsDemonstrating;public bool IsFinalWave;public bool AllowsPower(string item){return true;}}
 public enum ZombieKind {Normal,Brute,Ghost,Splitling}
 public class HUD {
  public int Flashes; public void SetHealth(int h,int max){} public void FlashRed(){Flashes++;}

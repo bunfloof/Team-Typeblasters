@@ -263,12 +263,13 @@ public static class DynamicDifficulty
         converged = false;
         hadTargets = false;
         lastKeyTime = Time.time;
-        level = Enabled ? TargetLevel() : 0f; // starts there: no ramp at the start of a level
+        level = Enabled && EasyTutorial.Active == null ? TargetLevel() : 0f;
     }
 
     // Every frame of play (TypingController). anyTargets: something can be typed now.
     public static void Tick(float deltaTime, bool anyTargets)
     {
+        if (EasyTutorial.Active != null) { level = 0f; return; }
         // Nothing to type: the player is not slow, they are waiting. The clock
         // for the next key starts when a target appears.
         if (!anyTargets || !hadTargets)
