@@ -24,19 +24,20 @@ public class TutorialCoachView : MonoBehaviour
     private Material lineMaterial;
     private static readonly Color Teal = new Color(.25f, .86f, .8f);
     private static readonly Color Gold = new Color(1f, .68f, .3f);
-    private static readonly Color WaitRed = new Color(1f, .45f, .35f);
+    private static readonly Color WaitColor = new Color(1f, .85f, .45f); // a friendly light gold, not an error red
 
-    // WATCH vs YOUR TURN must never look alike: during a demo the key card is
-    // greyed out with a DEMO tag and a progress bar, and pressing the key says
-    // WAIT. When the demo ends, YOUR TURN pops in and the key card lights up.
-    private const float WaitSeconds = 1.2f;   // how long WAIT - WATCH FIRST stays after an early press
+    // HOW IT WORKS (the demo) vs YOUR TURN must never look alike: during a
+    // demo the key card is greyed out with a DEMO tag and a progress bar, and
+    // pressing the key gently says "your turn is next". When the demo ends,
+    // YOUR TURN pops in and the key card lights up.
+    private const float WaitSeconds = 1.5f;   // how long "your turn is next" stays after an early press
     private const float YourTurnPopSeconds = 0.5f;
     private CanvasGroup keyGroup;
     private TMP_Text demoTag;
     private RectTransform demoBar, demoFill;
     private float demoStart, demoLength = 1f;
     private float waitAt = -100f, yourTurnAt = -100f;
-    private string actionText = "";   // the instruction (shown again once WAIT is over)
+    private string actionText = "";   // the instruction (shown again once the early-press note is over)
     private Color actionColor = Teal;
 
     // The arrow keys (lure lesson): left, right, up, down. They light up while
@@ -219,7 +220,7 @@ public class TutorialCoachView : MonoBehaviour
             pressedCode = null;
             return;
         }
-        if (demo) { waitAt = Time.unscaledTime; return; } // tapped during the demo: WAIT
+        if (demo) { waitAt = Time.unscaledTime; return; } // tapped during the demo: "your turn is next"
         if (complete || key.Length == 0) return;
         Key code = key == "TAB" ? Key.Tab : key == "1" ? Key.Digit1 : key == "2" ? Key.Digit2 : key == "3" ? Key.Digit3 : Key.Digit4;
         if (key == "2") { if (down) TouchInput.Type('2'); return; }
@@ -244,17 +245,17 @@ public class TutorialCoachView : MonoBehaviour
         float mobile = TouchControls.Active ? 1.35f : 1f;
         float now = Time.unscaledTime;
 
-        // Pressed during the demo: WAIT - WATCH FIRST, and the card shakes.
+        // Pressed during the demo: a friendly "your turn is next", and the card wiggles.
         if (demo && !DemoPressed && KeyWentDown()) waitAt = now;
         float wait = demo ? Mathf.Clamp01(1f - (now - waitAt) / WaitSeconds) : 0f;
         if (wait > 0f)
         {
-            action.text = "WAIT - WATCH FIRST";
-            action.color = WaitRed;
+            action.text = "DEMO PLAYING - YOUR TURN IS NEXT";
+            action.color = WaitColor;
         }
         else if (action.text != actionText)
         {
-            action.text = actionText; // WAIT is over: the instruction comes back
+            action.text = actionText; // the early-press note is over: the instruction comes back
             action.color = actionColor;
         }
         keyCard.anchoredPosition = new Vector2(Mathf.Sin(now * 60f) * 12f * wait, 210f);
