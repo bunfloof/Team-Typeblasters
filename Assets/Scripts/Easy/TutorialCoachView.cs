@@ -33,6 +33,15 @@ public class TutorialCoachView : MonoBehaviour
     private const float WaitSeconds = 1.5f;   // how long "your turn is next" stays after an early press
     private const float YourTurnPopSeconds = 0.5f;
     private CanvasGroup keyGroup;
+    private TMP_Text plusSign;                // [1] + arrows: they are used together
+    private RectTransform letterTop, letterBottom; // cinema bars: shown during a demo ("this is a show, not your turn")
+    private const float LetterboxHeight = 72f;
+    private const float LetterboxSpeed = 360f;  // canvas units per second
+    private float holdStart = -1f;              // when the lure key started being held (demo or player), -1 = not held
+    private const float DemoCardScale = .78f;   // the key card is smaller and grey during a demo
+    private static readonly Color DemoFace = new Color(.16f, .17f, .19f, .97f);
+    private static readonly Color DemoFacePressed = new Color(.3f, .32f, .35f, .97f);
+    private static readonly Color DemoKeyText = new Color(.62f, .64f, .68f);
     private TMP_Text demoTag;
     private RectTransform demoBar, demoFill;
     private float demoStart, demoLength = 1f;
@@ -84,6 +93,9 @@ public class TutorialCoachView : MonoBehaviour
 
     private void Build()
     {
+        // Cinema bars first, so everything else is drawn over them.
+        letterTop = Letterbox("Letterbox Top", 1f);
+        letterBottom = Letterbox("Letterbox Bottom", 0f);
         for (int i = 0; i < dots.Length; i++)
             dots[i] = Plate(Rect("Step " + (i + 1), root, new Vector2(.5f, 1f), new Vector2((i - 2.5f) * 28f, -26f), Vector2.one * 12f), new Color(.2f,.27f,.3f));
         title = Text("Cue", root, "", new Vector2(.5f,1f), new Vector2(0,-83), new Vector2(1000,80), 52);
@@ -106,6 +118,8 @@ public class TutorialCoachView : MonoBehaviour
         demoFill.pivot = new Vector2(0f,.5f);
         Plate(demoFill, Gold);
         BuildArrowKeys();
+        plusSign = Text("Plus", root, "+", new Vector2(.5f,0f), new Vector2(-155,210), new Vector2(60,60), 56);
+        plusSign.gameObject.SetActive(false);
         RectTransform replayRect = Rect("Replay Demo", root, new Vector2(1,0), new Vector2(-150,210), new Vector2(210,100));
         Image replayFace = Plate(replayRect, new Color(.06f,.12f,.16f,.95f)); replayFace.raycastTarget = true;
         replay = replayRect.gameObject.AddComponent<Button>(); replay.targetGraphic = replayFace;
@@ -131,10 +145,25 @@ public class TutorialCoachView : MonoBehaviour
         actionText = instruction;
         actionColor = action.color;
         keyCard.gameObject.SetActive(shownKey.Length > 0);
-        keyGroup.alpha = demonstrating ? .4f : 1f;  // greyed out: not yours to press yet
+        keyGroup.alpha = demonstrating ? .7f : 1f;  // a little faded (it is also grey and smaller): not yours to press yet
         demoTag.gameObject.SetActive(demonstrating && shownKey.Length > 0);
         demoBar.gameObject.SetActive(demonstrating);
         replay.gameObject.SetActive(!demonstrating && owner.CurrentLesson >= 3);
+    }
+
+    // A full-width black bar at the top (edge 1) or bottom (edge 0); its height animates.
+    private RectTransform Letterbox(string name, float edge)
+    {
+        var go = new GameObject(name, typeof(RectTransform));
+        var rect = (RectTransform)go.transform;
+        rect.SetParent(root, false);
+        rect.anchorMin = new Vector2(0f, edge);
+        rect.anchorMax = new Vector2(1f, edge);
+        rect.pivot = new Vector2(.5f, edge);
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = new Vector2(0f, 0f);
+        Plate(rect, new Color(0f, 0f, 0f, .88f));
+        return rect;
     }
 
     // A demo starts: its progress bar fills over about this many seconds.
@@ -153,7 +182,7 @@ public class TutorialCoachView : MonoBehaviour
     // Four small key caps, an arrow drawn on each (no font glyph needed).
     private void BuildArrowKeys()
     {
-        arrowKeys = Rect("Arrow Keys", root, new Vector2(.5f,0f), new Vector2(-250,190), new Vector2(160,110)); // left of the key card: the aim hint is bottom-right
+        arrowKeys = Rect("Arrow Keys", root, new Vector2(.5f,0f), new Vector2(-270,200), new Vector2(160,110)); // left of the key card: the aim hint is bottom-right
         Vector2[] spots = { new Vector2(-54,-26), new Vector2(54,-26), new Vector2(0,28), new Vector2(0,-26) };
         float[] turns = { -90f, 90f, 180f, 0f }; // the drawn arrow points down; turned for left, right, up
         for (int i = 0; i < 4; i++)
@@ -177,6 +206,7 @@ public class TutorialCoachView : MonoBehaviour
         bool demoAiming = demo && DemoPressed && owner.CurrentLesson == 3;
         bool playerAiming = !demo && owner.CurrentLesson == 3 && GameManager.Instance.Powers.IsAiming && !TouchControls.Active;
         arrowKeys.gameObject.SetActive(demoAiming || playerAiming);
+        plusSign.gameObject.SetActive(demoAiming || playerAiming);
         if (!arrowKeys.gameObject.activeSelf) return;
         Vector2 arrows = demoArrows;
         if (playerAiming)
@@ -188,10 +218,12 @@ public class TutorialCoachView : MonoBehaviour
         }
         float breathe = .5f + .5f * Mathf.Sin(Time.unscaledTime * 4f);
         Color idle = Color.Lerp(CapIdle, new Color(.13f,.3f,.32f), breathe); // they breathe: "use us"
-        arrowCaps[0].color = arrows.x < 0f ? Gold : idle;
-        arrowCaps[1].color = arrows.x > 0f ? Gold : idle;
-        arrowCaps[2].color = arrows.y > 0f ? Gold : idle;
-        arrowCaps[3].color = arrows.y < 0f ? Gold : idle;
+        bool[] lit = { arrows.x < 0f, arrows.x > 0f, arrows.y > 0f, arrows.y < 0f };
+        for (int i = 0; i < 4; i++)
+        {
+            arrowCaps[i].color = lit[i] ? Gold : idle;
+            arrowCaps[i].rectTransform.localScale = Vector3.one * (lit[i] ? 1.25f : 1f); // the key being pressed stands out
+        }
     }
 
     // The key on the card went down this frame (keyboard).
@@ -263,17 +295,39 @@ public class TutorialCoachView : MonoBehaviour
         // The demo's progress bar.
         if (demo) demoFill.sizeDelta = new Vector2(240f * Mathf.Clamp01((now - demoStart) / demoLength), 10f);
 
+        // Cinema bars slide in for a demo and away for YOUR TURN.
+        float barHeight = Mathf.MoveTowards(letterTop.sizeDelta.y, demo ? LetterboxHeight : 0f, LetterboxSpeed * Time.unscaledDeltaTime);
+        letterTop.sizeDelta = new Vector2(0f, barHeight);
+        letterBottom.sizeDelta = new Vector2(0f, barHeight);
+
+        // The lure key being HELD (by the demo or the player): a bar fills on its card.
+        bool holdingLure = owner.CurrentLesson == 3 && key == "1" && Pressed();
+        if (!holdingLure) holdStart = -1f;
+        else if (holdStart < 0f) holdStart = now;
+
         // YOUR TURN: the title and the key card pop when the demo hands over.
         float pop = Mathf.Clamp01((now - yourTurnAt) / YourTurnPopSeconds);
         float grow = pop < 1f ? Mathf.Sin(pop * Mathf.PI) * .35f : 0f;
         title.rectTransform.localScale = Vector3.one * (1f + grow);
-        keyCard.localScale = Vector3.one * mobile * (Pressed() ? .93f : 1f) * (1f + grow);
+        keyCard.localScale = Vector3.one * mobile * (Pressed() ? .93f : 1f) * (1f + grow) * (demo ? DemoCardScale : 1f);
         UpdateArrowKeys();
         bool effect = owner.CurrentLesson == 2 ? Powers.IsShielded : owner.CurrentLesson == 4 ? Powers.IsFrozen
             : owner.CurrentLesson == 5 ? Powers.IsFrenzy : owner.CurrentLesson == 6 && GameManager.Instance.Powers.RocketLoaded;
-        keyFace.color = effect || Pressed() ? new Color(.14f,.49f,.47f) : Color.Lerp(new Color(.05f,.13f,.18f), new Color(.13f,.3f,.32f), .5f + .5f * Mathf.Sin(Time.time * 3f));
-        float progress = effect ? 1f : 0f;
+        // A demo's card is flat grey (even when the demo presses it): it is not
+        // the player's to press. On YOUR TURN it breathes in teal.
+        if (demo)
+        {
+            keyFace.color = Pressed() ? DemoFacePressed : DemoFace;
+            keyText.color = DemoKeyText;
+        }
+        else
+        {
+            keyFace.color = effect || Pressed() ? new Color(.14f,.49f,.47f) : Color.Lerp(new Color(.05f,.13f,.18f), new Color(.13f,.3f,.32f), .5f + .5f * Mathf.Sin(Time.time * 3f));
+            keyText.color = Color.white;
+        }
+        float progress = effect ? 1f : holdStart >= 0f ? Mathf.Clamp01((now - holdStart) / 0.8f) : 0f;
         fill.rectTransform.sizeDelta = new Vector2(240f * progress,8f);
+        fill.color = demo ? Gold : Teal;
         bool energySkill = key == "1" || key == "2" || key == "3" || key == "4";
         energyCost.gameObject.SetActive(energySkill);
         if (energySkill)

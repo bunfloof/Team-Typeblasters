@@ -81,7 +81,10 @@ public class EasyTutorial : MonoBehaviour
             : pair ? new[] { "GO", "STOP" } : new[] { "CAT", "DOG", "SUN" };
         for (int i = 0; i < words.Length; i++)
         {
-            float speed = CurrentLesson == 3 ? 1.4f : CurrentLesson == 4 ? 0.7f : 0f;
+            // The lure demo is long (hold, steer, throw): its zombies walk slowly, so
+            // they are still out in front when the bomb lands and can be seen
+            // turning toward it. Practice keeps the real pace.
+            float speed = CurrentLesson == 3 ? (demo ? 0.5f : 1.4f) : CurrentLesson == 4 ? 0.7f : 0f;
             spawner.SpawnTrainingTarget(words[i], 12f, (i - (words.Length - 1) * 0.5f) * 1.4f, speed);
         }
     }
@@ -117,11 +120,11 @@ public class EasyTutorial : MonoBehaviour
                 ShieldWord.Current == null ? "TAB" : "", false);
             yield return null;
         }
-        view.Cue("SHIELD UP", "", "TAB", false);
+        view.Cue("SHIELD UP", "", "", false); // done with Tab: no key card any more
         attacker.transform.position = owner.PlayerPosition + owner.CurrentEncounter.Facing * 4f;
         attacker.SetTrainingSpeed(4f);
         while (!blocked) yield return null;
-        view.Cue("BLOCKED!", "", "TAB", false);
+        view.Cue("BLOCKED!", "", "", false);
         yield return new WaitForSeconds(1f);
         yield return Success();
 
@@ -200,18 +203,21 @@ public class EasyTutorial : MonoBehaviour
     {
         switch (lesson)
         {
-            case 3: return 1.5f + LureSteerSeconds + 5.5f;
+            case 3: return 1.5f + LureHoldSeconds + LureSteerSeconds + 5.5f;
             case 4: return 1.5f + 0.2f + 2.5f;
             case 5: return 1.5f + 0.18f + 2.5f;
             default: return 1.5f + 0.18f + 0.7f + 1f + 2.5f;
         }
     }
 
-    // The lure demo turns the throw right, left, back to the middle (the
-    // arrow keys light up on screen), then lets go of 1.
-    private const float LureSteerSeconds = 2.4f;
-    private static readonly Vector2[] SteerArrows = { Vector2.right, Vector2.left, Vector2.right, Vector2.zero };
-    private static readonly float[] SteerSeconds = { 0.6f, 1.1f, 0.5f, 0.2f };
+    // The lure demo, slow enough to follow: 1 is pressed and HELD (a bar fills
+    // on its key card, the throw arc appears), the throw is turned right,
+    // left and back to the middle (the arrow keys light up one at a time,
+    // with short stops between), then 1 is let go and the bomb flies.
+    private const float LureHoldSeconds = 1.0f;
+    private const float LureSteerSeconds = 4.7f; // the sum of SteerSeconds
+    private static readonly Vector2[] SteerArrows = { Vector2.right, Vector2.zero, Vector2.left, Vector2.zero, Vector2.right, Vector2.zero };
+    private static readonly float[] SteerSeconds = { 1.0f, 0.35f, 1.7f, 0.35f, 0.7f, 0.6f }; // right 1.0 - left 1.7 + right 0.7 = straight again
 
     private IEnumerator SteerDemo()
     {
@@ -251,6 +257,7 @@ public class EasyTutorial : MonoBehaviour
                 view.Cue("HOW IT WORKS", "HOLD 1, AIM WITH ARROWS, LET GO", Keys[CurrentLesson], true);
                 view.DemoPressed = true;
                 Execute(Power.BeginLureAim);
+                yield return new WaitForSeconds(LureHoldSeconds); // just holding: the arc is out
                 yield return SteerDemo();
                 thrown = Power.IsAiming;
                 Execute(Power.ReleaseLureAim);
