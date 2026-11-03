@@ -250,7 +250,9 @@ public class WaveSpawner : MonoBehaviour
     // Every enemy word is a HUD text (HUD.CreateWordLabel), drawn on top of the
     // 3D scene, so no body can hide it. Every frame each word is pinned to its
     // enemy's LabelAnchor:
-    //   - it is hidden while its enemy is behind the camera;
+    //   - it is hidden while its enemy is behind the camera (except a zombie
+    //     within BehindWordDistance: its word is pinned low on its side of the
+    //     screen, see BehindPoint);
     //   - if its enemy is off to a side (or above), the word is kept
     //     labelEdgeMargin inside that screen edge, so it can still be read and
     //     typed (KeepOnScreen). For a zombie that is off screen, this puts the
@@ -298,6 +300,33 @@ public class WaveSpawner : MonoBehaviour
         get { return boss != null ? Mathf.Max(labelTopMargin, bossLabelTopMargin) : labelTopMargin; }
     }
 
+    private const float BehindWordDistance = 8f;   // metres: a zombie this close keeps its word on screen even behind the camera
+    private const float BehindWordHeight = 0.24f;  // ...pinned this high up the screen (above the bottom word box)
+    private const float BehindWordSpread = 0.4f;   // ...and up to this far left / right of the middle (fraction of the width)
+
+    private bool IsCloseZombie(ITypingTarget target)
+    {
+        Zombie zombie = target as Zombie;
+        if (zombie == null)
+        {
+            return false;
+        }
+        Vector3 offset = zombie.Position - player.position;
+        offset.y = 0f;
+        return offset.magnitude <= BehindWordDistance;
+    }
+
+    // Where to show the word of a close zombie behind the camera: low on the
+    // screen, left or right by how far it is to that side (straight behind =
+    // the middle), at full size (screen z = 1).
+    private static Vector3 BehindPoint(Camera cam, Vector3 worldPoint)
+    {
+        Vector3 local = cam.transform.InverseTransformPoint(worldPoint);
+        float side = Mathf.Clamp(local.x / Mathf.Max(0.5f, Mathf.Abs(local.z)), -1f, 1f);
+        Rect view = cam.pixelRect; // the camera's part of the screen (smaller on phones, above the keyboard)
+        return new Vector3(view.x + (0.5f + BehindWordSpread * side) * view.width, view.y + BehindWordHeight * view.height, 1f);
+    }
+
     private void LayoutLabels()
     {
         RectTransform layer = hud.WordLayer;
@@ -327,12 +356,20 @@ public class WaveSpawner : MonoBehaviour
             TMP_Text label = target.Label;
             RectTransform labelRect = label.rectTransform;
 
-            // Behind the camera: hide the word.
+            // Behind the camera: hide the word - unless it is a zombie close to
+            // the player (one biting from behind or beside, or about to): its
+            // word is pinned low on the screen on its side, next to its red
+            // threat arrow, so it can always be read and shot. (Zombies stay
+            // and keep biting until killed, so a hidden word would be a trap.)
             Vector3 screenPoint = cam.WorldToScreenPoint(target.LabelAnchor);
             if (screenPoint.z <= 0f)
             {
-                label.enabled = false;
-                continue;
+                if (!IsCloseZombie(target))
+                {
+                    label.enabled = false;
+                    continue;
+                }
+                screenPoint = BehindPoint(cam, target.LabelAnchor);
             }
 
             // Screen pixels -> position inside the word layer (Canvas units).
