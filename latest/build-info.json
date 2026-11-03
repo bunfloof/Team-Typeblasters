@@ -1,15 +1,15 @@
 {
-  "version": "latest-2026-11-03-0f23ccf",
-  "source_commit": "0f23ccf1324ddfe17175ebf821ff7eae44fa6df2",
-  "commit_message": "Merge branch 'main' of github.com:bunfloof/Team-Typeblasters",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/41639276701",
+  "version": "latest-2026-11-03-9ac2a4d",
+  "source_commit": "9ac2a4d1403ebd4e63ddc94caaf3d9e9d4f64ac2",
+  "commit_message": "Fix overlapping enemy words in the map view (Normal wave 2)",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/41704971901",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-03T13:02:39.192380Z",
+  "published_utc": "2026-11-03T19:48:41.083195Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14300762,
-      "sha256": "fe69cd85006caa0ff3f076a6b60eb01ddd1e534107640726167bf6acfcfc89d3"
+      "bytes": 14301046,
+      "sha256": "a28e999cefc647c98af233c860e53a703812b2ba8d5e3b04bf9a9d305af710ac"
     },
     {
       "path": "Build/WebGL.framework.js",
@@ -19,12 +19,12 @@
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "33daecab32d4b683bedbf60de9e195f8da26090d39b0ae199fa48ed0b8b455e6"
+      "sha256": "994a1539d01b845f9bb161c9f88ef8f30f69e174835fb12fc89cc03522a27a42"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48019654,
-      "sha256": "e768dee46b718f04c97f7a0a2ea814a30753af32a69eb4fbcf97c368a0c6d233"
+      "bytes": 48022033,
+      "sha256": "b5c77064bb894353ada822cf768bd160073ad02bbfd3298da114a383d5b8f64a"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7265,
-      "sha256": "62a00c7fb86db9f276a2debf7316320a88c07771fd2869a4af5154d114ca8312"
+      "sha256": "d0e16065cbff41bb4ccd76a1b956d6c32ab0c702e7b4a5a6be13473697454004"
     }
   ]
 }
