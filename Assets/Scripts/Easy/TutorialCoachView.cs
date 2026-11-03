@@ -24,6 +24,27 @@ public class TutorialCoachView : MonoBehaviour
     private Material lineMaterial;
     private static readonly Color Teal = new Color(.25f, .86f, .8f);
     private static readonly Color Gold = new Color(1f, .68f, .3f);
+    private static readonly Color WaitRed = new Color(1f, .45f, .35f);
+
+    // WATCH vs YOUR TURN must never look alike: during a demo the key card is
+    // greyed out with a DEMO tag and a progress bar, and pressing the key says
+    // WAIT. When the demo ends, YOUR TURN pops in and the key card lights up.
+    private const float WaitSeconds = 1.2f;   // how long WAIT - WATCH FIRST stays after an early press
+    private const float YourTurnPopSeconds = 0.5f;
+    private CanvasGroup keyGroup;
+    private TMP_Text demoTag;
+    private RectTransform demoBar, demoFill;
+    private float demoStart, demoLength = 1f;
+    private float waitAt = -100f, yourTurnAt = -100f;
+    private string actionText = "";   // the instruction (shown again once WAIT is over)
+    private Color actionColor = Teal;
+
+    // The arrow keys (lure lesson): left, right, up, down. They light up while
+    // the demo steers the throw, and while the player aims.
+    private RectTransform arrowKeys;
+    private readonly Image[] arrowCaps = new Image[4];
+    private Vector2 demoArrows;
+    private static readonly Color CapIdle = new Color(.08f, .17f, .2f, .97f);
 
     public static TutorialCoachView Create(EasyTutorial owner, HUD hud)
     {
@@ -75,6 +96,15 @@ public class TutorialCoachView : MonoBehaviour
         fill.rectTransform.pivot = new Vector2(0,.5f);
         energyCost = Text("Energy Cost",root,"",new Vector2(.5f,0),new Vector2(0,65),new Vector2(750,60),38);
         var input = keyCard.gameObject.AddComponent<TutorialPracticeKey>(); input.View = this;
+        keyGroup = keyCard.gameObject.AddComponent<CanvasGroup>();
+        demoTag = Text("Demo Tag", root, "DEMO", new Vector2(.5f,0f), new Vector2(0,312), new Vector2(240,36), 28);
+        demoTag.color = Gold; demoTag.fontStyle = FontStyles.Bold;
+        demoBar = Rect("Demo Progress", root, new Vector2(.5f,0f), new Vector2(0,118), new Vector2(240,10));
+        Plate(demoBar, new Color(.015f,.04f,.06f,.9f));
+        demoFill = Rect("Fill", demoBar, new Vector2(0f,.5f), Vector2.zero, new Vector2(0,10));
+        demoFill.pivot = new Vector2(0f,.5f);
+        Plate(demoFill, Gold);
+        BuildArrowKeys();
         RectTransform replayRect = Rect("Replay Demo", root, new Vector2(1,0), new Vector2(-150,210), new Vector2(210,100));
         Image replayFace = Plate(replayRect, new Color(.06f,.12f,.16f,.95f)); replayFace.raycastTarget = true;
         replay = replayRect.gameObject.AddComponent<Button>(); replay.targetGraphic = replayFace;
@@ -89,11 +119,89 @@ public class TutorialCoachView : MonoBehaviour
 
     public void Cue(string heading, string instruction, string shownKey, bool demonstrating)
     {
+        if (demo && !demonstrating && shownKey.Length > 0)
+        {
+            yourTurnAt = Time.unscaledTime; // the demo just ended: YOUR TURN pops in
+        }
         title.text = heading; action.text = instruction; keyText.text = shownKey;
         key = shownKey; demo = demonstrating;
+        title.color = demonstrating ? Gold : Color.white;
         action.color = demonstrating ? Gold : Teal;
+        actionText = instruction;
+        actionColor = action.color;
         keyCard.gameObject.SetActive(shownKey.Length > 0);
+        keyGroup.alpha = demonstrating ? .4f : 1f;  // greyed out: not yours to press yet
+        demoTag.gameObject.SetActive(demonstrating && shownKey.Length > 0);
+        demoBar.gameObject.SetActive(demonstrating);
         replay.gameObject.SetActive(!demonstrating && owner.CurrentLesson >= 3);
+    }
+
+    // A demo starts: its progress bar fills over about this many seconds.
+    public void StartDemoTimer(float seconds)
+    {
+        demoStart = Time.unscaledTime;
+        demoLength = Mathf.Max(.5f, seconds);
+    }
+
+    // The demo is steering the lure bomb with these arrows (zero = none).
+    public void ShowDemoArrows(Vector2 arrows)
+    {
+        demoArrows = arrows;
+    }
+
+    // Four small key caps, an arrow drawn on each (no font glyph needed).
+    private void BuildArrowKeys()
+    {
+        arrowKeys = Rect("Arrow Keys", root, new Vector2(.5f,0f), new Vector2(-250,190), new Vector2(160,110)); // left of the key card: the aim hint is bottom-right
+        Vector2[] spots = { new Vector2(-54,-26), new Vector2(54,-26), new Vector2(0,28), new Vector2(0,-26) };
+        float[] turns = { -90f, 90f, 180f, 0f }; // the drawn arrow points down; turned for left, right, up
+        for (int i = 0; i < 4; i++)
+        {
+            RectTransform cap = Rect("Arrow Cap", arrowKeys, new Vector2(.5f,.5f), spots[i], new Vector2(48,48));
+            arrowCaps[i] = Plate(cap, CapIdle);
+            RectTransform glyph = Rect("Arrow", cap, new Vector2(.5f,.5f), Vector2.zero, new Vector2(40,60));
+            glyph.localScale = Vector3.one * .55f;
+            glyph.localRotation = Quaternion.Euler(0,0,turns[i]);
+            Plate(Rect("Stem", glyph, new Vector2(.5f,.5f), new Vector2(0,10), new Vector2(6,33)), Color.white);
+            var a = Rect("Left", glyph, new Vector2(.5f,.5f), new Vector2(-6,-6), new Vector2(6,21)); a.localRotation = Quaternion.Euler(0,0,45); Plate(a, Color.white);
+            a = Rect("Right", glyph, new Vector2(.5f,.5f), new Vector2(6,-6), new Vector2(6,21)); a.localRotation = Quaternion.Euler(0,0,-45); Plate(a, Color.white);
+        }
+        arrowKeys.gameObject.SetActive(false);
+    }
+
+    private void UpdateArrowKeys()
+    {
+        // Shown in the lure lesson while the bomb is aimed: by the demo, or by
+        // the player on a keyboard (a phone aims by dragging).
+        bool demoAiming = demo && DemoPressed && owner.CurrentLesson == 3;
+        bool playerAiming = !demo && owner.CurrentLesson == 3 && GameManager.Instance.Powers.IsAiming && !TouchControls.Active;
+        arrowKeys.gameObject.SetActive(demoAiming || playerAiming);
+        if (!arrowKeys.gameObject.activeSelf) return;
+        Vector2 arrows = demoArrows;
+        if (playerAiming)
+        {
+            Keyboard board = Keyboard.current;
+            arrows = board == null ? Vector2.zero : new Vector2(
+                (board.rightArrowKey.isPressed ? 1f : 0f) - (board.leftArrowKey.isPressed ? 1f : 0f),
+                (board.upArrowKey.isPressed ? 1f : 0f) - (board.downArrowKey.isPressed ? 1f : 0f));
+        }
+        float breathe = .5f + .5f * Mathf.Sin(Time.unscaledTime * 4f);
+        Color idle = Color.Lerp(CapIdle, new Color(.13f,.3f,.32f), breathe); // they breathe: "use us"
+        arrowCaps[0].color = arrows.x < 0f ? Gold : idle;
+        arrowCaps[1].color = arrows.x > 0f ? Gold : idle;
+        arrowCaps[2].color = arrows.y > 0f ? Gold : idle;
+        arrowCaps[3].color = arrows.y < 0f ? Gold : idle;
+    }
+
+    // The key on the card went down this frame (keyboard).
+    private bool KeyWentDown()
+    {
+        Keyboard board = Keyboard.current;
+        if (board == null || key.Length == 0) return false;
+        return key == "TAB" ? board.tabKey.wasPressedThisFrame : key == "1" ? board.digit1Key.wasPressedThisFrame || board.numpad1Key.wasPressedThisFrame
+            : key == "2" ? board.digit2Key.wasPressedThisFrame || board.numpad2Key.wasPressedThisFrame
+            : key == "3" ? board.digit3Key.wasPressedThisFrame || board.numpad3Key.wasPressedThisFrame
+            : board.digit4Key.wasPressedThisFrame || board.numpad4Key.wasPressedThisFrame;
     }
 
     public void Success(int lesson)
@@ -111,7 +219,8 @@ public class TutorialCoachView : MonoBehaviour
             pressedCode = null;
             return;
         }
-        if (demo || complete || key.Length == 0) return;
+        if (demo) { waitAt = Time.unscaledTime; return; } // tapped during the demo: WAIT
+        if (complete || key.Length == 0) return;
         Key code = key == "TAB" ? Key.Tab : key == "1" ? Key.Digit1 : key == "2" ? Key.Digit2 : key == "3" ? Key.Digit3 : Key.Digit4;
         if (key == "2") { if (down) TouchInput.Type('2'); return; }
         pressedCode = code;
@@ -133,7 +242,32 @@ public class TutorialCoachView : MonoBehaviour
         TouchInput.Update(); // also release single-frame mouse taps on the desktop key card
         if (owner == null || complete) return;
         float mobile = TouchControls.Active ? 1.35f : 1f;
-        keyCard.localScale = Vector3.one * mobile * (Pressed() ? .93f : 1f);
+        float now = Time.unscaledTime;
+
+        // Pressed during the demo: WAIT - WATCH FIRST, and the card shakes.
+        if (demo && !DemoPressed && KeyWentDown()) waitAt = now;
+        float wait = demo ? Mathf.Clamp01(1f - (now - waitAt) / WaitSeconds) : 0f;
+        if (wait > 0f)
+        {
+            action.text = "WAIT - WATCH FIRST";
+            action.color = WaitRed;
+        }
+        else if (action.text != actionText)
+        {
+            action.text = actionText; // WAIT is over: the instruction comes back
+            action.color = actionColor;
+        }
+        keyCard.anchoredPosition = new Vector2(Mathf.Sin(now * 60f) * 12f * wait, 210f);
+
+        // The demo's progress bar.
+        if (demo) demoFill.sizeDelta = new Vector2(240f * Mathf.Clamp01((now - demoStart) / demoLength), 10f);
+
+        // YOUR TURN: the title and the key card pop when the demo hands over.
+        float pop = Mathf.Clamp01((now - yourTurnAt) / YourTurnPopSeconds);
+        float grow = pop < 1f ? Mathf.Sin(pop * Mathf.PI) * .35f : 0f;
+        title.rectTransform.localScale = Vector3.one * (1f + grow);
+        keyCard.localScale = Vector3.one * mobile * (Pressed() ? .93f : 1f) * (1f + grow);
+        UpdateArrowKeys();
         bool effect = owner.CurrentLesson == 2 ? Powers.IsShielded : owner.CurrentLesson == 4 ? Powers.IsFrozen
             : owner.CurrentLesson == 5 ? Powers.IsFrenzy : owner.CurrentLesson == 6 && GameManager.Instance.Powers.RocketLoaded;
         keyFace.color = effect || Pressed() ? new Color(.14f,.49f,.47f) : Color.Lerp(new Color(.05f,.13f,.18f), new Color(.13f,.3f,.32f), .5f + .5f * Mathf.Sin(Time.time * 3f));

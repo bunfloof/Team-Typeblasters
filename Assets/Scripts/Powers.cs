@@ -169,6 +169,8 @@ public class Powers : MonoBehaviour
     private float aimTurn;       // degrees the throw is turned right (< 0 = left) by the arrow keys
     private float aimDistance;   // metres: starts at throwDistance, Up / Down change it
     private Vector2 arrowInput;  // this frame's arrow keys: x = Right - Left, y = Up - Down (set by TypingController)
+    private bool scriptedAim;    // the tutorial's demo is steering the throw (the player's arrows are ignored)
+    private Vector2 scriptedArrows;
 
     private void Awake()
     {
@@ -547,10 +549,11 @@ public class Powers : MonoBehaviour
         }
 
         // Left / Right: turn the throw, within maxAimTurn of where the camera looks.
-        aimTurn = Mathf.Clamp(aimTurn + arrowInput.x * aimTurnSpeed * Time.deltaTime, -maxAimTurn, maxAimTurn);
+        Vector2 arrows = scriptedAim ? scriptedArrows : arrowInput;
+        aimTurn = Mathf.Clamp(aimTurn + arrows.x * aimTurnSpeed * Time.deltaTime, -maxAimTurn, maxAimTurn);
 
         // Up / Down: move the landing point farther / closer.
-        aimDistance = Mathf.Clamp(aimDistance + arrowInput.y * aimDistanceSpeed * Time.deltaTime,
+        aimDistance = Mathf.Clamp(aimDistance + arrows.y * aimDistanceSpeed * Time.deltaTime,
             minThrowDistance, maxThrowDistance);
 
         arc.Show(Hand(), LandingPoint(aimDistance));
@@ -561,6 +564,14 @@ public class Powers : MonoBehaviour
     public void SetAimInput(Vector2 arrows)
     {
         arrowInput = arrows;
+    }
+
+    // The tutorial's lure demo steers the throw itself, so the player sees the
+    // arrow keys at work (EasyTutorial). on = false gives the arrows back.
+    public void SetScriptedAim(bool on, Vector2 arrows)
+    {
+        scriptedAim = on;
+        scriptedArrows = arrows;
     }
 
     // Where the bomb leaves the hand: just below and right of the camera.

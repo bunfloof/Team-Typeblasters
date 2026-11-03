@@ -1583,7 +1583,8 @@ public class HUD : MonoBehaviour
     // see-through black box, sized to fit the text.
     public void SetAimHint(bool show)
     {
-        if (EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave) show = false;
+        // In the tutorial only the LURE lesson (3) shows how to aim (demo and practice).
+        if (EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave && EasyTutorial.Active.CurrentLesson != 3) show = false;
         if (!show)
         {
             if (aimHintBox != null)
