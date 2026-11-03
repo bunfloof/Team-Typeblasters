@@ -391,6 +391,9 @@ public class WaveSpawner : MonoBehaviour
         Dictionary<TMP_Text, Vector2> swap = labelLifts;
         labelLifts = nextLabelLifts;
         nextLabelLifts = swap;
+
+        // The dark plates behind the words follow them (same frame: no lag).
+        hud.SyncWordPlates();
     }
 
     // Moves a word that would stick out of the screen back inside it, keeping

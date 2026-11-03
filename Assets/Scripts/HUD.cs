@@ -764,7 +764,84 @@ public class HUD : MonoBehaviour
         label.fontSharedMaterial = OutlineMaterial(label);
 
         label.enabled = false;
+        AddWordPlate(label);
         return label;
+    }
+
+    // ---- Word plates ----
+    // Every enemy word sits on a dark, see-through plate a little bigger than
+    // the word, so it stands out from bright walls, sky, blasts or other words.
+    // The plates live in their own layer at the BACK of the word layer (all
+    // plates behind all words, and they scale with the words on phones).
+    // WaveSpawner.LayoutLabels moves the words, then calls SyncWordPlates.
+
+    private static readonly Color PlateColor = new Color(0.02f, 0.03f, 0.05f, 0.62f);
+    private const float PlatePadX = 18f;  // word units added left + right together
+    private const float PlatePadY = 6f;   // ...and top + bottom together
+
+    private RectTransform plateLayer;
+    private readonly List<TMP_Text> plateLabels = new List<TMP_Text>();
+    private readonly List<Image> plates = new List<Image>();
+
+    private void AddWordPlate(TMP_Text label)
+    {
+        if (plateLayer == null)
+        {
+            plateLayer = CreateRect("Word Plates", wordLayer);
+            StretchToParent(plateLayer);
+        }
+        plateLayer.SetAsFirstSibling(); // behind every word
+
+        Image plate = CreateImage("Word Plate", plateLayer, PlateColor);
+        plate.enabled = false;
+        plateLabels.Add(label);
+        plates.Add(plate);
+    }
+
+    // Puts each plate under its word (same place, size and scale, plus padding)
+    // and drops the plates of words that are gone.
+    public void SyncWordPlates()
+    {
+        for (int i = plates.Count - 1; i >= 0; i--)
+        {
+            TMP_Text label = plateLabels[i];
+            Image plate = plates[i];
+            if (label == null)
+            {
+                if (plate != null)
+                {
+                    Destroy(plate.gameObject);
+                }
+                plates.RemoveAt(i);
+                plateLabels.RemoveAt(i);
+                continue;
+            }
+
+            bool show = label.isActiveAndEnabled && label.color.a > 0.05f && !string.IsNullOrEmpty(label.text);
+            if (plate.enabled != show)
+            {
+                plate.enabled = show;
+            }
+            if (!show)
+            {
+                continue;
+            }
+
+            RectTransform word = label.rectTransform;
+            RectTransform rect = plate.rectTransform;
+            float scale = word.localScale.x;
+            rect.anchorMin = word.anchorMin;
+            rect.anchorMax = word.anchorMax;
+            rect.pivot = word.pivot;
+            rect.localScale = word.localScale;
+            rect.sizeDelta = word.sizeDelta + new Vector2(PlatePadX, PlatePadY);
+            // Grown evenly on every side, whatever the word's pivot.
+            rect.anchoredPosition = word.anchoredPosition
+                + new Vector2(PlatePadX * (word.pivot.x - 0.5f), PlatePadY * (word.pivot.y - 0.5f)) * scale;
+            Color color = PlateColor;
+            color.a *= label.color.a;
+            plate.color = color;
+        }
     }
 
     // The RectTransform the words live in (WaveSpawner converts screen points into it).
@@ -782,7 +859,7 @@ public class HUD : MonoBehaviour
         {
             wordMaterial = new Material(sample.fontSharedMaterial);
             wordMaterial.EnableKeyword(ShaderUtilities.Keyword_Outline);
-            wordMaterial.SetFloat(ShaderUtilities.ID_OutlineWidth, wordOutlineWidth);
+            wordMaterial.SetFloat(ShaderUtilities.ID_OutlineWidth, Mathf.Max(wordOutlineWidth, 0.3f)); // thick enough for coloured words
             wordMaterial.SetColor(ShaderUtilities.ID_OutlineColor, Color.black);
         }
         return wordMaterial;

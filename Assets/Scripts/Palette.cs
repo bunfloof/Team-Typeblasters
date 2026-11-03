@@ -47,18 +47,19 @@ public static class Palette
     public static readonly Color WordBarrel = new Color(1.00f, 0.60f, 0.20f);
     public static readonly Color WordCrate = new Color(0.45f, 1.00f, 0.50f);
     public static readonly Color WordQuiz = new Color(0.40f, 0.90f, 1.00f);
-    public static readonly Color WordArmor = new Color(0.75f, 0.80f, 0.90f);
+    public static readonly Color WordArmor = new Color(0.55f, 0.72f, 1.00f);   // steel blue, like the armour
 
-    // A zombie's word is a light shade of its body colour (light enough to
-    // read on any background), so a word always tells which kind carries it.
-    public static readonly Color WordRunner = new Color(1.00f, 0.95f, 0.55f);
-    public static readonly Color WordExplosive = new Color(1.00f, 0.60f, 0.55f);
-    public static readonly Color WordShifter = new Color(0.86f, 0.62f, 1.00f);
-    public static readonly Color WordSplitter = new Color(0.45f, 0.95f, 0.88f);
-    public static readonly Color WordSplitling = new Color(0.70f, 1.00f, 0.94f);
-    public static readonly Color WordGhost = new Color(0.92f, 0.88f, 1.00f);
-    public static readonly Color WordBrute = new Color(0.95f, 0.72f, 0.60f);
-    public static readonly Color WordSpitter = new Color(0.88f, 1.00f, 0.45f);
+    // A zombie's word is in its BODY colour (made bright enough to read), so
+    // the word alone tells which kind carries it. Every word also sits on a
+    // dark plate (HUD.CreateWordLabel), which keeps it readable on any background.
+    public static readonly Color WordRunner = new Color(1.00f, 0.90f, 0.20f);    // yellow
+    public static readonly Color WordExplosive = new Color(1.00f, 0.36f, 0.28f); // red
+    public static readonly Color WordShifter = new Color(0.80f, 0.45f, 1.00f);   // purple
+    public static readonly Color WordSplitter = new Color(0.20f, 0.95f, 0.85f);  // teal
+    public static readonly Color WordSplitling = new Color(0.60f, 1.00f, 0.93f); // light teal
+    public static readonly Color WordGhost = new Color(0.86f, 0.80f, 1.00f);     // pale lavender
+    public static readonly Color WordBrute = new Color(0.92f, 0.62f, 0.52f);     // red-brown (lighter than the dark body)
+    public static readonly Color WordSpitter = new Color(0.80f, 1.00f, 0.15f);   // acid yellow-green
 
     // The word colour of a zombie of this kind (an armored one with its armour on: WordArmor).
     public static Color WordFor(ZombieKind kind)
