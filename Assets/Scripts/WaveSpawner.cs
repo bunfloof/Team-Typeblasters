@@ -361,7 +361,7 @@ public class WaveSpawner : MonoBehaviour
             // room left at the top: to the nearest free spot instead).
             // Map view (seen from above, words crowd together): move it the
             // shortest way, in any direction, to a free spot.
-            Rect rect = mapBlend > 0.5f ? SpreadOut(baseRect, layer.rect) : StackUp(baseRect, layer.rect, WasMovedAside(label));
+            Rect rect = mapBlend > 0.5f ? SpreadOut(baseRect, layer.rect, LastLift(label)) : StackUp(baseRect, layer.rect, WasMovedAside(label));
             placedLabels.Add(rect);
 
             // Slide toward the new spot (new words jump straight there).
@@ -452,14 +452,30 @@ public class WaveSpawner : MonoBehaviour
         return labelLifts.TryGetValue(label, out lastLift) && (lastLift.x != 0f || lastLift.y < -1f);
     }
 
-    // Map view: the word already fits -> it stays. Otherwise it moves the
-    // shortest way to a free spot (FindFreeSpot). If no single move frees it,
-    // fall back to stacking it up.
-    private Rect SpreadOut(Rect rect, Rect screen)
+    // Map view: the word already fits -> it stays. Otherwise:
+    //   1. where it was moved to last frame, if that spot is still free (so
+    //      the words do not jump around while new zombies keep coming);
+    //   2. the shortest move next to a word already placed (FindFreeSpot);
+    //   3. the nearest free spot further out, searched ring by ring around
+    //      where the word wants to be (SearchRings). This is what keeps words
+    //      apart in a crowded corner (e.g. the top-right of wave 2), where
+    //      the spots next to the other words are all off screen or taken.
+    // Only if the whole screen is full does it fall back to stacking it up.
+    private Rect SpreadOut(Rect rect, Rect screen, Vector2 lastLift)
     {
         if (!OverlapsPlaced(rect))
         {
             return rect;
+        }
+
+        Rect inside = LabelArea(screen);
+        if (lastLift.sqrMagnitude > 0.01f)
+        {
+            Rect kept = new Rect(rect.position + lastLift, rect.size);
+            if (Contains(inside, kept) && !OverlapsPlaced(kept))
+            {
+                return kept;
+            }
         }
 
         Rect free;
@@ -467,7 +483,71 @@ public class WaveSpawner : MonoBehaviour
         {
             return free;
         }
+        if (SearchRings(rect, inside, out free))
+        {
+            return free;
+        }
         return StackUp(rect, screen, false);
+    }
+
+    private const int LabelSearchRings = 10; // how far SearchRings looks: this many word heights / half-widths out
+
+    // Tries spots on growing rings around the word (one word height up / down,
+    // half a word width left / right per step) and returns the cheapest free
+    // one on the first ring that has any.
+    private bool SearchRings(Rect rect, Rect inside, out Rect best)
+    {
+        best = rect;
+        float stepX = rect.width * 0.5f + LabelSideGap;
+        float stepY = rect.height + labelGap;
+        for (int ring = 1; ring <= LabelSearchRings; ring++)
+        {
+            float bestCost = float.MaxValue;
+            for (int dx = -ring; dx <= ring; dx++)
+            {
+                for (int dy = -ring; dy <= ring; dy++)
+                {
+                    if (Mathf.Max(Mathf.Abs(dx), Mathf.Abs(dy)) != ring)
+                    {
+                        continue; // only the ring itself (the inside was tried already)
+                    }
+                    Rect spot = new Rect(rect.x + dx * stepX, rect.y + dy * stepY, rect.width, rect.height);
+                    if (!Contains(inside, spot) || OverlapsPlaced(spot))
+                    {
+                        continue;
+                    }
+                    float cost = Mathf.Abs(dx * stepX) * 1.2f + Mathf.Abs(dy * stepY);
+                    if (cost < bestCost)
+                    {
+                        bestCost = cost;
+                        best = spot;
+                    }
+                }
+            }
+            if (bestCost < float.MaxValue)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Where words may go: the screen minus a small border and the HUD along the top.
+    private Rect LabelArea(Rect screen)
+    {
+        return new Rect(screen.xMin + 10f, screen.yMin + 10f, screen.width - 20f, screen.height - 10f - TopMargin);
+    }
+
+    private static bool Contains(Rect outer, Rect inner)
+    {
+        return inner.xMin >= outer.xMin && inner.xMax <= outer.xMax && inner.yMin >= outer.yMin && inner.yMax <= outer.yMax;
+    }
+
+    // How far the word was moved off its own spot last frame (zero if it was not).
+    private Vector2 LastLift(TMP_Text label)
+    {
+        Vector2 lastLift;
+        return labelLifts.TryGetValue(label, out lastLift) ? lastLift : Vector2.zero;
     }
 
     // Tries every spot just above, below, left or right of each word already
