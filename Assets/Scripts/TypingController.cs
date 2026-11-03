@@ -243,6 +243,11 @@ public class TypingController : MonoBehaviour
         // ---- 3. Outside of play, only Enter does something (and LEFT / RIGHT on the Start panel) ----
         if (GameManager.Instance.State != GameState.Playing)
         {
+            if (GameManager.Instance.State == GameState.Start && (pausePressed || dropPressed))
+            {
+                GameManager.Instance.LoadMenu();
+                return;
+            }
             if (difficultyStep != 0 && GameManager.Instance.State == GameState.Start)
             {
                 GameManager.Instance.CycleTypingDifficulty(difficultyStep);

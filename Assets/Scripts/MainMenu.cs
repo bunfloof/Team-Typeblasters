@@ -18,6 +18,9 @@ using UnityEngine.EventSystems;
 using UnityEngine.Events;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 public class MainMenu : MonoBehaviour
 {
@@ -40,6 +43,13 @@ public class MainMenu : MonoBehaviour
     private readonly List<RectTransform> levelButtons = new List<RectTransform>();
     private Vector2 lastLayoutSize;
     private bool portraitLayout;
+    private readonly List<RectTransform> menuItems = new List<RectTransform>(); // buttons the keys can select on the current page
+    private int selected;           // index in menuItems
+    private bool settingsWasOpen;   // SettingsPanel was open last frame (it closes itself on Esc / Enter)
+
+    private const float SelectedScale = 1.05f;
+    private const float FrameThickness = 6f;
+    private static readonly Color FrameColor = new Color(0.95f, 0.75f, 0.1f);
 
     private void Start()
     {
@@ -64,6 +74,7 @@ public class MainMenu : MonoBehaviour
         Image dimImage = dim.AddComponent<Image>();
         dimImage.color = dimColor;
         dimImage.raycastTarget = false;
+        MenuBackground.Create((RectTransform)canvas);
         mainPage = BuildMainPage(canvas);
         levelPage = BuildLevelPage(canvas);
         Canvas.ForceUpdateCanvases();
@@ -74,6 +85,7 @@ public class MainMenu : MonoBehaviour
     private void Update()
     {
         UpdateResponsiveLayout();
+        HandleKeys();
     }
 
     // The menu has no HUD, so TouchControls cannot adapt its layout for it.
@@ -132,6 +144,8 @@ public class MainMenu : MonoBehaviour
     {
         mainPage.SetActive(true);
         levelPage.SetActive(false);
+        selected = 0;
+        RefreshHighlight();
     }
 
     private void ShowLevels()
@@ -139,6 +153,8 @@ public class MainMenu : MonoBehaviour
         levelMessage.text = "";
         mainPage.SetActive(false);
         levelPage.SetActive(true);
+        selected = 0;
+        RefreshHighlight();
     }
 
     private GameObject BuildMainPage(Transform canvas)
@@ -189,6 +205,88 @@ public class MainMenu : MonoBehaviour
         }
         loading = true;
         SceneManager.LoadScene(sceneName);
+    }
+
+    // The buttons the keyboard can select on the page that is showing, in order.
+    private List<RectTransform> CurrentItems()
+    {
+        menuItems.Clear();
+        if (mainPage.activeSelf)
+        {
+            menuItems.Add(startButton);
+        }
+        else
+        {
+            menuItems.AddRange(levelButtons);
+            menuItems.Add(backButton);
+        }
+        return menuItems;
+    }
+
+    // W A S D / arrow keys move the selection, Enter / Space press it, Esc / Backspace go back.
+    private void HandleKeys()
+    {
+    #if ENABLE_INPUT_SYSTEM
+        // SettingsPanel closes itself on Esc / Enter: that key must not also act here.
+        bool settingsBusy = SettingsPanel.IsOpen || settingsWasOpen;
+        settingsWasOpen = SettingsPanel.IsOpen;
+
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null || loading || settingsBusy)
+        {
+            return;
+        }
+
+        bool previous = keyboard.upArrowKey.wasPressedThisFrame || keyboard.leftArrowKey.wasPressedThisFrame
+            || keyboard.wKey.wasPressedThisFrame || keyboard.aKey.wasPressedThisFrame;
+        bool next = keyboard.downArrowKey.wasPressedThisFrame || keyboard.rightArrowKey.wasPressedThisFrame
+            || keyboard.sKey.wasPressedThisFrame || keyboard.dKey.wasPressedThisFrame;
+        bool confirm = keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame
+            || keyboard.spaceKey.wasPressedThisFrame;
+        bool back = keyboard.escapeKey.wasPressedThisFrame || keyboard.backspaceKey.wasPressedThisFrame;
+
+        List<RectTransform> items = CurrentItems();
+        int step = (next ? 1 : 0) - (previous ? 1 : 0);
+        if (step != 0)
+        {
+            selected = (selected + step + items.Count) % items.Count;
+            RefreshHighlight();
+        }
+
+        if (confirm)
+        {
+            // The same click the mouse does (START -> ShowLevels, a level -> LoadLevel, BACK -> ShowMain).
+            items[Mathf.Clamp(selected, 0, items.Count - 1)].GetComponent<Button>().onClick.Invoke();
+        }
+        else if (back && levelPage.activeSelf)
+        {
+            ShowMain();
+        }
+    #endif
+    }
+
+    private void RefreshHighlight()
+    {
+        List<RectTransform> items = CurrentItems();
+        selected = Mathf.Clamp(selected, 0, items.Count - 1);
+
+        SetHighlight(startButton, false);
+        foreach (RectTransform level in levelButtons)
+        {
+            SetHighlight(level, false);
+        }
+        SetHighlight(backButton, false);
+        SetHighlight(items[selected], true);
+    }
+
+    private static void SetHighlight(RectTransform button, bool on)
+    {
+        Transform frame = button.Find("Selection Frame");
+        if (frame != null)
+        {
+            frame.gameObject.SetActive(on);
+        }
+        button.localScale = on ? new Vector3(SelectedScale, SelectedScale, 1f) : Vector3.one;
     }
 
     // ---- Small UI helpers (the same look as HUD's buttons) ----
@@ -273,6 +371,41 @@ public class MainMenu : MonoBehaviour
         button.navigation = navigation;
 
         CreateText(rect, "Text", text, 44f, Vector2.zero, size);
+        AddSelectionFrame(rect);
         return button;
+    }
+
+    // A yellow frame made of four thin bars INSIDE the button, hidden until the keyboard selects it.
+    // (Child images are not tinted by the Button's colour block, unlike an Outline component.)
+    private static void AddSelectionFrame(RectTransform button)
+    {
+        RectTransform frame = new GameObject("Selection Frame", typeof(RectTransform)).GetComponent<RectTransform>();
+        frame.SetParent(button, false);
+        frame.anchorMin = Vector2.zero;
+        frame.anchorMax = Vector2.one;
+        frame.offsetMin = Vector2.zero;
+        frame.offsetMax = Vector2.zero;
+
+        AddFrameBar(frame, new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, FrameThickness)); // top
+        AddFrameBar(frame, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, FrameThickness)); // bottom
+        AddFrameBar(frame, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f), new Vector2(FrameThickness, 0f)); // left
+        AddFrameBar(frame, new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f), new Vector2(FrameThickness, 0f)); // right
+        frame.gameObject.SetActive(false);
+    }
+
+    private static void AddFrameBar(Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 size)
+    {
+        GameObject bar = new GameObject("Bar", typeof(RectTransform), typeof(Image));
+        RectTransform rect = bar.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.pivot = pivot;
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = size;
+
+        Image image = bar.GetComponent<Image>();
+        image.color = FrameColor;
+        image.raycastTarget = false; // clicks still reach the button
     }
 }
