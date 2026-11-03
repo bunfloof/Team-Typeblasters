@@ -41,11 +41,14 @@ public class Powers : MonoBehaviour
     [Header("Charges")]
     [SerializeField] private int maxCharges = 3;
 
-    // Independent skill energy costs, displayed beside each action.
-    public const int FrenzyCost = 10;
-    public const int RocketCost = 15;
-    public const int LureCost = 4;
-    public const int FreezeCost = 5;
+    // Independent skill energy costs, displayed beside each action. Energy
+    // comes only from words typed to the end (1 per kill, GameManager.AddKills),
+    // never from blast kills, and stops at GameManager.MaxSkillEnergy: a lure
+    // bomb or RPG can never pay for the next one, and energy cannot be hoarded.
+    public const int FrenzyCost = 12;
+    public const int RocketCost = 18;
+    public const int LureCost = 6;
+    public const int FreezeCost = 8;
 
     [Header("Energy skills")]
     [SerializeField] private float frenzySeconds = 5f;    // enemy words are short this long
@@ -464,7 +467,7 @@ public class Powers : MonoBehaviour
         string text = "<size=65%>ENERGY</size> " + energy;
         if (text == lastWeaponStatus) return;
         lastWeaponStatus = text;
-        hud.SetWeaponStatus(text,Mathf.Clamp01((float)energy / RocketCost),new Color(.3f,.9f,.88f));
+        hud.SetWeaponStatus(text,Mathf.Clamp01((float)energy / GameManager.MaxSkillEnergy),new Color(.3f,.9f,.88f));
         RefreshHud();
         RefreshWeaponSlots();
     }
