@@ -203,6 +203,10 @@ public class GameManager : MonoBehaviour
         SetTypingDifficulty((TypingDifficulty)next);
     }
 
+    // The most skill energy the player can hold (more is lost): powers cannot be
+    // saved up over a whole level.
+    public const int MaxSkillEnergy = 20;
+
     // Skills spend independent energy; the scoring combo is never charged.
     public bool TrySpendSkillEnergy(int amount)
     {
@@ -216,7 +220,7 @@ public class GameManager : MonoBehaviour
     public bool AddSkillEnergy(int amount)
     {
         if (State != GameState.Playing || amount <= 0) return false;
-        SkillEnergy += amount;
+        SkillEnergy = Mathf.Min(MaxSkillEnergy, SkillEnergy + amount);
         powers.OnComboChanged(Combo);
         return true;
     }
@@ -466,7 +470,10 @@ public class GameManager : MonoBehaviour
     // kills 2 or more, every one of those kills is also multiplied by that number
     // (3 kills at once = x3 points each), and the HUD shows "TRIPLE KILL!".
     // Returns the points gained.
-    public int AddKills(int count)
+    // earnsEnergy: false for blast kills (barrels, red zombies, lure bombs, the
+    // RPG). Only a word typed to the end earns energy, so a power never pays
+    // for the next one.
+    public int AddKills(int count, bool earnsEnergy = true)
     {
         if (EasyTutorial.Active != null && EasyTutorial.Active.IsDemonstrating) return 0;
         if (count <= 0 || State == GameState.Lost)
@@ -480,7 +487,10 @@ public class GameManager : MonoBehaviour
         {
             gained += PointsPerKill * Combo * multiplier;
             Combo += 1;
-            SkillEnergy += 1;
+            if (earnsEnergy)
+            {
+                SkillEnergy = Mathf.Min(MaxSkillEnergy, SkillEnergy + 1);
+            }
             powers.OnComboChanged(Combo); // the combo weapons line on the HUD follows the combo
         }
 

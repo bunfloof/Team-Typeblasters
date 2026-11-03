@@ -42,6 +42,10 @@
 // alive, so it can still be shot). Every bullet that hits it pushes it back a
 // little. When it dies, the capsule is knocked over (see Corpse).
 //
+// A zombie that REACHES the player does not go away: it stays right there and
+// bites again every BiteInterval seconds until it is shot, blown up (barrel,
+// red zombie, RPG, lure bomb) or lured away by a lure bomb. Freeze stops it.
+//
 // THE WORD is not part of the 3D scene: it is a HUD text (HUD.CreateWordLabel)
 // pinned above the zombie by WaveSpawner.LayoutLabels, so no body can hide it.
 //
@@ -107,7 +111,9 @@ public class Zombie : MonoBehaviour, ITypingTarget
     private const float ExitTimeout = 8f;
 
     // TextMeshPro rich-text colour for the letters typed so far (yellow).
-    public const string TypedColorTag = "<color=#FFD21E>";
+    // Letters already typed turn dim grey, so what is left stands out (yellow
+    // used to clash with the yellow runner and acid spitter words).
+    public const string TypedColorTag = "<color=#7E848E>";
 
     public string Word { get; private set; }
     public int TypedCount { get; private set; }       // how many letters have been typed so far
@@ -261,7 +267,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         // The word lives on the HUD; the prefab's old world-space label is not used.
         label.gameObject.SetActive(false);
         Label = spawner.Hud.CreateWordLabel(new Vector2(0.5f, 0f)); // centred, just above the head
-        Label.color = Palette.WordFor(kind); // a light shade of its body colour
+        Label.color = Palette.WordFor(kind); // its body colour, bright enough to read
         RefreshLabel();
     }
 
@@ -872,15 +878,37 @@ public class Zombie : MonoBehaviour, ITypingTarget
     // Text colour of the "WORD SHIFT!" popup (the shifter's purple, lighter).
     private static readonly Color ShifterColor = new Color(0.8f, 0.4f, 1f);
 
-    // Reached the player: bites (damage) and is shoved away. No score.
+    // At the player: it STAYS and keeps biting, one bite every BiteInterval
+    // seconds (the first one at once), until it is killed or lured away.
+    private const float BiteInterval = 1.5f;
+    private const float BiteRecoil = 0.35f;  // metres it rocks back after each bite (it then steps in again)
+    private float nextBiteTime;
+    private int bites;
+
     private void Attack()
     {
+        if (Time.time < nextBiteTime)
+        {
+            return;
+        }
+        nextBiteTime = Time.time + BiteInterval;
+        bites += 1;
         GameManager.Instance.TakeDamage(BiteDamage, IsAmbusher, BiteEvent(), this);
 
+        // A small rock back, so each bite reads as a hit.
         Vector3 away = transform.position - player.position;
         away.y = 0f;
-        KnockOver(away.normalized * 4f + Vector3.up * 2f);
-        Remove("bite");
+        if (away.sqrMagnitude > 0.0001f)
+        {
+            transform.position += away.normalized * BiteRecoil;
+        }
+
+        // The bite that ended the run: this zombie logs its own "zombie" event
+        // (GameManager leaves it out of the "run_over" ones).
+        if (GameManager.Instance.State == GameState.Lost)
+        {
+            LogEnd("bite");
+        }
     }
 
     private int BiteDamage
@@ -990,6 +1018,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         e.Add("letters_typed", TypedCount);
         e.Add("was_targeted", firstTypedPlayTime >= 0f);
         e.Add("typing_starts", typingStarts);
+        e.Add("bites", bites); // bites it gave while standing at the player
         e.Add("seconds_alive", GameManager.Instance.Stats.Seconds - spawnPlayTime); // an ambusher's includes its lurking
         if (IsAmbusher)
         {

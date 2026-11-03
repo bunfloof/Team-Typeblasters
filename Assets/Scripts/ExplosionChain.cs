@@ -102,7 +102,7 @@ public class ExplosionChain
         int points = 0;
         if (scored)
         {
-            points = gameManager.AddKills(Kills);
+            points = gameManager.AddKills(Kills, false); // blast kills score, but earn no energy
             if (points > 0 && hasOrigin)
             {
                 ShowPoints(points);

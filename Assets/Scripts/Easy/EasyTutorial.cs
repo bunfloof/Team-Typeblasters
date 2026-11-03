@@ -67,6 +67,8 @@ public class EasyTutorial : MonoBehaviour
         foreach (LureBomb bomb in FindObjectsByType<LureBomb>(FindObjectsSortMode.None)) Destroy(bomb.gameObject);
         foreach (Bullet bullet in FindObjectsByType<Bullet>(FindObjectsSortMode.None)) Destroy(bullet.gameObject);
         Power.ResetTrainingState();
+        Power.SetScriptedAim(false, Vector2.zero);
+        view.ShowDemoArrows(Vector2.zero);
         GameManager.Instance.GrantTrainingEnergy(25);
         used = blocked = false;
         nextRefill = Time.time + 3f;
@@ -148,7 +150,8 @@ public class EasyTutorial : MonoBehaviour
                         used = false;
                         SpawnGroup(false);
                     }
-                    string instruction = lesson < 5 ? "TAP " + Keys[lesson]
+                    string instruction = lesson == 3 ? LureInstruction()
+                        : lesson < 5 ? "TAP " + Keys[lesson]
                         : lesson == 6 && Power.RocketLoaded ? "TYPE A WORD!" : "TAP " + Keys[lesson];
                     if (used && lesson == 4) instruction = "TYPE THE WORDS!";
                     if (used && lesson == 5) instruction = "TYPE THE SHORT WORDS!";
@@ -182,9 +185,49 @@ public class EasyTutorial : MonoBehaviour
         yield return new WaitForSeconds(1f);
     }
 
+    // The lure lesson's practice line: hold 1, aim (arrow keys, or drag on a phone), let go.
+    private string LureInstruction()
+    {
+        if (Power.IsAiming)
+        {
+            return TouchControls.Active ? "DRAG TO AIM, THEN LET GO" : "AIM WITH THE ARROW KEYS, LET GO OF 1";
+        }
+        return TouchControls.Active ? "HOLD 1, DRAG TO AIM, LET GO" : "HOLD 1, AIM WITH ARROWS, LET GO";
+    }
+
+    // How long each lesson's demo lasts, roughly (for the demo progress bar).
+    private static float DemoSeconds(int lesson)
+    {
+        switch (lesson)
+        {
+            case 3: return 1.5f + LureSteerSeconds + 5.5f;
+            case 4: return 1.5f + 0.2f + 2.5f;
+            case 5: return 1.5f + 0.18f + 2.5f;
+            default: return 1.5f + 0.18f + 0.7f + 1f + 2.5f;
+        }
+    }
+
+    // The lure demo turns the throw right, left, back to the middle (the
+    // arrow keys light up on screen), then lets go of 1.
+    private const float LureSteerSeconds = 2.4f;
+    private static readonly Vector2[] SteerArrows = { Vector2.right, Vector2.left, Vector2.right, Vector2.zero };
+    private static readonly float[] SteerSeconds = { 0.6f, 1.1f, 0.5f, 0.2f };
+
+    private IEnumerator SteerDemo()
+    {
+        for (int i = 0; i < SteerArrows.Length; i++)
+        {
+            Power.SetScriptedAim(true, SteerArrows[i]);
+            view.ShowDemoArrows(SteerArrows[i]);
+            yield return new WaitForSeconds(SteerSeconds[i]);
+        }
+        Power.SetScriptedAim(false, Vector2.zero);
+        view.ShowDemoArrows(Vector2.zero);
+    }
+
     private IEnumerator ActivateDemo(bool rocket)
     {
-        view.Cue("WATCH","TAP " + Keys[CurrentLesson],Keys[CurrentLesson],true);
+        view.Cue("HOW IT WORKS", Names[CurrentLesson], Keys[CurrentLesson], true);
         view.DemoPressed = true;
         Execute(() => Power.WeaponKeyDown(rocket));
         yield return new WaitForSeconds(.18f);
@@ -196,19 +239,23 @@ public class EasyTutorial : MonoBehaviour
     {
         IsDemonstrating = true;
         ResetStage(); SpawnGroup(true); Log("demo");
-        view.Cue("WATCH", Names[CurrentLesson], Keys[CurrentLesson], true);
+        view.Cue("HOW IT WORKS", Names[CurrentLesson], Keys[CurrentLesson], true);
+        view.StartDemoTimer(DemoSeconds(CurrentLesson));
         yield return new WaitForSeconds(1.5f);
         if (CurrentLesson == 3)
         {
             bool thrown;
             do
             {
+                // Hold 1, steer with the arrows (they light up), let go.
+                view.Cue("HOW IT WORKS", "HOLD 1, AIM WITH ARROWS, LET GO", Keys[CurrentLesson], true);
                 view.DemoPressed = true;
                 Execute(Power.BeginLureAim);
-                yield return new WaitForSeconds(0.18f);
+                yield return SteerDemo();
                 thrown = Power.IsAiming;
                 Execute(Power.ReleaseLureAim);
             } while (!thrown);
+            view.Cue("HOW IT WORKS", Names[CurrentLesson], Keys[CurrentLesson], true);
             view.DemoPressed = false;
             yield return new WaitForSeconds(5.5f); // actual flight, attraction and explosion
         }
@@ -224,7 +271,7 @@ public class EasyTutorial : MonoBehaviour
             if (CurrentLesson == 6)
             {
                 yield return new WaitForSeconds(0.7f);
-                view.Cue("WATCH", "TYPE A WORD!", "", true);
+                view.Cue("HOW IT WORKS", "THEN TYPE A WORD", "", true);
                 Zombie target = spawner.AliveZombies.First(z => z != null && z.IsAlive);
                 while (!target.IsWordComplete)
                 {

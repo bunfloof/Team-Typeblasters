@@ -41,11 +41,14 @@ public class Powers : MonoBehaviour
     [Header("Charges")]
     [SerializeField] private int maxCharges = 3;
 
-    // Independent skill energy costs, displayed beside each action.
-    public const int FrenzyCost = 10;
-    public const int RocketCost = 15;
-    public const int LureCost = 4;
-    public const int FreezeCost = 5;
+    // Independent skill energy costs, displayed beside each action. Energy
+    // comes only from words typed to the end (1 per kill, GameManager.AddKills),
+    // never from blast kills, and stops at GameManager.MaxSkillEnergy: a lure
+    // bomb or RPG can never pay for the next one, and energy cannot be hoarded.
+    public const int FrenzyCost = 12;
+    public const int RocketCost = 18;
+    public const int LureCost = 6;
+    public const int FreezeCost = 8;
 
     [Header("Energy skills")]
     [SerializeField] private float frenzySeconds = 5f;    // enemy words are short this long
@@ -169,6 +172,8 @@ public class Powers : MonoBehaviour
     private float aimTurn;       // degrees the throw is turned right (< 0 = left) by the arrow keys
     private float aimDistance;   // metres: starts at throwDistance, Up / Down change it
     private Vector2 arrowInput;  // this frame's arrow keys: x = Right - Left, y = Up - Down (set by TypingController)
+    private bool scriptedAim;    // the tutorial's demo is steering the throw (the player's arrows are ignored)
+    private Vector2 scriptedArrows;
 
     private void Awake()
     {
@@ -462,7 +467,7 @@ public class Powers : MonoBehaviour
         string text = "<size=65%>ENERGY</size> " + energy;
         if (text == lastWeaponStatus) return;
         lastWeaponStatus = text;
-        hud.SetWeaponStatus(text,Mathf.Clamp01((float)energy / RocketCost),new Color(.3f,.9f,.88f));
+        hud.SetWeaponStatus(text,Mathf.Clamp01((float)energy / GameManager.MaxSkillEnergy),new Color(.3f,.9f,.88f));
         RefreshHud();
         RefreshWeaponSlots();
     }
@@ -547,10 +552,11 @@ public class Powers : MonoBehaviour
         }
 
         // Left / Right: turn the throw, within maxAimTurn of where the camera looks.
-        aimTurn = Mathf.Clamp(aimTurn + arrowInput.x * aimTurnSpeed * Time.deltaTime, -maxAimTurn, maxAimTurn);
+        Vector2 arrows = scriptedAim ? scriptedArrows : arrowInput;
+        aimTurn = Mathf.Clamp(aimTurn + arrows.x * aimTurnSpeed * Time.deltaTime, -maxAimTurn, maxAimTurn);
 
         // Up / Down: move the landing point farther / closer.
-        aimDistance = Mathf.Clamp(aimDistance + arrowInput.y * aimDistanceSpeed * Time.deltaTime,
+        aimDistance = Mathf.Clamp(aimDistance + arrows.y * aimDistanceSpeed * Time.deltaTime,
             minThrowDistance, maxThrowDistance);
 
         arc.Show(Hand(), LandingPoint(aimDistance));
@@ -561,6 +567,14 @@ public class Powers : MonoBehaviour
     public void SetAimInput(Vector2 arrows)
     {
         arrowInput = arrows;
+    }
+
+    // The tutorial's lure demo steers the throw itself, so the player sees the
+    // arrow keys at work (EasyTutorial). on = false gives the arrows back.
+    public void SetScriptedAim(bool on, Vector2 arrows)
+    {
+        scriptedAim = on;
+        scriptedArrows = arrows;
     }
 
     // Where the bomb leaves the hand: just below and right of the camera.
