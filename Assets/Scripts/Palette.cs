@@ -45,7 +45,8 @@ public static class Palette
 
     // ---- Word colours (HUD text) ----
     public static readonly Color WordBarrel = new Color(1.00f, 0.60f, 0.20f);
-    public static readonly Color WordCrate = new Color(0.45f, 1.00f, 0.50f);
+    public static readonly Color WordCrate = new Color(0.45f, 1.00f, 0.50f);   // health crates
+    public static readonly Color Energy = new Color(0.30f, 0.90f, 0.88f);      // skill ENERGY: the HUD number and bar, energy crates, their words
     public static readonly Color WordQuiz = new Color(0.40f, 0.90f, 1.00f);
     public static readonly Color WordArmor = new Color(0.55f, 0.72f, 1.00f);   // steel blue, like the armour
 

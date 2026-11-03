@@ -234,16 +234,6 @@ public class Powers : MonoBehaviour
     // the power on the HUD, and the very first charge of each power asks for a
     // tip box explaining it (GameManager.RequestPowerTip: the box waits until the
     // player is not typing or aiming, and never opens while tips are turned off).
-    public bool AddCharge(PowerKind kind)
-    {
-        int gained = kind == PowerKind.Lure ? LureCost : FreezeCost;
-        if (!GameManager.Instance.AddSkillEnergy(gained)) return false;
-        RefreshHud();
-        hud.PulsePower(kind);
-        hud.ShowHint("+" + gained + " ENERGY",2f);
-        return true;
-    }
-
     // ---- The first-time tip box (shown by GameManager, drawn by HUD) ----
 
     private static string TipTitle(PowerKind kind)
@@ -467,7 +457,7 @@ public class Powers : MonoBehaviour
         string text = "<size=65%>ENERGY</size> " + energy;
         if (text == lastWeaponStatus) return;
         lastWeaponStatus = text;
-        hud.SetWeaponStatus(text,Mathf.Clamp01((float)energy / GameManager.MaxSkillEnergy),new Color(.3f,.9f,.88f));
+        hud.SetWeaponStatus(text,Mathf.Clamp01((float)energy / GameManager.MaxSkillEnergy),Palette.Energy);
         RefreshHud();
         RefreshWeaponSlots();
     }

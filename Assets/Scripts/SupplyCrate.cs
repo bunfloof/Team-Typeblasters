@@ -1,16 +1,18 @@
 // SupplyCrate.cs
 // ---------------------------------------------------------------------------
 // A supply crate: a plain coloured cube standing in the level. While its area
-// is being fought it shows a word (green). Typing the word shoots it open and
-// gives its reward (the word itself hints at what is inside):
-//   Health - white cube:  +HealAmount health
-//   Lure   - orange cube: +1 lure bomb (press 1 to throw)
-//   Freeze - blue cube:   +1 freeze    (press 2 to use)
+// is being fought it shows a word. Typing the word shoots it open and gives
+// its reward (the word itself hints at what is inside):
+//   Health - white cube, green word:  +HealAmount health
+//   Energy - teal cube, teal word:    +EnergyAmount skill energy (the same
+//            teal as the ENERGY number on the HUD, so it reads "energy")
 // Grabbing one costs time while zombies keep walking: a small gamble.
 //
 // How it is used:
 //   Scene:       a crate prefab (Assets/Prefabs: SupplyCrate is the health
-//                crate, LureCrate and FreezeCrate are variants of it), placed
+//                crate; LureCrate and FreezeCrate are variants of it that are
+//                now both ENERGY crates - they used to give a lure bomb or a
+//                freeze, which made no sense once powers ran on energy), placed
 //                under a fight (an Encounter): it belongs to that fight.
 //   WaveSpawner: crate.Activate(word, hud) when the player arrives in its area,
 //                crate.Deactivate() when the player leaves.
@@ -26,13 +28,19 @@ using UnityEngine;
 public enum SupplyKind
 {
     Health,
-    Lure,
-    Freeze
+    Energy
 }
 
 public class SupplyCrate : MonoBehaviour, ITypingTarget
 {
     public const int HealAmount = 30;
+
+    // Energy in an energy crate, always the same. 7: a level had two lure
+    // crates (6 energy each) and two freeze crates (8 each), 28 energy in all;
+    // four energy crates at 7 give the same 28, so the energy balance (typed
+    // kills earn 1, cap 20, powers cost 6 / 8 / 12 / 18) does not change. One
+    // crate is a bit more than a lure bomb, about a third of the cap.
+    public const int EnergyAmount = 7;
 
     private const float Size = 0.8f;            // metres (the prefab's cube is this big)
     private const float LabelAboveTop = 0.35f;
@@ -46,6 +54,20 @@ public class SupplyCrate : MonoBehaviour, ITypingTarget
     public SupplyKind Kind
     {
         get { return kind; }
+    }
+
+    // An energy crate is painted the energy teal (its prefab still carries the
+    // old lure / freeze material).
+    private void Awake()
+    {
+        if (kind == SupplyKind.Energy && cube != null)
+        {
+            Renderer cubeRenderer = cube.GetComponent<Renderer>();
+            if (cubeRenderer != null)
+            {
+                cubeRenderer.sharedMaterial = Palette.Lit(Palette.Energy);
+            }
+        }
     }
 
     // True once it has been opened.
@@ -70,7 +92,7 @@ public class SupplyCrate : MonoBehaviour, ITypingTarget
         {
             Label = hud.CreateWordLabel(new Vector2(0.5f, 0f)); // centred above the crate
         }
-        Label.color = Palette.WordCrate;
+        Label.color = kind == SupplyKind.Energy ? Palette.Energy : Palette.WordCrate;
         Label.gameObject.SetActive(true); // WaveSpawner.LayoutLabels places it and shows it
         RefreshLabel();
     }
@@ -103,39 +125,30 @@ public class SupplyCrate : MonoBehaviour, ITypingTarget
         e.Add("word", Word);
         e.Add("health_before", GameManager.Instance.Health);
 
-        // A power that is already full gives nothing, so it shows no "+1" either.
-        string text = null;
+        string text;
+        int energyGained = 0;
         if (Kind == SupplyKind.Health)
         {
             GameManager.Instance.Heal(HealAmount);
             text = "+" + HealAmount + " HEALTH";
         }
-        else if (Kind == SupplyKind.Lure)
-        {
-            if (GameManager.Instance.Powers.AddCharge(PowerKind.Lure))
-            {
-                text = "+" + Powers.LureCost + " ENERGY";
-            }
-        }
         else
         {
-            if (GameManager.Instance.Powers.AddCharge(PowerKind.Freeze))
-            {
-                text = "+" + Powers.FreezeCost + " ENERGY";
-            }
+            // Energy stops at the cap (GameManager.MaxSkillEnergy): say what really came in.
+            int before = GameManager.Instance.SkillEnergy;
+            GameManager.Instance.AddSkillEnergy(EnergyAmount);
+            energyGained = GameManager.Instance.SkillEnergy - before;
+            text = energyGained > 0 ? "+" + energyGained + " ENERGY" : "ENERGY FULL";
         }
-        if (text != null)
-        {
-            hud.ShowFloatingText(transform.position + Vector3.up, text, Palette.WordCrate);
-        }
+        hud.ShowFloatingText(transform.position + Vector3.up, text,
+            Kind == SupplyKind.Energy ? Palette.Energy : Palette.WordCrate);
 
-        e.Add("power_gained", Kind != SupplyKind.Health && text != null); // false: that power was full
-        e.Add("energy_gained", Kind == SupplyKind.Lure ? Powers.LureCost : Kind == SupplyKind.Freeze ? Powers.FreezeCost : 0);
+        e.Add("energy_gained", energyGained); // 0 for health, or when the energy was already full
         Analytics.AddPlayerState(e); // health after, charges after...
         Analytics.Send(e);
     }
 
-    // Rebuilds the rich text: typed letters in yellow, the rest in green.
+    // Rebuilds the rich text: typed letters dim, the rest in the crate's colour.
     // Word is stored UPPERCASE but shown in lowercase.
     private void RefreshLabel()
     {

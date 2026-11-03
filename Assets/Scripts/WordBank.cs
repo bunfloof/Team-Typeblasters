@@ -133,21 +133,16 @@ public static class WordBank
         "UNSTABLE", "CRUDE", "ZAPPER", "YIKES", "QUAKE"
     };
 
-    // Supply crates (green words). The word tells you what is inside.
+    // Supply crates (health: green words, energy: teal). The word tells you what is inside.
     private static readonly string[] HealthCrateWords =
     {
         "MEDKIT", "BANDAGE", "HEALTH", "FIRSTAID", "PILLS", "TONIC", "REMEDY", "CURE", "VITAMIN",
         "SPLINT", "GAUZE", "ANTIDOTE", "ELIXIR", "OINTMENT", "NURSE", "DOCTOR", "LIFE", "KIT"
     };
-    private static readonly string[] LureCrateWords =
+    private static readonly string[] EnergyCrateWords =
     {
-        "LURE", "BAIT", "DECOY", "SIREN", "MAGNET", "WHISTLE", "CHUM", "TRAP", "HONEY", "RATTLE",
-        "GRENADE", "BOMB", "ALARM", "NOISE", "FIRECRACKER", "PINATA", "UKULELE", "EGGTIMER"
-    };
-    private static readonly string[] FreezeCrateWords =
-    {
-        "FREEZE", "ICE", "FROST", "CHILL", "COLD", "BLIZZARD", "SNOW", "POLAR", "GLACIER", "WINTER",
-        "ARCTIC", "ICICLE", "TUNDRA", "HAIL", "SLEET", "KELVIN", "YETI", "DEEPFREEZE", "NORTH", "VORTEX"
+        "ENERGY", "POWER", "CHARGE", "BATTERY", "VOLTS", "SURGE", "CELL", "AMPS", "DYNAMO", "REACTOR",
+        "PLASMA", "CURRENT", "FUSION", "WATTS", "BOOST", "RECHARGE", "GENERATOR", "OHMS"
     };
 
     // Returns a random word for an explosive barrel (first letter avoids usedFirstLetters if possible).
@@ -163,11 +158,7 @@ public static class WordBank
         {
             return PickFrom(HealthCrateWords, usedFirstLetters);
         }
-        if (kind == SupplyKind.Lure)
-        {
-            return PickFrom(LureCrateWords, usedFirstLetters);
-        }
-        return PickFrom(FreezeCrateWords, usedFirstLetters);
+        return PickFrom(EnergyCrateWords, usedFirstLetters);
     }
 
     // The SHIELD WORD (Tab, see Powers): what the player types to raise the shield.
