@@ -21,7 +21,14 @@ using UnityEngine;
 public class LureBomb : MonoBehaviour
 {
     public const float LureRadius = 16f;   // zombies closer than this walk to the bomb
-    public const float BlastRadius = 4.5f;
+    private const float NormalBlastRadius = 4.5f;
+    private const float TutorialBlastRadius = 8f; // the tutorial's lure lessons: big enough that the gathered zombies surely die
+
+    // The blast's reach (also drawn as the aim ring, see ThrowArc).
+    public static float BlastRadius
+    {
+        get { return EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave ? TutorialBlastRadius : NormalBlastRadius; }
+    }
     public const float FuseSeconds = 3.5f; // from landing to the explosion
     public const float BossDamage = 120f;  // if it goes off next to the boss
 

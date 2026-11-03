@@ -58,7 +58,22 @@ public class ThrowArc : MonoBehaviour
         // The ring shows what the bomb's blast will cover where it lands.
         landingMarker = new GameObject("Landing").transform;
         landingMarker.SetParent(transform, false);
-        BlastRing.Create(landingMarker, LureBomb.BlastRadius, Palette.BlastOrange);
+        BuildRing();
+    }
+
+    // The ring is drawn for one radius: built again if the blast radius
+    // changed (the tutorial's lessons use a bigger blast than its final wave).
+    private BlastRing ring;
+    private float ringRadius;
+
+    private void BuildRing()
+    {
+        if (ring != null)
+        {
+            Destroy(ring.gameObject);
+        }
+        ringRadius = LureBomb.BlastRadius;
+        ring = BlastRing.Create(landingMarker, ringRadius, Palette.BlastOrange);
     }
 
     // Draws the arc from "from" (the hand) to "to" (the landing point on the ground).
@@ -78,6 +93,10 @@ public class ThrowArc : MonoBehaviour
         }
 
         landingMarker.position = to;
+        if (ringRadius != LureBomb.BlastRadius)
+        {
+            BuildRing();
+        }
     }
 
     public void Hide()

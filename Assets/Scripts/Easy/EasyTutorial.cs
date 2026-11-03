@@ -81,10 +81,10 @@ public class EasyTutorial : MonoBehaviour
             : pair ? new[] { "GO", "STOP" } : new[] { "CAT", "DOG", "SUN" };
         for (int i = 0; i < words.Length; i++)
         {
-            // The lure demo is long (hold, steer, throw): its zombies walk slowly, so
-            // they are still out in front when the bomb lands and can be seen
-            // turning toward it. Practice keeps the real pace.
-            float speed = CurrentLesson == 3 ? (demo ? 0.5f : 1.4f) : CurrentLesson == 4 ? 0.7f : 0f;
+            // The lure lesson takes time to follow (hold 1, aim with the arrows,
+            // let go): its zombies only creep, in the demo and in practice, so
+            // nobody is rushed while learning it.
+            float speed = CurrentLesson == 3 ? (demo ? 0.25f : 0.45f) : CurrentLesson == 4 ? 0.7f : 0f;
             spawner.SpawnTrainingTarget(words[i], 12f, (i - (words.Length - 1) * 0.5f) * 1.4f, speed);
         }
     }
