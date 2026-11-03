@@ -1,14 +1,40 @@
-# Build an artifact; publish playable versions manually to gh-pages.
-# Keep each release in its own folder on gh-pages so older links remain playable.
-name: Build WebGL for manual gh-pages publishing
+# Builds the Unity WebGL player on every push to main, then:
+#   - keeps it as a downloadable zip on the run's Summary page,
+#   - refreshes the latest/ folder on gh-pages and the "Play the latest build"
+#     button at the top of the versions page (the root index.html),
+#   - sends it to Vercel for a permanent link per build (optional).
+#
+# Links:
+#   Versions page:  https://<owner>.github.io/<repository>/
+#   Latest build:   https://<owner>.github.io/<repository>/latest/
+#
+# What this workflow may change on gh-pages, and nothing else:
+#   - the latest/ folder (replaced with each new build),
+#   - the block between <!-- latest-build:start --> and <!-- latest-build:end -->
+#     in the root index.html (added once, then refreshed).
+# The Playable-... folders, every other part of index.html, .nojekyll and
+# .gitattributes are never touched. A check runs before every push and stops
+# the run if anything else would change. It never force-pushes.
+# Hand-made version folders keep working exactly as before.
+#
+# Pages setting (already done): Deploy from a branch, gh-pages, / (root).
+#
+# Secrets (Settings > Secrets and variables > Actions):
+#   UNITY_LICENSE, UNITY_EMAIL, UNITY_PASSWORD   Unity Personal license login
+# Optional, for the Vercel link:
+#   VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+
+name: Build and deploy WebGL
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
+# One run at a time. A newer push waits for the running one instead of
+# cancelling it; if several are waiting, only the newest one runs.
 concurrency:
-  group: webgl-build
+  group: webgl-deploy
   cancel-in-progress: false
 
 permissions:
@@ -18,6 +44,10 @@ jobs:
   build:
     name: Build the WebGL player
     runs-on: ubuntu-latest
+    outputs:
+      artifact-name: ${{ steps.names.outputs.artifact }}
+      unity-version: ${{ steps.names.outputs.unity }}
+      commit-subject: ${{ steps.names.outputs.subject }}
     steps:
       - name: Check out the project
         uses: actions/checkout@v7
@@ -25,11 +55,13 @@ jobs:
           fetch-depth: 0
           lfs: true
 
+      # The Unity WebGL Docker image is large; make room for it on the runner.
       - name: Free up disk space on the runner
         uses: jlumbroso/free-disk-space@v2
         with:
           large-packages: false
 
+      # Reusing the Library folder between runs makes later builds much faster.
       - name: Cache the Library folder
         uses: actions/cache@v6
         with:
@@ -38,6 +70,8 @@ jobs:
           restore-keys: |
             Library-WebGL-
 
+      # Unity version is read from ProjectSettings/ProjectVersion.txt automatically.
+      # Output lands in build/WebGL/WebGL (index.html, Build/, TemplateData/).
       - name: Build the WebGL player
         uses: game-ci/unity-builder@v6
         env:
@@ -47,10 +81,217 @@ jobs:
         with:
           targetPlatform: WebGL
 
-      - name: Upload WebGL build for manual publishing
-        uses: actions/upload-artifact@v5
+      - name: Name the download after the commit
+        id: names
+        run: |
+          echo "artifact=Typeblasters-WebGL-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          echo "unity=$(sed -n 's/^m_EditorVersion: //p' ProjectSettings/ProjectVersion.txt)" >> "$GITHUB_OUTPUT"
+          echo "subject=$(git log -1 --format=%s)" >> "$GITHUB_OUTPUT"
+
+      # upload-artifact zips the CONTENTS of the folder, so the download opens
+      # straight onto index.html, Build/ and TemplateData/ (no "." folder).
+      # That is the folder to copy when you make a Playable-... folder by hand.
+      - name: Upload the build as a download
+        id: upload
+        uses: actions/upload-artifact@v7
         with:
-          name: WebGL-${{ github.sha }}
+          name: ${{ steps.names.outputs.artifact }}
           path: build/WebGL/WebGL
           if-no-files-found: error
           retention-days: 90
+          overwrite: true
+
+      - name: Put the download link on the Summary page
+        run: |
+          echo "### Download: [${{ steps.names.outputs.artifact }}.zip](${{ steps.upload.outputs.artifact-url }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Unzip it and serve the folder with a local web server (for example \`npx serve\`); Unity WebGL builds do not run by double-clicking index.html." >> "$GITHUB_STEP_SUMMARY"
+
+  pages:
+    name: Refresh latest/ on gh-pages
+    needs: build
+    runs-on: ubuntu-latest
+    # Asked for here, so it also works in an organization whose default
+    # GITHUB_TOKEN is read-only.
+    permissions:
+      contents: write  # push one commit to gh-pages
+    steps:
+      - name: Check out the gh-pages branch
+        uses: actions/checkout@v7
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Download the build
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: site
+
+      - name: Write the helper scripts
+        run: |
+          cat > "$RUNNER_TEMP/update_latest.py" <<'PY'
+          import datetime, hashlib, html, json, os, re, shutil, subprocess, sys, zoneinfo
+          from pathlib import Path
+
+          repo = Path("gh-pages")
+          site = Path("site")
+          sha = os.environ["GITHUB_SHA"]
+          short = sha[:7]
+          subject = os.environ.get("COMMIT_SUBJECT", "").strip()
+          commit_url = f"{os.environ['GITHUB_SERVER_URL']}/{os.environ['GITHUB_REPOSITORY']}/commit/{sha}"
+
+          # 1. Replace the latest/ folder with this build. Nothing outside latest/ is touched here.
+          latest = repo / "latest"
+          shutil.rmtree(latest, ignore_errors=True)
+          shutil.copytree(site, latest)
+
+          now = datetime.datetime.now(datetime.timezone.utc)
+          day = now.astimezone(zoneinfo.ZoneInfo("America/Los_Angeles"))
+          files = [{"path": p.relative_to(latest).as_posix(), "bytes": p.stat().st_size,
+                    "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
+                   for p in sorted(latest.rglob("*")) if p.is_file()]
+          info = {"version": f"latest-{day:%Y-%m-%d}-{short}", "source_commit": sha,
+                  "commit_message": subject, "build_run": os.environ["RUN_URL"],
+                  "unity_version": os.environ.get("UNITY_VERSION", ""),
+                  "published_utc": now.isoformat().replace("+00:00", "Z"), "files": files}
+          (latest / "build-info.json").write_text(json.dumps(info, indent=2) + "\n")
+
+          # 2. Put (or refresh) the "Play latest" block at the top of the versions page.
+          #    Only the text between the two latest-build markers is ever written.
+          BLOCK = re.compile(r"[ \t]*<!-- latest-build:start.*?<!-- latest-build:end -->\n", re.S)
+          e = html.escape
+          block = (
+              "    <!-- latest-build:start (updated automatically on every push to main; edits inside this block are overwritten) -->\n"
+              "    <article>\n"
+              "      <h2>Latest build</h2>\n"
+              "      <p><a class=\"play\" href=\"latest/\" style=\"font-size: 1.3em; padding: 14px 32px;\">Play the latest build</a></p>\n"
+              + (f"      <p>{e(subject)}</p>\n" if subject else "")
+              + f"      <small>Updated {day:%B} {day.day}, {day.year} · Source commit: <a href=\"{e(commit_url)}\">{short}</a>"
+              " · <a href=\"latest/build-info.json\">Build information</a></small>\n"
+              "    </article>\n"
+              "    <!-- latest-build:end -->\n"
+          )
+
+          index = repo / "index.html"
+          if not index.exists():
+              print("::warning::There is no index.html at the root of gh-pages, so no button was added.")
+              sys.exit(0)
+          with open(index, encoding="utf-8", newline="") as f:
+              page = f.read()
+
+          if BLOCK.search(page):
+              new_page = BLOCK.sub(lambda m: block, page, count=1)
+          else:
+              spot = page.find("<article>")
+              if spot == -1:
+                  spot = page.find("</main>")
+              if spot == -1:
+                  print("::warning::Could not find where to put the button in index.html, so it was left unchanged.")
+                  sys.exit(0)
+              line_start = page.rfind("\n", 0, spot) + 1
+              new_page = page[:line_start] + block + page[line_start:]
+
+          with open(index, "w", encoding="utf-8", newline="") as f:
+              f.write(new_page)
+          PY
+          cat > "$RUNNER_TEMP/check_changes.py" <<'PY'
+          # Refuses the commit unless the ONLY changes are inside latest/ and inside the
+          # latest-build block of index.html. Run from inside the gh-pages checkout.
+          import re, subprocess, sys
+
+          def git(*args):
+              return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
+
+          problems = []
+          for line in git("diff", "--cached", "--name-status", "--no-renames").splitlines():
+              status, path = line.split("\t", 1)
+              if path.startswith("latest/"):
+                  continue
+              if path == "index.html" and status == "M":
+                  continue
+              problems.append(f"{status}\t{path}")
+
+          BLOCK = re.compile(r"[ \t]*<!-- latest-build:start.*?<!-- latest-build:end -->\n", re.S)
+          names = git("diff", "--cached", "--name-only").split()
+          if "index.html" in names:
+              old = git("show", "HEAD:index.html")
+              new = git("show", ":index.html")
+              if BLOCK.sub("", old) != BLOCK.sub("", new):
+                  problems.append("M\tindex.html (changed outside the latest-build block)")
+
+          if problems:
+              print("::error::Stopped: this would change files on gh-pages other than latest/ and the Play latest button. Nothing was pushed.")
+              print("\n".join(problems))
+              sys.exit(1)
+          print("Safety check passed: only latest/ and the Play latest button change.")
+          PY
+
+      # If a teammate pushes to gh-pages while this runs, the push is refused
+      # (no force-push), so it starts again from their commit, up to 3 times.
+      - name: Refresh latest/ and the button, check, and push
+        env:
+          COMMIT_SUBJECT: ${{ needs.build.outputs.commit-subject }}
+          UNITY_VERSION: ${{ needs.build.outputs.unity-version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          git -C gh-pages config user.name "github-actions[bot]"
+          git -C gh-pages config user.email "41898888+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git -C gh-pages fetch -q --depth 1 origin gh-pages
+            git -C gh-pages reset -q --hard FETCH_HEAD
+            git -C gh-pages clean -q -fdx
+            python3 "$RUNNER_TEMP/update_latest.py"
+            git -C gh-pages add -A
+            echo "Files this commit changes:"
+            git -C gh-pages diff --cached --name-status --no-renames | grep -v $'\tlatest/' | sed 's/^/  /' || true
+            echo "  ...plus $(git -C gh-pages diff --cached --name-only -- latest | wc -l) file(s) inside latest/"
+            (cd gh-pages && python3 "$RUNNER_TEMP/check_changes.py")
+            if git -C gh-pages diff --cached --quiet; then
+              echo "Nothing changed on gh-pages."
+              exit 0
+            fi
+            git -C gh-pages commit -q -m "Update latest build to ${GITHUB_SHA::7}"
+            if git -C gh-pages push -q origin HEAD:gh-pages; then
+              exit 0
+            fi
+            echo "::warning::Someone else pushed to gh-pages meanwhile; trying again on top of their commit."
+            sleep 10
+          done
+          echo "::error::Could not push to gh-pages after 3 tries."
+          exit 1
+
+      - name: Put the Pages links on the Summary page
+        env:
+          SITE: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: |
+          echo "### GitHub Pages latest build: ${SITE}latest/" >> "$GITHUB_STEP_SUMMARY"
+          echo "Versions page: $SITE (Pages takes a minute or two to update.)" >> "$GITHUB_STEP_SUMMARY"
+
+  # Every Vercel deploy gets its own permanent link, so older builds stay
+  # playable. Skipped (not failed) when the Vercel secrets are not set.
+  vercel:
+    name: Deploy to Vercel (unique link per build)
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Skip when the Vercel secrets are not set
+        if: env.VERCEL_TOKEN == ''
+        run: echo "::notice::Vercel secrets not set, skipping the Vercel deploy."
+
+      - name: Download the build
+        if: env.VERCEL_TOKEN != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.artifact-name }}
+          path: site
+
+      - name: Deploy to Vercel
+        if: env.VERCEL_TOKEN != ''
+        run: |
+          url=$(npx --yes vercel@latest deploy site --prod --yes --token "$VERCEL_TOKEN")
+          echo "Vercel link for this build: $url"
+          echo "### Vercel link for commit \`${GITHUB_SHA::7}\`: $url" >> "$GITHUB_STEP_SUMMARY"
