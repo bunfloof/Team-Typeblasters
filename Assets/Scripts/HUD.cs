@@ -25,14 +25,15 @@
 //     top of the 3D scene, so an enemy's body can never hide another's word.
 //     WaveSpawner.LayoutLabels moves them to their enemies every frame.
 //   - the Start panel (with its "Show tips" toggle and the TYPING DIFFICULTY
-//     buttons, built in code under it), the "You survived" and
-//     "You died" panels (with the run's stats at the end), the pause panel
-//     and the 3-2-1 resume countdown; the SETTINGS gear (top-right of the
-//     Start and pause panels, see SettingsPanel)
+//     row), the "You survived" and "You died" panels (with the run's stats at
+//     the end), the pause panel and the 3-2-1 resume countdown. The MENU
+//     buttons, the SETTINGS gear and the TYPING DIFFICULTY row on these panels
+//     are prefabs placed in each level scene (Assets/Prefabs/UI, see MenuButton,
+//     SettingsButton and TypingDifficultySelector).
 //
 // The HUD never decides anything. Other scripts call these methods when a value
 // changes (for example GameManager calls SetScore after a kill).
-// The objects saved in the scene are wired in the scene (Prototype.unity);
+// The objects saved in the scene are wired in the scene (Easy, Normal and Hard);
 // everything else is built here in code the first time it is needed (see the
 // Build... methods).
 //
@@ -80,6 +81,7 @@ public class HUD : MonoBehaviour
     [SerializeField] private Toggle tipsToggle;           // "Show tips" on the Start panel
     [SerializeField] private GameObject pausePanel;       // Esc: its Resume and Restart buttons call GameManager
     [SerializeField] private TMP_Text countdownText;      // the 3-2-1 before play resumes
+    [SerializeField] private TypingDifficultySelector difficultySelector; // the TYPING DIFFICULTY row on the Start panel (none in Easy)
 
     // Empty full-screen objects in the scene (see DRAWING ORDER at the top).
     [Header("Drawing layers")]
@@ -539,78 +541,21 @@ public class HUD : MonoBehaviour
     {
         HideAllPanels();
         // BuildLevelSelection();
-        BuildMenuButtons();
-        BuildSettingsButtons();
         startPanel.SetActive(true);
         if (EasyTutorial.Active == null) RefreshDifficulty();
     }
 
     // ---- Typing difficulty (Start panel, under the "Show tips" toggle) ----
-    //   TYPING DIFFICULTY
-    //   [ EASY ] [ MEDIUM ] [ HARD ] [ EXTREME ]
-    //   what it adds, with example words
-    // The picked one is filled in its colour. Clicking a button (or LEFT /
-    // RIGHT, see TypingController) calls GameManager.SetTypingDifficulty.
-
-    private const float DifficultyTop = -378f;        // canvas units from the centre of the Start panel
-    private static readonly Vector2 DifficultyButtonSize = new Vector2(210f, 54f);
-    private const float DifficultyButtonGap = 14f;
-    private static readonly Color DifficultyIdle = new Color(0.17f, 0.18f, 0.21f);
-
-    private RectTransform difficultyRoot; // null until the Start panel is first shown
-    private readonly Image[] difficultyButtons = new Image[TypingSettings.DifficultyCount];
-    private readonly TMP_Text[] difficultyNames = new TMP_Text[TypingSettings.DifficultyCount];
-    private TMP_Text difficultyDescription;
+    // The row is the "Typing Difficulty" prefab placed under the Start panel
+    // (see TypingDifficultySelector). The Easy scene has none.
 
     // Shows the difficulty picked now (TypingSettings.Difficulty).
     public void RefreshDifficulty()
     {
-        if (difficultyRoot == null)
+        if (difficultySelector != null)
         {
-            BuildDifficultySelector();
+            difficultySelector.Refresh();
         }
-
-        TypingDifficulty picked = TypingSettings.Difficulty;
-        for (int i = 0; i < TypingSettings.DifficultyCount; i++)
-        {
-            TypingDifficulty level = (TypingDifficulty)i;
-            bool selected = level == picked;
-            difficultyButtons[i].color = selected ? TypingSettings.Tint(level) : DifficultyIdle;
-            difficultyNames[i].color = selected ? Color.black : TypingSettings.Tint(level);
-        }
-        difficultyDescription.text = "";
-    }
-
-    private void BuildDifficultySelector()
-    {
-        difficultyRoot = CreateRect("Typing Difficulty", startPanel.transform);
-        PlaceRect(difficultyRoot, Centre, TopCentre, new Vector2(0f, DifficultyTop), new Vector2(1000f, 150f));
-
-        TMP_Text title = CreateText(difficultyRoot, "Title",
-            "TYPING DIFFICULTY", 26f, Vector2.zero);
-        PlaceRect(title.rectTransform, TopCentre, TopCentre, Vector2.zero, new Vector2(1000f, 34f));
-        title.fontStyle = FontStyles.Bold;
-
-        float rowWidth = TypingSettings.DifficultyCount * DifficultyButtonSize.x
-            + (TypingSettings.DifficultyCount - 1) * DifficultyButtonGap;
-        for (int i = 0; i < TypingSettings.DifficultyCount; i++)
-        {
-            TypingDifficulty level = (TypingDifficulty)i;
-            float x = -rowWidth * 0.5f + DifficultyButtonSize.x * 0.5f + i * (DifficultyButtonSize.x + DifficultyButtonGap);
-            TMP_Text label = CreateButton(difficultyRoot, TypingSettings.Name(level), TypingSettings.Name(level), Vector2.zero,
-                () => GameManager.Instance.SetTypingDifficulty(level));
-            RectTransform button = (RectTransform)label.rectTransform.parent;
-            PlaceRect(button, TopCentre, TopCentre, new Vector2(x, -42f), DifficultyButtonSize);
-            label.rectTransform.sizeDelta = DifficultyButtonSize;
-            label.fontSize = 28f;
-            label.fontStyle = FontStyles.Bold;
-            difficultyButtons[i] = button.GetComponent<Image>();
-            difficultyNames[i] = label;
-        }
-
-        difficultyDescription = CreateText(difficultyRoot, "Description", "", 24f, Vector2.zero);
-        PlaceRect(difficultyDescription.rectTransform, TopCentre, TopCentre, new Vector2(0f, -106f), new Vector2(1200f, 64f));
-        difficultyDescription.textWrappingMode = TextWrappingModes.NoWrap;
     }
 
     // Ticks or unticks "Show tips" without calling its OnValueChanged (GameManager
@@ -2431,48 +2376,5 @@ public class HUD : MonoBehaviour
         rect.anchorMax = Vector2.one;
         rect.offsetMin = Vector2.zero;
         rect.offsetMax = Vector2.zero;
-    }
-
-    private bool menuButtonsBuilt;
-
-    // A MENU button on the Start, pause, win and lose panels.
-    private void BuildMenuButtons()
-    {
-        if (menuButtonsBuilt)
-        {
-            return;
-        }
-        menuButtonsBuilt = true;
-        // Keep MENU beside the new difficulty selector instead of over its buttons.
-        AddMenuButton(startPanel.transform, new Vector2(740f, -435f));
-        AddMenuButton(pausePanel.transform, new Vector2(0f, -260f));
-        AddMenuButton(wonPanel.transform, new Vector2(0f, -450f));
-        AddMenuButton(lostPanel.transform, new Vector2(0f, -450f));
-    }
-
-    private bool settingsButtonsBuilt;
-
-    // The SETTINGS gear (adaptive difficulty, see SettingsPanel) at the
-    // top-right of the Start and pause panels, just under Wave / Score.
-    private void BuildSettingsButtons()
-    {
-        if (EasyTutorial.Active != null) return;
-        if (settingsButtonsBuilt)
-        {
-            return;
-        }
-        settingsButtonsBuilt = true;
-        Vector2 underScore = new Vector2(-40f, -150f);
-        SettingsPanel.AddButton((RectTransform)startPanel.transform, underScore);
-        SettingsPanel.AddButton((RectTransform)pausePanel.transform, underScore);
-    }
-
-    private void AddMenuButton(Transform panel, Vector2 position)
-    {
-        TMP_Text label = CreateButton(panel, "Menu Button", "MENU", position, () => GameManager.Instance.LoadMenu());
-        label.fontSize = 40f;
-        RectTransform rect = (RectTransform)label.transform.parent;
-        rect.sizeDelta = new Vector2(320f, 80f);
-        label.rectTransform.sizeDelta = rect.sizeDelta;
     }
 }

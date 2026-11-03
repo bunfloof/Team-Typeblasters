@@ -1,9 +1,10 @@
 // SettingsPanel.cs
 // ---------------------------------------------------------------------------
 // The SETTINGS button (a gear, top-right, just under Wave / Score) and the
-// panel it opens. HUD puts the gear on the Start panel and the pause panel;
-// MainMenu puts one on its main page. Built in code, like the rest of the UI:
-// the gear is drawn from plain rectangles (no image files).
+// panel it opens. In the level scenes the gear is the "Settings Button" prefab
+// on the Start and pause panels (see SettingsButton, which calls Open); the
+// Menu scene's gear and the panel itself are built here in code (AddButton,
+// Build). The gear is drawn from plain rectangles (no image files).
 //
 //   SETTINGS
 //   ADAPTIVE DIFFICULTY                  [ ON ]
@@ -90,7 +91,9 @@ public class SettingsPanel : MonoBehaviour
 
     // ---- The panel ----
 
-    private static void Open(Transform from)
+    // Opens the panel over everything on the canvas that 'from' is on
+    // (called by a gear: SettingsButton, or the one AddButton makes).
+    public static void Open(Transform from)
     {
         Canvas canvas = from.GetComponentInParent<Canvas>();
         if (canvas == null || open != null)
