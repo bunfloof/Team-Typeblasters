@@ -1,15 +1,15 @@
 {
-  "version": "latest-2026-11-03-9ac2a4d",
-  "source_commit": "9ac2a4d1403ebd4e63ddc94caaf3d9e9d4f64ac2",
-  "commit_message": "Fix overlapping enemy words in the map view (Normal wave 2)",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/41704971901",
+  "version": "latest-2026-11-03-721fa3f",
+  "source_commit": "721fa3f5eae2eaa4b9cd6d6e69e8e75681e56c6b",
+  "commit_message": "Keep the words of close zombies behind the camera on screen",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/41736363922",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-03T19:48:41.083195Z",
+  "published_utc": "2026-11-03T23:15:33.513370Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14301046,
-      "sha256": "a28e999cefc647c98af233c860e53a703812b2ba8d5e3b04bf9a9d305af710ac"
+      "bytes": 14301823,
+      "sha256": "9fb14b87db9d12a77273a33e2da1d604494bc9455ee982255b52cd9230e53655"
     },
     {
       "path": "Build/WebGL.framework.js",
@@ -19,12 +19,12 @@
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "994a1539d01b845f9bb161c9f88ef8f30f69e174835fb12fc89cc03522a27a42"
+      "sha256": "fc1a38af57af988da48b5f28cfd91a2e3a379dcdeecdb13b3d1a256dcc536856"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48022033,
-      "sha256": "b5c77064bb894353ada822cf768bd160073ad02bbfd3298da114a383d5b8f64a"
+      "bytes": 48026115,
+      "sha256": "bafd389509cb37d31f9fd9b2731b2bde7b422ad02008f36aad0f055837ec88af"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7265,
-      "sha256": "d0e16065cbff41bb4ccd76a1b956d6c32ab0c702e7b4a5a6be13473697454004"
+      "sha256": "7173cd66474ddf81cdeb16a276420c5f0be05749bb1daa4b9808a254725e6296"
     }
   ]
 }
