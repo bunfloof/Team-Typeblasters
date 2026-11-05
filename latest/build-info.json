@@ -1,30 +1,30 @@
 {
-  "version": "latest-2026-11-03-721fa3f",
-  "source_commit": "721fa3f5eae2eaa4b9cd6d6e69e8e75681e56c6b",
-  "commit_message": "Keep the words of close zombies behind the camera on screen",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/41736363922",
+  "version": "latest-2026-11-04-3a07346",
+  "source_commit": "3a0734694189316b6f4975802cb9462c2d03626e",
+  "commit_message": "Waiting phrases resume after a space; wave 3 gate open from the start",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/41988225820",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-03T23:15:33.513370Z",
+  "published_utc": "2026-11-05T07:47:15.571203Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14301823,
-      "sha256": "9fb14b87db9d12a77273a33e2da1d604494bc9455ee982255b52cd9230e53655"
+      "bytes": 14265281,
+      "sha256": "4b7e342aa5a0634f64324c57859bcfd29ec79f6ee6aaf2529cd37482f102f496"
     },
     {
       "path": "Build/WebGL.framework.js",
       "bytes": 479039,
-      "sha256": "5a79f59f9967cb34f08c7b11c4f512ce83d8bf22ac771a0654258066642d0f96"
+      "sha256": "301701ae3288944901374a6814dd238836d8d7110f77d015b2f792bcd67d0f0d"
     },
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "fc1a38af57af988da48b5f28cfd91a2e3a379dcdeecdb13b3d1a256dcc536856"
+      "sha256": "2ae903531197843cb5e49cd617c2fad927d0e9a423a90a17f0d37c9f7ddce6d4"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48026115,
-      "sha256": "bafd389509cb37d31f9fd9b2731b2bde7b422ad02008f36aad0f055837ec88af"
+      "bytes": 48139343,
+      "sha256": "89f0965eed8bbc05c2a5b9e0a01f4fbc542ec3255a084078874c57024fc89d33"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7265,
-      "sha256": "7173cd66474ddf81cdeb16a276420c5f0be05749bb1daa4b9808a254725e6296"
+      "sha256": "609f3d4e7ff04eb4062b9eac2aa2a3f2441dc55bb5570bbfcd6c7286041e16fe"
     }
   ]
 }
