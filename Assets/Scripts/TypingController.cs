@@ -489,11 +489,18 @@ public class TypingController : MonoBehaviour
     }
 
     // True if a word being typed has a space as its next character (a phrase).
+    // A WAITING phrase counts too: a brute's phrase left half-typed right
+    // before a space goes on with that space (the space used to be thrown
+    // away, so the phrase could never be finished).
     private bool NextIsSpace()
     {
-        foreach (ITypingTarget candidate in candidates)
+        if (AnyNextIs(candidates, ' '))
         {
-            if (candidate.IsAlive && !candidate.IsWordComplete && candidate.NextLetter == ' ')
+            return true;
+        }
+        foreach (ParkedWord waiting in parked)
+        {
+            if (AnyNextIs(waiting.Targets, ' '))
             {
                 return true;
             }
@@ -516,6 +523,17 @@ public class TypingController : MonoBehaviour
     // target is case-sensitive, or (no target yet) some case-sensitive target exists.
     private bool SymbolsMatter()
     {
+        // A waiting word that must be typed exactly (an orb's "Sp@rk"): its symbols count.
+        foreach (ParkedWord waiting in parked)
+        {
+            foreach (ITypingTarget target in waiting.Targets)
+            {
+                if (target.IsAlive && target.IsCaseSensitive)
+                {
+                    return true;
+                }
+            }
+        }
         if (candidates.Count > 0)
         {
             foreach (ITypingTarget candidate in candidates)
@@ -540,6 +558,12 @@ public class TypingController : MonoBehaviour
 
     private void HandleCharacter(char typed)
     {
+        // The guided intro waits for a power key: nothing is typed (a space neither).
+        if (GuidedIntro.BlocksLetters)
+        {
+            GuidedIntro.Nudge();
+            return;
+        }
         lastTypingTime = Time.time;
 
         // The letter goes on with the word being typed if it fits. If it does
