@@ -7,7 +7,7 @@
 // low on the screen says what to press, and the player does it for real.
 // Everything else is learned by playing: pieces of the HUD simply pop in.
 //
-//   ride       "You move automatically, don't worry. Just type."  ENTER skips the whole
+//   ride       "You move automatically, don't worry."  ENTER skips the whole
 //              intro (only now; wave 1 is then a normal wave)
 //   shoot      the first zombie: type its word (HEALTH, SCORE, WAVE pop in)
 //              two more: keep shooting
@@ -82,7 +82,7 @@ public static class GuidedIntro
         Powers.ActionPerformed -= OnPower;
         Powers.ActionPerformed += OnPower;
         view = GuidedIntroView.Create(hudRef);
-        view.ShowCard("", "You move automatically, don't worry. Just type.", null, false);
+        view.ShowCard("", "You move automatically, don't worry.", null, false);
         view.ShowSkip(true);
         Log("start");
     }

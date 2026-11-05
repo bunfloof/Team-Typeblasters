@@ -82,6 +82,26 @@ public class TypingController : MonoBehaviour
     // that is finished is shot while the longer ones stay candidates, so going
     // on to "hunter" kills both: a WORD CHAIN.
     private readonly List<ITypingTarget> candidates = new List<ITypingTarget>();
+
+    // ---- Half-typed words kept for later (PARKED) ----
+    // Typing a letter that does not fit the word being typed but STARTS
+    // another word switches to that word. The word left behind keeps its
+    // typed letters if at least ParkMinLetters were typed ("elemen" waits for
+    // its "t"), and is shown, dimmer, next to the current word in the bottom
+    // box. Typing its next letter later picks it up again. At most MaxParked
+    // words wait at once: with that many, a word left behind loses its
+    // letters, until one of the waiting words is finished. Backspace with
+    // nothing being typed drops the newest waiting word.
+    private sealed class ParkedWord
+    {
+        public readonly List<ITypingTarget> Targets = new List<ITypingTarget>();
+        public int Letters;
+    }
+
+    private readonly List<ParkedWord> parked = new List<ParkedWord>();
+    private const int MaxParked = 3;
+    private const int ParkMinLetters = 3;
+    private int runLetters; // letters typed into the current candidates
     private readonly List<ITypingTarget> scratch = new List<ITypingTarget>();
     private int wordsFinished; // words finished in this run of typing (2+ = a word chain)
     private float lastTypingTime = -100f; // Time.time the player last typed a letter (right or wrong) or dropped a word
@@ -279,8 +299,28 @@ public class TypingController : MonoBehaviour
             }
         }
 
-        // ---- 5. Backspace: drop the word being typed ----
-        if (dropPressed && candidates.Count > 0)
+        // Waiting words whose zombie is gone (or lost its letters, e.g. an armour broke) are forgotten.
+        for (int i = parked.Count - 1; i >= 0; i--)
+        {
+            parked[i].Targets.RemoveAll(target => !target.IsAlive || !target.IsTargeted);
+            if (parked[i].Targets.Count == 0)
+            {
+                parked.RemoveAt(i);
+            }
+        }
+
+        // ---- 5. Backspace: drop the word being typed (nothing typed: the newest waiting word) ----
+        if (dropPressed && candidates.Count == 0 && parked.Count > 0)
+        {
+            ParkedWord newest = parked[parked.Count - 1];
+            parked.RemoveAt(parked.Count - 1);
+            foreach (ITypingTarget target in newest.Targets)
+            {
+                target.ResetProgress();
+            }
+            lastTypingTime = Time.time;
+        }
+        else if (dropPressed && candidates.Count > 0)
         {
             foreach (ITypingTarget candidate in candidates)
             {
@@ -399,6 +439,26 @@ public class TypingController : MonoBehaviour
     // keys are hitting, never one word while another one is being shot.
     private string CandidatesText()
     {
+        string current = CurrentWordsText();
+        if (parked.Count == 0)
+        {
+            return current;
+        }
+        // The waiting words after it, smaller and dimmer: "organic    elemen|t".
+        System.Text.StringBuilder text = new System.Text.StringBuilder(current);
+        foreach (ParkedWord waiting in parked)
+        {
+            if (text.Length > 0)
+            {
+                text.Append("      ");
+            }
+            text.Append("<size=72%><alpha=#B0>").Append(waiting.Targets[0].ColoredWord).Append("<alpha=#FF></size>");
+        }
+        return text.ToString();
+    }
+
+    private string CurrentWordsText()
+    {
         if (candidates.Count == 0)
         {
             return "";
@@ -482,19 +542,40 @@ public class TypingController : MonoBehaviour
     {
         lastTypingTime = Time.time;
 
-        // Nothing being typed yet: this character picks every target whose word
-        // starts with it (usually exactly one), and counts as their first character.
-        bool startsWord = candidates.Count == 0;
-        if (startsWord)
+        // The letter goes on with the word being typed if it fits. If it does
+        // not (or nothing is being typed), it picks up a WAITING word whose
+        // next letter it is, or else STARTS every word beginning with it
+        // (usually exactly one); the word being typed then waits (parked) or,
+        // if it is too short to keep or no room is left, loses its letters.
+        // Only a letter that fits nothing at all is a wrong key.
+        bool startsWord = false;
+        if (!AnyNextIs(candidates, typed))
         {
-            FindTargetsStartingWith(typed, candidates);
-            if (candidates.Count == 0)
+            ParkedWord resume = FindParked(typed);
+            if (resume != null)
             {
-                WrongKey(typed);
-                return;
+                ParkCurrent();
+                parked.Remove(resume);
+                candidates.AddRange(resume.Targets);
+                runLetters = resume.Letters;
+                wordsFinished = 0;
+                StartAttempt();
             }
-            wordsFinished = 0;
-            StartAttempt();
+            else
+            {
+                FindTargetsStartingWith(typed, scratch);
+                if (scratch.Count == 0)
+                {
+                    WrongKey(typed);
+                    return;
+                }
+                ParkCurrent();
+                candidates.AddRange(scratch);
+                runLetters = 0;
+                startsWord = true;
+                wordsFinished = 0;
+                StartAttempt();
+            }
         }
 
         // Keep only the candidates whose next character is this one.
@@ -522,6 +603,7 @@ public class TypingController : MonoBehaviour
         }
         candidates.Clear();
         candidates.AddRange(scratch);
+        runLetters += 1;
         GameManager.Instance.OnCorrectKey();
         DynamicDifficulty.OnCorrectKey(startsWord);
         attemptCorrectKeys += 1;
@@ -547,6 +629,14 @@ public class TypingController : MonoBehaviour
         {
             lastTypingTime = Time.time; // a word was half-typed: the player goes on with a new one
         }
+        foreach (ParkedWord waiting in parked)
+        {
+            foreach (ITypingTarget target in waiting.Targets)
+            {
+                target.ResetProgress(); // their words are about to change
+            }
+        }
+        parked.Clear();
         foreach (ITypingTarget candidate in candidates)
         {
             candidate.ResetProgress();
@@ -770,6 +860,58 @@ public class TypingController : MonoBehaviour
     }
 
     // Fills 'found' with every alive target whose word starts with the typed character.
+    private static bool AnyNextIs(List<ITypingTarget> targets, char typed)
+    {
+        foreach (ITypingTarget target in targets)
+        {
+            if (target.IsAlive && !target.IsWordComplete && Matches(target, typed, target.NextLetter))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // The waiting word (newest first) whose next letter this is, or null.
+    private ParkedWord FindParked(char typed)
+    {
+        for (int i = parked.Count - 1; i >= 0; i--)
+        {
+            if (AnyNextIs(parked[i].Targets, typed))
+            {
+                return parked[i];
+            }
+        }
+        return null;
+    }
+
+    // The word being typed is left for another: it waits with its letters
+    // (long enough, and room left), or loses them.
+    private void ParkCurrent()
+    {
+        if (candidates.Count == 0)
+        {
+            return;
+        }
+        if (runLetters >= ParkMinLetters && parked.Count < MaxParked)
+        {
+            ParkedWord waiting = new ParkedWord { Letters = runLetters };
+            waiting.Targets.AddRange(candidates);
+            parked.Add(waiting);
+            EndRun("parked");
+        }
+        else
+        {
+            foreach (ITypingTarget candidate in candidates)
+            {
+                candidate.ResetProgress();
+            }
+            EndRun("switched");
+        }
+        candidates.Clear();
+        runLetters = 0;
+    }
+
     private void FindTargetsStartingWith(char typed, List<ITypingTarget> found)
     {
         found.Clear();
@@ -777,7 +919,8 @@ public class TypingController : MonoBehaviour
         {
             if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsTarget(candidate)) continue;
             // Skip a target whose word is already done: a bullet is on its way to it.
-            if (candidate.IsWordComplete || !Matches(candidate, typed, candidate.Word[0]))
+            // ...or one already started (being typed, or waiting with its letters).
+            if (candidate.IsWordComplete || candidate.IsTargeted || !Matches(candidate, typed, candidate.Word[0]))
             {
                 continue;
             }

@@ -768,10 +768,21 @@ public class HUD : MonoBehaviour
         comboText.fontSharedMaterial = OutlineMaterial(comboText);
     }
 
+    private bool targetWordAutoSized;
+
     // richText is the word with TextMeshPro colour tags (see Zombie.ColoredWord),
     // or "" when there is no target.
     public void SetTargetWord(string richText)
     {
+        if (!targetWordAutoSized)
+        {
+            // Several words (one typed + up to three waiting) shrink to fit the box.
+            targetWordAutoSized = true;
+            targetWordText.fontSizeMax = targetWordText.fontSize;
+            targetWordText.fontSizeMin = targetWordText.fontSize * 0.45f;
+            targetWordText.enableAutoSizing = true;
+            targetWordText.textWrappingMode = TextWrappingModes.NoWrap;
+        }
         targetWordText.text = richText;
     }
 

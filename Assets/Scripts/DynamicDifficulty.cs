@@ -209,18 +209,45 @@ public static class DynamicDifficulty
         get { return level; }
     }
 
+    // ---- FLAWLESS pressure ----
+    // A player who takes no damage and uses no powers is clearly not being
+    // pushed: on top of the level, a FLAWLESS bonus creeps up while they play
+    // (about +0.3 a minute, up to +MaxFlawless), giving more zombies (wave
+    // size, packs, how many at once) and faster ones. A bite wipes it out, a
+    // power halves it. Attack rate and damage are NOT raised by it.
+    private const float FlawlessPerSecond = 0.005f;
+    private const float MaxFlawless = 0.9f;
+    private static float flawless;
+
+    public static float Flawless
+    {
+        get { return flawless; }
+    }
+
+    // The level plus the flawless bonus: what sets zombie numbers and speed.
+    public static float Pressure
+    {
+        get { return Enabled ? level + flawless : 0f; }
+    }
+
+    // Powers: a lure bomb, freeze, frenzy, RPG or shield was used.
+    public static void OnPowerUsed()
+    {
+        flawless *= 0.5f;
+    }
+
     // ---- What the game reads (all exactly 1 or 0 at level 0, i.e. when switched off) ----
 
     // Enemies' speed and attack clocks (multiplied into Powers.EnemySpeedFactor).
     public static float PaceFactor
     {
-        get { return Mathf.Pow(2f, (level > 0f ? PaceExponentUp : PaceExponent) * level); }
+        get { float p = Pressure; return Mathf.Pow(2f, (p > 0f ? PaceExponentUp : PaceExponent) * p); }
     }
 
     // Time between packs of zombies (WaveSpawner).
     public static float SpawnIntervalFactor
     {
-        get { return Mathf.Pow(2f, (level > 0f ? SpawnExponentUp : SpawnExponent) * level); }
+        get { float p = Pressure; return Mathf.Pow(2f, (p > 0f ? SpawnExponentUp : SpawnExponent) * p); }
     }
 
     // Added to a normal zombie's chance of a short word (WordBank.PickWord).
@@ -293,13 +320,13 @@ public static class DynamicDifficulty
     // Fast typists only: extra zombies for a wave of 'waveSize' (0 at or below the reference speed).
     public static int ExtraZombies(int waveSize)
     {
-        return Mathf.RoundToInt(waveSize * ExtraZombieSlope * Mathf.Max(0f, level));
+        return Mathf.RoundToInt(waveSize * ExtraZombieSlope * Mathf.Max(0f, Pressure));
     }
 
     // Fast typists only: added to the size of every pack of zombies.
     public static int PackBonus
     {
-        get { return level >= PackBonusLevel ? 1 : 0; }
+        get { return Pressure >= PackBonusLevel ? 1 : 0; }
     }
 
     // Chance that a normal zombie gets a LONG word (only for fast typists, up to 20%).
@@ -314,6 +341,7 @@ public static class DynamicDifficulty
     // first guess (this session's last speed, or PriorWpm).
     public static void BeginRun()
     {
+        flawless = 0f;
         priorWpm = sessionWpm > 0f ? sessionWpm : PriorWpm;
         weightedChars = 0f;
         weightedSeconds = 0f;
@@ -342,6 +370,10 @@ public static class DynamicDifficulty
     // Every frame of play (TypingController). anyTargets: something can be typed now.
     public static void Tick(float deltaTime, bool anyTargets)
     {
+        if (Enabled && anyTargets && !firstWaveHeld && !GuidedIntro.Running)
+        {
+            flawless = Mathf.Min(MaxFlawless, flawless + deltaTime * FlawlessPerSecond);
+        }
         if (EasyTutorial.Active != null) { level = 0f; return; }
         // Nothing to type: the player is not slow, they are waiting. The clock
         // for the next key starts when a target appears.
@@ -421,6 +453,7 @@ public static class DynamicDifficulty
     // GameManager.TakeDamage (not when the shield blocked it).
     public static void OnDamage(int amount)
     {
+        flawless = 0f; // hurt: the flawless bonus is gone
         damagePenalty = Mathf.Min(MaxDamagePenalty, damagePenalty + amount * DamagePerHealth);
     }
 

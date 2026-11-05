@@ -51,16 +51,18 @@ public class SupplyCrate : MonoBehaviour, ITypingTarget
     private bool isActive;                      // true between Activate and Deactivate
     private HUD hud;
 
+    // Anything but a health crate is an ENERGY crate (old scenes saved lure
+    // = 1 and freeze = 2 kinds: both are energy crates now).
     public SupplyKind Kind
     {
-        get { return kind; }
+        get { return kind == SupplyKind.Health ? SupplyKind.Health : SupplyKind.Energy; }
     }
 
     // An energy crate is painted the energy teal (its prefab still carries the
     // old lure / freeze material).
     private void Awake()
     {
-        if (kind == SupplyKind.Energy && cube != null)
+        if (Kind == SupplyKind.Energy && cube != null)
         {
             Renderer cubeRenderer = cube.GetComponent<Renderer>();
             if (cubeRenderer != null)
@@ -94,7 +96,7 @@ public class SupplyCrate : MonoBehaviour, ITypingTarget
         {
             Label = hud.CreateWordLabel(new Vector2(0.5f, 0f)); // centred above the crate
         }
-        Label.color = kind == SupplyKind.Energy ? Palette.Energy : Palette.WordCrate;
+        Label.color = Kind == SupplyKind.Energy ? Palette.Energy : Palette.WordCrate;
         Label.gameObject.SetActive(true); // WaveSpawner.LayoutLabels places it and shows it
         RefreshLabel();
     }

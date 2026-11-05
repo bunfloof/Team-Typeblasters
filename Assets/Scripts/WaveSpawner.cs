@@ -133,7 +133,7 @@ public class WaveSpawner : MonoBehaviour
     // player's measured speed (ADAPTIVE DIFFICULTY).
     private int MaxOnScreen
     {
-        get { return Mathf.Clamp(Mathf.RoundToInt(maxOnScreen + 2f * DynamicDifficulty.Level), 3, maxOnScreen + 3); }
+        get { return Mathf.Clamp(Mathf.RoundToInt(maxOnScreen + 2f * DynamicDifficulty.Pressure), 3, maxOnScreen + 3); }
     }
 
     // The boss being fought, or null.
@@ -1765,6 +1765,20 @@ public class WaveSpawner : MonoBehaviour
         return true;
     }
 
+    // A zombie crawling out of the ground beside the boss (left and right in
+    // turn), a runner now and then.
+    private void SpawnBossExtra(Encounter encounter, int number)
+    {
+        Vector3 toPlayer = player.position - encounter.BossStand;
+        toPlayer.y = 0f;
+        Vector3 forward = toPlayer.sqrMagnitude > 0.01f ? toPlayer.normalized : Vector3.forward;
+        Vector3 right = new Vector3(forward.z, 0f, -forward.x);
+        float side = (number % 2 == 0 ? 1f : -1f) * Random.Range(3.5f, 6f);
+        Vector3 at = encounter.BossStand + right * side + forward * Random.Range(1.5f, 3.5f);
+        ZombieKind kind = number % 3 == 2 ? ZombieKind.Runner : ZombieKind.Normal;
+        SpawnBossMinion(at, kind);
+    }
+
     // Called by the Boss's STOMP: a zombie crawls out of the ground at 'at' and
     // walks at the player. A red one blown up next to the boss hurts the boss.
     public Zombie SpawnBossMinion(Vector3 at, ZombieKind kind)
@@ -2151,9 +2165,24 @@ public class WaveSpawner : MonoBehaviour
         Analytics.AddPlayerState(e);
         Analytics.Send(e);
 
-        // 2. Wait until it is dead.
+        // 2. Wait until it is dead. While the player is (nearly) unhurt,
+        //    zombies keep crawling out on both sides of the boss: a strong
+        //    player gets a real fight (faster the longer they stay flawless).
+        float nextExtra = Time.time + 8f;
+        int extraSide = 0;
         while (boss.IsAlive)
         {
+            GameManager game = GameManager.Instance;
+            float healthy = game.MaxHealth > 0 ? (float)game.Health / game.MaxHealth : 0f;
+            if (Time.time >= nextExtra && game.State == GameState.Playing)
+            {
+                if (healthy >= 0.6f && aliveZombies.Count < 4)
+                {
+                    SpawnBossExtra(encounter, extraSide++);
+                }
+                float interval = healthy >= 0.9f ? Mathf.Lerp(7f, 4f, DynamicDifficulty.Flawless / 0.9f) : 12f;
+                nextExtra = Time.time + interval;
+            }
             yield return null;
         }
 

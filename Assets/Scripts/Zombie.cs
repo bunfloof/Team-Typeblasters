@@ -317,6 +317,14 @@ public class Zombie : MonoBehaviour, ITypingTarget
         {
             return;
         }
+        // Already started (being typed, or waiting with its letters): it keeps
+        // its short word until it is finished - or dropped (ResetProgress).
+        if (TypedCount > 0)
+        {
+            frenzyExitPending = true;
+            return;
+        }
+        frenzyExitPending = false;
         Word = realWord;
         realWord = null;
         TypedCount = 0;
@@ -644,8 +652,15 @@ public class Zombie : MonoBehaviour, ITypingTarget
     public void ResetProgress()
     {
         TypedCount = 0;
+        if (frenzyExitPending && !Powers.IsFrenzy)
+        {
+            ExitFrenzy(); // the frenzy ended while it was being typed: its real word comes back now
+            return;
+        }
         RefreshLabel();
     }
+
+    private bool frenzyExitPending; // the frenzy is over, but its short word stays until it is finished or dropped
 
     // ---- Dying ----
 

@@ -273,6 +273,10 @@ public class Powers : MonoBehaviour
 
     private static AnalyticsEvent PowerEvent(string action, string item)
     {
+        if (action == "use" || action == "throw")
+        {
+            DynamicDifficulty.OnPowerUsed(); // relying on powers: the flawless pressure eases
+        }
         ActionPerformed?.Invoke(action, item);
         AnalyticsEvent e = Analytics.NewEvent("power");
         e.Add("action", action);
@@ -405,10 +409,16 @@ public class Powers : MonoBehaviour
     }
 
     // The frenzy is over: every enemy gets its real word back.
+    // A zombie whose short word is already being typed (or waiting
+    // half-typed) keeps it until finished (Zombie.ExitFrenzy); only the boss's
+    // words, which do change, drop the word being typed.
     private void RestoreRealWords()
     {
         WaveSpawner spawner = Object.FindFirstObjectByType<WaveSpawner>();
-        DropTypedWord();
+        if (spawner != null && spawner.CurrentBoss != null && spawner.CurrentBoss.IsAlive)
+        {
+            DropTypedWord();
+        }
         if (spawner == null)
         {
             return;
