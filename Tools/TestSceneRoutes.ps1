@@ -1,7 +1,7 @@
 $ErrorActionPreference='Stop'
 Set-Location (Join-Path $PSScriptRoot '..')
 $fingerprints=@{}
-foreach($name in 'Easy','Normal','Hard') {
+foreach($name in 'Normal','Hard') {
     $scene=[IO.File]::ReadAllText((Join-Path $PWD "Assets/Scenes/$name.unity"))
     $blocks=@{}
     foreach($match in [regex]::Matches($scene,'(?ms)^--- !u!\d+ &(\d+).*?(?=^--- !u!|\z)')) {
@@ -33,7 +33,7 @@ foreach($name in 'Easy','Normal','Hard') {
 }
 if(@($fingerprints.Values | Select-Object -Unique).Count -ne 3){throw 'Level routes are identical'}
 $build=[IO.File]::ReadAllText((Join-Path $PWD 'ProjectSettings/EditorBuildSettings.asset'))
-foreach($name in 'Menu','Easy','Normal','Hard') {
+foreach($name in 'Menu','Normal','Hard') {
     if($build -notmatch "path: Assets/Scenes/$name.unity"){throw "Missing $name in Build Settings"}
 }
 Write-Output 'PASS three distinct routes and all four menu/build scenes.'

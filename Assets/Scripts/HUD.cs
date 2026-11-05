@@ -587,7 +587,7 @@ public class HUD : MonoBehaviour
             int levelIndex = i;
             string title = (i + 1) + ". " + GameManager.LevelName(i);
             TMP_Text label = CreateButton(startPanel.transform, "Select " + GameManager.LevelName(i),
-                title, new Vector2((i - 1) * 320f, -460f), () => GameManager.Instance.SelectLevel(levelIndex));
+                title, new Vector2((i - (GameManager.LevelCount - 1) * 0.5f) * 320f, -460f), () => GameManager.Instance.SelectLevel(levelIndex));
             label.fontSize = 32f;
             RectTransform rect = (RectTransform)label.transform.parent;
             rect.sizeDelta = new Vector2(290f, 80f);

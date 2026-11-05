@@ -38,7 +38,9 @@ public enum GameState
 
 public class GameManager : MonoBehaviour
 {
-    private static readonly string[] levelScenes = { "Easy", "Normal", "Hard" };
+    // The playable levels, in order. The separate Easy tutorial level was removed:
+    // Normal's first wave teaches the game itself (GuidedIntro).
+    private static readonly string[] levelScenes = { "Normal", "Hard" };
     public static int LevelCount => levelScenes.Length;
     public static string LevelName(int index) => levelScenes[index];
     public static int CurrentLevelIndex => System.Array.IndexOf(levelScenes, SceneManager.GetActiveScene().name);
