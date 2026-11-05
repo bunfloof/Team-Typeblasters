@@ -15666,7 +15666,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 808752874739772526, guid: d98a8086295b95c459941a622d2a4b3d, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 89.4
+      value: 89.8
       objectReference: {fileID: 0}
     - target: {fileID: 808752874739772526, guid: d98a8086295b95c459941a622d2a4b3d, type: 3}
       propertyPath: m_LocalPosition.y
@@ -15674,7 +15674,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 808752874739772526, guid: d98a8086295b95c459941a622d2a4b3d, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 41.08
+      value: 44
       objectReference: {fileID: 0}
     - target: {fileID: 808752874739772526, guid: d98a8086295b95c459941a622d2a4b3d, type: 3}
       propertyPath: m_LocalRotation.w
@@ -24899,6 +24899,7 @@ MonoBehaviour:
   stop: {fileID: 883518517}
   groupSize: 3
   exitGate: {fileID: 479229088}
+  openGateFromStart: 1
   isBossFight: 0
   bossStand: {fileID: 0}
 --- !u!1 &1473829499
@@ -26247,7 +26248,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 808752874739772526, guid: d98a8086295b95c459941a622d2a4b3d, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 93.6
+      value: 94.3
       objectReference: {fileID: 0}
     - target: {fileID: 808752874739772526, guid: d98a8086295b95c459941a622d2a4b3d, type: 3}
       propertyPath: m_LocalPosition.y
@@ -26255,7 +26256,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 808752874739772526, guid: d98a8086295b95c459941a622d2a4b3d, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 34
+      value: 34.5
       objectReference: {fileID: 0}
     - target: {fileID: 808752874739772526, guid: d98a8086295b95c459941a622d2a4b3d, type: 3}
       propertyPath: m_LocalRotation.w

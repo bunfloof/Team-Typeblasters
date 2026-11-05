@@ -118,7 +118,23 @@ public class GameManager : MonoBehaviour
         hud.SetHealth(Health, startingHealth);
         hud.ShowStartPanel();
         hud.SetTipsToggle(tipsEnabled); // after a Restart, show the choice the player made before
+
+        // Died and chose to go on: straight back into the run, at the start
+        // of the wave they died in (CHECKPOINT), with that wave's score and energy.
+        if (Checkpoint.TakeResume(SceneManager.GetActiveScene().name))
+        {
+            Score = Checkpoint.Score;
+            SkillEnergy = Checkpoint.Energy;
+            hud.SetScore(Score);
+            resumingFromCheckpoint = true;
+            spawner.ResumeFromCheckpoint();
+            StartGame();
+            resumingFromCheckpoint = false;
+            powers.OnComboChanged(Combo);
+        }
     }
+
+    private bool resumingFromCheckpoint;
 
     private void OnDestroy()
     {
@@ -172,7 +188,14 @@ public class GameManager : MonoBehaviour
 
         State = GameState.Playing;
         hud.HideAllPanels();
-        DynamicDifficulty.BeginRun(); // ADAPTIVE DIFFICULTY: measure this run's typing from a first guess
+        if (resumingFromCheckpoint)
+        {
+            DynamicDifficulty.ResumeRun(); // the speed measured before: no new first-wave measurement
+        }
+        else
+        {
+            DynamicDifficulty.BeginRun(); // ADAPTIVE DIFFICULTY: measure this run's typing from a first guess
+        }
 
         // Logged before the waves begin: the first ride logs right away.
         Analytics.StartRun();
@@ -181,6 +204,7 @@ public class GameManager : MonoBehaviour
         e.Add("runs_this_session", Analytics.RunsThisSession); // runs since the page was loaded (each tip shows once per page load)
         e.Add("tips_enabled", tipsEnabled);
         e.Add("hard_level", HardLevel.Active != null);
+        e.Add("from_checkpoint_wave", resumingFromCheckpoint ? Checkpoint.WaveIndex + 1 : 0);
         DynamicDifficulty.AddTo(e);
         Analytics.Send(e);
         Analytics.FlushSoon();
@@ -242,14 +266,26 @@ public class GameManager : MonoBehaviour
     // Called by the Restart buttons (pause panel and the end screens) and by
     // Enter on the end screens: reloads the scene, which shows the Start panel,
     // the same screen as when the game is first opened.
+    // After a death with a checkpoint saved, it goes on from that wave instead
+    // (Checkpoint); any other Restart starts the level from the beginning.
     public void RestartGame()
     {
-        LoadLevelScene(SceneManager.GetActiveScene().name);
+        string scene = SceneManager.GetActiveScene().name;
+        if (State == GameState.Lost && Checkpoint.Has(scene))
+        {
+            Checkpoint.RequestResume();
+        }
+        else
+        {
+            Checkpoint.Clear();
+        }
+        LoadLevelScene(scene);
     }
 
     // Called by the MENU buttons (Start, pause, win and lose panels): back to the Menu scene.
     public void LoadMenu()
     {
+        Checkpoint.Clear();
         LoadLevelScene("Menu");
     }
 
@@ -262,6 +298,7 @@ public class GameManager : MonoBehaviour
             return;
         }
         if (State == GameState.Start && index == CurrentLevelIndex) return;
+        Checkpoint.Clear();
         LoadLevelScene(levelScenes[index]);
     }
 
@@ -642,6 +679,10 @@ public class GameManager : MonoBehaviour
         LogRunEnd(won ? "won" : "lost");
 
         State = won ? GameState.Won : GameState.Lost;
+        if (won)
+        {
+            Checkpoint.Clear();
+        }
         if (!won)
         {
             spawner.StopWaves();

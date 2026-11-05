@@ -154,8 +154,8 @@ public static class DynamicDifficulty
     private const float PaceExponentUp = 0.55f;     // ...and above it (faster typists)
     private const float SpawnExponent = -0.32f;
     private const float SpawnExponentUp = -0.45f;
-    private const float ExtraZombieSlope = 0.35f;   // fast typists: extra zombies per wave, as a fraction of the wave
-    private const float PackBonusLevel = 0.6f;      // fast typists: one more zombie per pack from this level
+    private const float ExtraZombieSlope = 0.5f;    // fast typists: extra zombies per wave, as a fraction of the wave
+    private const float PackBonusLevel = 0.45f;     // fast typists: one more zombie per pack from this level
     private const float ShortWordSlope = -0.22f;
     private const float LengthBiasSlope = 0.6f;
 
@@ -328,6 +328,15 @@ public static class DynamicDifficulty
         level = Enabled && EasyTutorial.Active == null ? TargetLevel() : 0f;
         heldLevel = level;      // the first guess (40 WPM, or this session's last speed)
         firstWaveHeld = true;   // until WaveSpawner calls ApplyNow after wave 1
+    }
+
+    // Back from a CHECKPOINT: like a new run, but the speed measured before
+    // this session is used at once (no first wave held for measuring).
+    public static void ResumeRun()
+    {
+        BeginRun();
+        firstWaveHeld = false;
+        converged = true;
     }
 
     // Every frame of play (TypingController). anyTargets: something can be typed now.

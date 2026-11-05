@@ -24,6 +24,14 @@ public class SpawnPoint : MonoBehaviour
     [SerializeField] private Door door;             // bursts open when the first zombie comes out (empty = no door)
     [SerializeField] private float spread = 0.4f;   // random sideways offset (metres) so a pack does not stack up
 
+    // Set up in code (Encounter.OpenGateAsSpawn): where its zombies walk first.
+    public void Configure(Transform exitPoint, float sideSpread)
+    {
+        exit = exitPoint;
+        door = null;
+        spread = sideSpread;
+    }
+
     // Where zombies appear (on the ground).
     public Vector3 Position
     {

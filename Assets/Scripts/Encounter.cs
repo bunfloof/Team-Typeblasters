@@ -33,6 +33,7 @@ public class Encounter : MonoBehaviour
 
     [Header("After the fight")]
     [SerializeField] private Gate exitGate;      // sinks into the ground when the fight is won (empty = none)
+    [SerializeField] private bool openGateFromStart; // the gate is down from the start and zombies come through it (the player does not move during a fight anyway)
 
     [Header("Boss fight")]
     [SerializeField] private bool isBossFight;
@@ -97,6 +98,33 @@ public class Encounter : MonoBehaviour
     public List<SupplyCrate> Crates
     {
         get { return new List<SupplyCrate>(GetComponentsInChildren<SupplyCrate>()); }
+    }
+
+    // openGateFromStart: the gate goes down at once and a spawn point is made
+    // in the passage behind it (on the far side from the stop), so this
+    // fight's zombies also come through it. Called by WaveSpawner.Awake.
+    public void OpenGateAsSpawn()
+    {
+        if (!openGateFromStart || exitGate == null)
+        {
+            return;
+        }
+        exitGate.OpenAtOnce();
+        Transform gate = exitGate.transform;
+        Vector3 through = gate.forward;
+        through.y = 0f;
+        through.Normalize();
+        if (Vector3.Dot(gate.position - StopPosition, through) < 0f)
+        {
+            through = -through; // "behind" = away from the player
+        }
+        GameObject spawn = new GameObject("Through the gate");
+        spawn.transform.SetParent(transform, false);
+        spawn.transform.position = new Vector3(gate.position.x, 0f, gate.position.z) + through * 10f;
+        GameObject exitPoint = new GameObject("Exit");
+        exitPoint.transform.SetParent(spawn.transform, false);
+        exitPoint.transform.position = new Vector3(gate.position.x, 0f, gate.position.z) - through * 1.8f;
+        spawn.AddComponent<SpawnPoint>().Configure(exitPoint.transform, 0.4f);
     }
 
     public int GroupSize

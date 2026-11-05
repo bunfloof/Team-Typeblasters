@@ -2175,7 +2175,7 @@ public class HUD : MonoBehaviour
             BuildComboReward();
         }
         comboRewardTarget = Mathf.Clamp01(progress);
-        comboRewardText.text = "<color=#" + ColorUtility.ToHtmlStringRGB(color) + ">" + text + "</color>";
+        energyNumber.text = GameManager.Instance != null ? GameManager.Instance.SkillEnergy.ToString() : "0";
         comboRewardFillImage.color = color;
     }
 
@@ -2192,11 +2192,39 @@ public class HUD : MonoBehaviour
         bar.GetWorldCorners(corners);
         Vector2 bottomLeft = (Vector2)readoutLayer.InverseTransformPoint(corners[0]) - readoutLayer.rect.center;
         Vector2 topRight = (Vector2)readoutLayer.InverseTransformPoint(corners[2]) - readoutLayer.rect.center;
-        float y = bottomLeft.y - EnergyRowGap - EnergyBarHeight * 0.5f - 6f;
+        // The bar: exactly the health bar's length and thickness, one row lower.
+        float barHeight = topRight.y - bottomLeft.y;
+        float barMiddle = (bottomLeft.y + topRight.y) * 0.5f;
+        float y = barMiddle - barHeight - EnergyRowGap;
         comboRewardBar.anchoredPosition = new Vector2(bottomLeft.x, y);
-        comboRewardBar.sizeDelta = new Vector2(topRight.x - bottomLeft.x, EnergyBarHeight);
-        PlaceRect(comboRewardText.rectTransform, Centre, new Vector2(1f, 0.5f), new Vector2(bottomLeft.x - 14f, y + 1f), new Vector2(260f, 42f));
-        EnergyRowBottom = y - 18f; // the text is a little taller than the bar
+        comboRewardBar.sizeDelta = new Vector2(topRight.x - bottomLeft.x, barHeight);
+        energyNumber.fontSize = Mathf.Max(18f, barHeight * 0.78f);
+
+        // The label: a twin of the scene's "Health" label (same box, font, size, colour), one row lower.
+        TMP_Text healthText = HealthLabel != null ? HealthLabel.GetComponent<TMP_Text>() : null;
+        if (healthText != null)
+        {
+            RectTransform from = healthText.rectTransform;
+            Vector3[] labelCorners = new Vector3[4];
+            from.GetWorldCorners(labelCorners);
+            Vector2 labelMin = (Vector2)readoutLayer.InverseTransformPoint(labelCorners[0]) - readoutLayer.rect.center;
+            Vector2 labelMax = (Vector2)readoutLayer.InverseTransformPoint(labelCorners[2]) - readoutLayer.rect.center;
+            float labelMiddle = (labelMin.y + labelMax.y) * 0.5f;
+            comboRewardText.fontSize = healthText.fontSize * from.lossyScale.y / readoutLayer.lossyScale.y;
+            comboRewardText.fontStyle = healthText.fontStyle;
+            comboRewardText.font = healthText.font;
+            comboRewardText.horizontalAlignment = healthText.horizontalAlignment;
+            comboRewardText.verticalAlignment = healthText.verticalAlignment;
+            comboRewardText.color = healthText.color;
+            PlaceRect(comboRewardText.rectTransform, Centre, Centre,
+                new Vector2((labelMin.x + labelMax.x) * 0.5f, labelMiddle - (barMiddle - y)),
+                labelMax - labelMin);
+        }
+        else
+        {
+            PlaceRect(comboRewardText.rectTransform, Centre, new Vector2(1f, 0.5f), new Vector2(bottomLeft.x - 14f, y), new Vector2(200f, barHeight + 10f));
+        }
+        EnergyRowBottom = y - barHeight * 0.5f;
         PlaceTopLeftPlate(bottomLeft, topRight);
     }
 
@@ -2219,7 +2247,7 @@ public class HUD : MonoBehaviour
         {
             return;
         }
-        float left = barBottomLeft.x - 14f - (comboRewardText.gameObject.activeInHierarchy ? comboRewardText.preferredWidth : 0f);
+        float left = barBottomLeft.x; // the labels' left end is measured below
         // ...and the "Health" text's own left end, wherever it is aligned in its box.
         TMP_Text labelText = HealthLabel != null ? HealthLabel.GetComponent<TMP_Text>() : null;
         if (labelText != null && labelText.gameObject.activeInHierarchy)
@@ -2244,7 +2272,6 @@ public class HUD : MonoBehaviour
     }
 
     private const float EnergyRowGap = 14f;     // between the health bar and the ENERGY row
-    private const float EnergyBarHeight = 12f;
 
     // The bottom of the ENERGY row (canvas units from the middle), for what goes under it.
     private float EnergyRowBottom = float.NaN;
@@ -2268,12 +2295,10 @@ public class HUD : MonoBehaviour
     //  ENERGY 12 [=======-------]
     private void BuildComboReward()
     {
-        comboRewardText = CreateText(readoutLayer, "Energy", "", 32f, Vector2.zero);
+        comboRewardText = CreateText(readoutLayer, "Energy Label", "Energy", 32f, Vector2.zero);
         comboRewardText.alignment = TextAlignmentOptions.Right;
-        comboRewardText.fontStyle = FontStyles.Bold;
         comboRewardText.textWrappingMode = TextWrappingModes.NoWrap;
-        comboRewardText.color = SmallTextColor;
-        comboRewardText.fontSharedMaterial = OutlineMaterial(comboRewardText);
+        comboRewardText.color = Color.white;
 
         Image bar = CreateImage("EnergyBar", readoutLayer, new Color(0.2f, 0.21f, 0.24f, 0.9f));
         comboRewardBar = bar.rectTransform;
@@ -2287,7 +2312,18 @@ public class HUD : MonoBehaviour
         comboRewardFill.offsetMin = Vector2.zero;
         comboRewardFill.offsetMax = Vector2.zero;
         comboRewardShown = 0f;
+
+        // How much energy, inside the bar at its right end.
+        energyNumber = CreateText(comboRewardBar, "Energy Number", "0", 22f, Vector2.zero);
+        StretchToParent(energyNumber.rectTransform);
+        energyNumber.rectTransform.offsetMax = new Vector2(-10f, 0f);
+        energyNumber.alignment = TextAlignmentOptions.Right;
+        energyNumber.fontStyle = FontStyles.Bold;
+        energyNumber.color = Color.white;
+        energyNumber.fontSharedMaterial = OutlineMaterial(energyNumber);
     }
+
+    private TMP_Text energyNumber; // the energy, inside the ENERGY bar
 
     // ---- Hint box (bottom-centre, just above the target word box) ----
 
@@ -2842,6 +2878,22 @@ public class HUD : MonoBehaviour
 
         // The stats replace "Final score: ...".
         message.text = StatsText(stats);
+        if (!won && Checkpoint.Has(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name))
+        {
+            message.text += "\n<color=#40DBCC><b>ENTER</b>  continue from Wave " + (Checkpoint.WaveIndex + 1) + "</color>";
+        }
+        if (!won)
+        {
+            // The panel's button goes on from the checkpoint when there is one.
+            bool canContinue = Checkpoint.Has(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name);
+            foreach (TMP_Text label in lostPanel.GetComponentsInChildren<TMP_Text>(true))
+            {
+                if (label.text == "Restart" || label.text == "Continue")
+                {
+                    label.text = canContinue ? "Continue" : "Restart";
+                }
+            }
+        }
     }
 
     // Four lines, e.g.

@@ -65,7 +65,9 @@ public class SupplyCrate : MonoBehaviour, ITypingTarget
             Renderer cubeRenderer = cube.GetComponent<Renderer>();
             if (cubeRenderer != null)
             {
-                cubeRenderer.sharedMaterial = Palette.Lit(Palette.Energy);
+                // Unlit: exactly the HUD's ENERGY teal whatever the light (the
+                // forest's light made a lit cube look green beside the teal word).
+                cubeRenderer.sharedMaterial = Palette.Unlit(Palette.Energy);
             }
         }
     }

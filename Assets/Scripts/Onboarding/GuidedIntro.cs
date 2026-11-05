@@ -7,7 +7,7 @@
 // low on the screen says what to press, and the player does it for real.
 // Everything else is learned by playing: pieces of the HUD simply pop in.
 //
-//   ride       "You move on your own. Just type."  ENTER skips the whole
+//   ride       "You move automatically, don't worry. Just type."  ENTER skips the whole
 //              intro (only now; wave 1 is then a normal wave)
 //   shoot      the first zombie: type its word (HEALTH, SCORE, WAVE pop in)
 //              two more: keep shooting
@@ -82,7 +82,7 @@ public static class GuidedIntro
         Powers.ActionPerformed -= OnPower;
         Powers.ActionPerformed += OnPower;
         view = GuidedIntroView.Create(hudRef);
-        view.ShowCard("", "You move on your own. Just type.", null, false);
+        view.ShowCard("", "You move automatically, don't worry. Just type.", null, false);
         view.ShowSkip(true);
         Log("start");
     }
@@ -372,9 +372,12 @@ public static class GuidedIntro
         }
         yield return Finish(group, "Finish them off.");
 
-        // [TAB] SHIELD: two come close.
+        // [TAB] SHIELD: four come close (two from each side)...
         yield return Calm(1.5f);
-        group = Pair(ZombieKind.Normal);
+        int[] shieldSides = TwoDoors();
+        group = Group(shieldSides[0], ZombieKind.Normal, 2, PairLanes);
+        yield return new WaitForSeconds(0.5f);
+        group.AddRange(Group(shieldSides[1], ZombieKind.Normal, 2, PairLanes));
         yield return new WaitForSeconds(WalkOutSeconds);
         float closeBy = Time.time + 10f;
         while (AnyAlive(group) && Time.time < closeBy && !AnyWithin(group, 6f))
@@ -399,7 +402,11 @@ public static class GuidedIntro
         view.HideCard();
         BlocksLetters = false;
         Holding = false;
-        yield return Finish(group, "Shielded! Now shoot them.");
+
+        // ...and while it is up, three more walk in and bounce off it: the
+        // shield is never shown with nothing to block.
+        group.AddRange(Group(NearPoint(), ZombieKind.Normal, 3, GroupLanes));
+        yield return Finish(group, "Shielded! Shoot them while it lasts.");
 
         // Everything has been shown: normal play from here.
         Log("complete");

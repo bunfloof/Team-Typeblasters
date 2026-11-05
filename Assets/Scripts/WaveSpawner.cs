@@ -133,7 +133,7 @@ public class WaveSpawner : MonoBehaviour
     // player's measured speed (ADAPTIVE DIFFICULTY).
     private int MaxOnScreen
     {
-        get { return Mathf.Clamp(Mathf.RoundToInt(maxOnScreen + 1.5f * DynamicDifficulty.Level), 3, maxOnScreen + 3); }
+        get { return Mathf.Clamp(Mathf.RoundToInt(maxOnScreen + 2f * DynamicDifficulty.Level), 3, maxOnScreen + 3); }
     }
 
     // The boss being fought, or null.
@@ -258,6 +258,10 @@ public class WaveSpawner : MonoBehaviour
         hud.SetWave(1, level.Encounters.Count);
         rail.PlaceAt(level.StartPosition, level.StartFacing);
 
+        foreach (Encounter encounter in level.Encounters)
+        {
+            encounter.OpenGateAsSpawn(); // e.g. wave 3: its gate is down, zombies come through it
+        }
         BuildSpawnCover();
 
         // No health kits standing in the map any more: health is offered as a
@@ -789,7 +793,16 @@ public class WaveSpawner : MonoBehaviour
             StartCoroutine(EasyTutorial.Active.Run(this));
             return;
         }
+        resumeIndex = Checkpoint.Has(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name) && resumingCheckpoint ? Checkpoint.WaveIndex : 0;
         StartCoroutine(RunLevel());
+    }
+
+    private int resumeIndex;          // the wave RunLevel starts at (0 = the first)
+    private bool resumingCheckpoint;  // set by GameManager when the run goes on from a checkpoint
+
+    public void ResumeFromCheckpoint()
+    {
+        resumingCheckpoint = true;
     }
 
     public IEnumerator RunTutorialFinalWave()
@@ -902,15 +915,34 @@ public class WaveSpawner : MonoBehaviour
     private IEnumerator RunLevel()
     {
         // Normal: the HUD starts empty and wave 1 teaches the game (unless skipped).
-        if (guidedFirstWave)
+        // Back from a CHECKPOINT: start at the saved wave, standing where the
+        // wave before it was fought, with the earlier gates already open.
+        int first = resumeIndex;
+        resumeIndex = 0;
+        seenKinds.Clear();
+        chainSeen = false;
+        if (first > 0)
+        {
+            Encounter before = level.Encounters[first - 1];
+            rail.PlaceAt(before.StopPosition, before.Facing);
+            for (int i = 0; i < first; i++)
+            {
+                if (level.Encounters[i].ExitGate != null)
+                {
+                    level.Encounters[i].ExitGate.OpenAtOnce();
+                }
+            }
+            seenKinds.UnionWith(Checkpoint.SeenKinds);
+            chainSeen = Checkpoint.ChainSeen;
+            hud.ShowHint("Back at the checkpoint: Wave " + (first + 1), 3f);
+        }
+        else if (guidedFirstWave)
         {
             GuidedIntro.Begin(this, hud);
         }
-        seenKinds.Clear();
-        chainSeen = false;
         int count = level.Encounters.Count;
 
-        for (int index = 0; index < count; index++)
+        for (int index = first; index < count; index++)
         {
             Encounter encounter = level.Encounters[index];
             int wave = index + 1;
@@ -1003,6 +1035,13 @@ public class WaveSpawner : MonoBehaviour
             {
                 float wpm = DynamicDifficulty.ApplyNow();
                 ShowAfterFirstWave(wpm, index + 1 < count);
+            }
+
+            // CHECKPOINT: a death from here on starts again at the next wave.
+            if (index + 1 < count)
+            {
+                Checkpoint.Save(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name, index + 1,
+                    GameManager.Instance.Score, GameManager.Instance.SkillEnergy, seenKinds, chainSeen);
             }
 
             // 3. Cleared: the next gate opens.

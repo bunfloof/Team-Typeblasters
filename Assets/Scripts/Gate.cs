@@ -34,6 +34,15 @@ public class Gate : MonoBehaviour
         StartCoroutine(Sink());
     }
 
+    // Already down when the level starts (a passage zombies come through, see
+    // Encounter.openGateFromStart, or a fight passed before a checkpoint).
+    public void OpenAtOnce()
+    {
+        IsOpen = true;
+        panel.GetComponent<Collider>().enabled = false;
+        panel.gameObject.SetActive(false);
+    }
+
     private IEnumerator Sink()
     {
         float height = panel.localScale.y;
