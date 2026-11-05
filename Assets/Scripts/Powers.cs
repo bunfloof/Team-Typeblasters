@@ -454,7 +454,7 @@ public class Powers : MonoBehaviour
     private void RefreshWeaponStatus()
     {
         int energy = GameManager.Instance.SkillEnergy;
-        string text = "<size=65%>ENERGY</size> " + energy;
+        string text = "<size=70%>ENERGY</size>  " + energy;
         if (text == lastWeaponStatus) return;
         lastWeaponStatus = text;
         hud.SetWeaponStatus(text,Mathf.Clamp01((float)energy / GameManager.MaxSkillEnergy),Palette.Energy);

@@ -388,6 +388,9 @@ public class CameraDirector : MonoBehaviour
         position = anchor - towardPlayer * mapDistance;
     }
 
+    private const float MapTopMargin = 0.2f;    // fraction of the screen kept free at the top in the map view
+    private const float MapBottomMargin = 0.12f; // ...and at the bottom
+
     // Everything the map view must show: the player, the fight's stop point,
     // every spawn point and its exit (where enemies come from), the barrels,
     // the crates, and every zombie.
@@ -436,6 +439,7 @@ public class CameraDirector : MonoBehaviour
             if (zombie != null && zombie.IsAlive)
             {
                 framePoints.Add(zombie.HitPoint);
+                framePoints.Add(zombie.LabelAnchor); // its word too: never under the HUD
             }
         }
     }
@@ -474,6 +478,8 @@ public class CameraDirector : MonoBehaviour
         Vector3 cameraPosition = anchor - towardPlayer * distance;
         Quaternion toCamera = Quaternion.Inverse(rotation);
         float limit = 1f - 2f * mapScreenMargin; // -1..1 is the whole screen
+        float top = 1f - 2f * MapTopMargin;       // the HUD along the top (health, ENERGY, combo, score) and the words above heads
+        float bottom = -(1f - 2f * MapBottomMargin); // the word box and the powers along the bottom
         float aspect = cam.aspect;
 
         foreach (Vector3 point in framePoints)
@@ -485,7 +491,7 @@ public class CameraDirector : MonoBehaviour
             }
             float x = local.x / (local.z * tanHalf * aspect);
             float y = local.y / (local.z * tanHalf);
-            if (Mathf.Abs(x) > limit || Mathf.Abs(y) > limit)
+            if (Mathf.Abs(x) > limit || y > top || y < bottom)
             {
                 return false;
             }

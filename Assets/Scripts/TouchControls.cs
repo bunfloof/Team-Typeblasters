@@ -661,7 +661,7 @@ public class TouchControls : MonoBehaviour
         CreateRowPower(ref left, total, TouchPowerButton.Power.Lure, "1", "LURE", Palette.LureCrate);
         CreateRowPower(ref left, total, TouchPowerButton.Power.Freeze, "2", "FREEZE", Palette.FreezeCrate);
         CreateRowPower(ref left, total, TouchPowerButton.Power.Frenzy, "3", "FRENZY", Palette.WeaponFrenzy);
-        CreateRowPower(ref left, total, TouchPowerButton.Power.Rocket, "4", "RPG", Palette.BlastOrange);
+        CreateRowPower(ref left, total, TouchPowerButton.Power.Rocket, "4", "RPG", Palette.Rocket);
         CreateRowPower(ref left, total, TouchPowerButton.Power.Shield, "TAB", "SHIELD", Palette.Shield);
 
         RectTransform typeSlot = CreateRowSlot("Touch Type Button", left, TypeWeight, total);
@@ -747,7 +747,7 @@ public class TouchControls : MonoBehaviour
         CreateColumnPower(leftColumn, true, TouchPowerButton.Power.Lure, "1", "LURE BOMB", Palette.LureCrate);
         CreateColumnPower(leftColumn, false, TouchPowerButton.Power.Freeze, "2", "FREEZE", Palette.FreezeCrate);
         CreateColumnPower(rightColumn, true, TouchPowerButton.Power.Frenzy, "3", "FRENZY", Palette.WeaponFrenzy);
-        CreateColumnPower(rightColumn, false, TouchPowerButton.Power.Rocket, "4", "RPG", Palette.BlastOrange);
+        CreateColumnPower(rightColumn, false, TouchPowerButton.Power.Rocket, "4", "RPG", Palette.Rocket);
     }
 
     // UseOwnKeyboard: the columns' width depends on the screen width (it

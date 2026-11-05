@@ -460,6 +460,10 @@ public class Zombie : MonoBehaviour, ITypingTarget
                 // from much farther): right in front of the camera its word
                 // would be pushed off the top of the screen and jump around.
                 stopDistance = Kind == ZombieKind.Spitter ? SpitRange : StandOffDistance;
+                if (HasApproach && Kind != ZombieKind.Spitter && CameraDirector.MapBlend <= 0.5f)
+                {
+                    goal = ApproachGoal(out stopDistance); // its own curve to its own spot in the fan
+                }
             }
         }
 
@@ -909,8 +913,61 @@ public class Zombie : MonoBehaviour, ITypingTarget
             {
                 return attackDistance;
             }
-            return Kind == ZombieKind.Brute || Kind == ZombieKind.Explosive ? BigStandOff : StandOff;
+            return (Kind == ZombieKind.Brute || Kind == ZombieKind.Explosive ? BigStandOff : StandOff) + standOffExtra;
         }
+    }
+
+    // ---- Its own way in (set by WaveSpawner.AssignApproach) ----
+    // A wave's zombies do not all walk the straight line from their door: each
+    // gets a BEARING (degrees left / right of the way the player faces) and
+    // walks a curve toward it, so they arrive spread out in a fan in front of
+    // the player, some a row further back (standOffExtra). Their words then
+    // sit apart and stay still instead of piling up and shuffling.
+    private float approachBearing = float.NaN; // NaN: straight at the player
+    private float standOffExtra;
+
+    public bool HasApproach
+    {
+        get { return !float.IsNaN(approachBearing); }
+    }
+
+    public float ApproachBearing
+    {
+        get { return approachBearing; }
+    }
+
+    public void SetApproach(float bearing, float extraStandOff)
+    {
+        approachBearing = bearing;
+        standOffExtra = Mathf.Max(0f, extraStandOff);
+    }
+
+    private const float ApproachLookAhead = 3f;   // metres: it steers toward a point this much closer on its curve
+    private const float ApproachMaxTurn = 22f;    // degrees of bearing it gains per look-ahead step
+
+    // Where to walk now on the way to its spot: a point a little closer to the
+    // player and turned a little toward its bearing (a gentle curve), then
+    // the spot itself. 'stop' is how close to that point counts as there.
+    private Vector3 ApproachGoal(out float stop)
+    {
+        Vector3 facing = spawner.CurrentEncounter != null ? spawner.CurrentEncounter.Facing : player.forward;
+        facing.y = 0f;
+        facing.Normalize();
+        Vector3 fromPlayer = transform.position - player.position;
+        fromPlayer.y = 0f;
+        float distance = fromPlayer.magnitude;
+        float standOff = StandOffDistance;
+        Vector3 spot = player.position + Quaternion.Euler(0f, approachBearing, 0f) * facing * standOff;
+        if (distance < 0.5f || FlatDistance(transform.position, spot) < ApproachLookAhead)
+        {
+            stop = 0.15f;
+            return spot;
+        }
+        float current = Vector3.SignedAngle(facing, fromPlayer, Vector3.up);
+        float turn = Mathf.Clamp(Mathf.DeltaAngle(current, approachBearing), -ApproachMaxTurn, ApproachMaxTurn);
+        float radius = Mathf.Max(standOff, distance - ApproachLookAhead);
+        stop = 0f;
+        return player.position + Quaternion.Euler(0f, current + turn, 0f) * facing * radius;
     }
 
     private float BiteRange

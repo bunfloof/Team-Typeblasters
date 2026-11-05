@@ -58,12 +58,14 @@ public class Barrel : MonoBehaviour, ITypingTarget
             Label = hud.CreateWordLabel(new Vector2(0.5f, 0f)); // centred above the barrel
         }
         Label.color = Palette.WordBarrel;
+        Label.fontStyle = TMPro.FontStyles.Bold | TMPro.FontStyles.Italic; // its own look: red, bold italic, no dark plate
+        hud.RemoveWordPlate(Label);
         Label.gameObject.SetActive(true); // WaveSpawner.LayoutLabels places it and shows it
         RefreshLabel();
 
         if (ring == null)
         {
-            ring = BlastRing.Create(transform, BlastRadius, Palette.BlastOrange);
+            ring = BlastRing.Create(transform, BlastRadius, Palette.WordBarrel); // red like its word
         }
         ring.gameObject.SetActive(true);
     }

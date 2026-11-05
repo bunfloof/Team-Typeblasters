@@ -161,7 +161,7 @@ public class LureBomb : MonoBehaviour
         transform.position = landingPoint;
         IsLuring = true;
         Active.Add(this);
-        BlastRing.Create(transform, BlastRadius, Palette.BlastOrange);
+        BlastRing.Create(transform, BlastRadius, Palette.LureCrate);
     }
 
     // On the ground: blink faster and faster, then explode.

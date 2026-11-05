@@ -28,36 +28,45 @@ public static class Palette
     public static readonly Color FrozenIce = new Color(0.60f, 0.88f, 1.00f);
     public static readonly Color ExplosiveRed = new Color(0.90f, 0.25f, 0.20f);
     public static readonly Color ShifterPurple = new Color(0.65f, 0.20f, 0.90f);
-    public static readonly Color SplitterTeal = new Color(0.10f, 0.60f, 0.55f);  // teal, not green: green words are supply crates
-    public static readonly Color SplitlingTeal = new Color(0.40f, 0.85f, 0.78f);
+    // Every kind has its own hue, and none matches a HUD colour (ENERGY is
+    // teal, health green, the shield silver, freeze ice blue): see the wheel
+    // at the word colours below.
+    public static readonly Color SplitterTeal = new Color(0.85f, 0.35f, 0.60f);  // pink (the name is old: it used to be teal, too close to ENERGY)
+    public static readonly Color SplitlingTeal = new Color(1.00f, 0.62f, 0.80f); // light pink
     public static readonly Color GhostPale = new Color(0.90f, 0.86f, 1.00f);    // pale lavender
     public static readonly Color BruteDark = new Color(0.45f, 0.25f, 0.20f);    // dark red-brown
     public static readonly Color SpitterAcid = new Color(0.75f, 0.95f, 0.10f);  // acid yellow-green (its globs too)
 
     // ---- Props ----
-    public static readonly Color LureCrate = new Color(1.00f, 0.50f, 0.10f);   // also the lure bomb power on the HUD
+    public static readonly Color LureCrate = new Color(1.00f, 0.32f, 0.30f);   // the LURE BOMB power (red, like the bomb's blink)
     public static readonly Color FreezeCrate = new Color(0.30f, 0.70f, 1.00f); // also the freeze power on the HUD
     public static readonly Color Bomb = new Color(0.10f, 0.10f, 0.10f);
     public static readonly Color BombBlink = new Color(0.90f, 0.10f, 0.10f);
     public static readonly Color QuizAnswer = new Color(0.40f, 0.90f, 1.00f);
     public static readonly Color BlastOrange = new Color(1.00f, 0.55f, 0.10f);
-    public static readonly Color Shield = new Color(0.35f, 0.95f, 0.85f);      // the SHIELD power (Tab): HUD row, screen glow, "BLOCKED"
+    public static readonly Color Shield = new Color(0.86f, 0.90f, 1.00f);      // the SHIELD power (Tab): silver-white - HUD row, screen glow, "BLOCKED"
+    public static readonly Color Rocket = new Color(1.00f, 0.80f, 0.25f);      // the RPG power: amber-gold
 
     // ---- Word colours (HUD text) ----
-    public static readonly Color WordBarrel = new Color(1.00f, 0.60f, 0.20f);
+    public static readonly Color WordBarrel = new Color(1.00f, 0.30f, 0.22f);  // red like the barrel (bold italic, no plate: never mistaken for a red zombie's word)
     public static readonly Color WordCrate = new Color(0.45f, 1.00f, 0.50f);   // health crates
     public static readonly Color Energy = new Color(0.30f, 0.90f, 0.88f);      // skill ENERGY: the HUD number and bar, energy crates, their words
     public static readonly Color WordQuiz = new Color(0.40f, 0.90f, 1.00f);
     public static readonly Color WordArmor = new Color(0.55f, 0.72f, 1.00f);   // steel blue, like the armour
 
     // A zombie's word is in its BODY colour (made bright enough to read), so
-    // the word alone tells which kind carries it. Every word also sits on a
+    // the word alone tells which kind carries it. Around the colour wheel:
+    //   white normal | red explosive | brown brute | yellow runner | acid
+    //   green spitter | steel blue armored | purple shifter | magenta word
+    //   chain | pink splitter | pale lavender ghost.
+    // HUD only: teal ENERGY, green health, ice-blue freeze, red lure bomb,
+    // orange frenzy, amber RPG, silver shield. Every word also sits on a
     // dark plate (HUD.CreateWordLabel), which keeps it readable on any background.
     public static readonly Color WordRunner = new Color(1.00f, 0.90f, 0.20f);    // yellow
     public static readonly Color WordExplosive = new Color(1.00f, 0.36f, 0.28f); // red
     public static readonly Color WordShifter = new Color(0.80f, 0.45f, 1.00f);   // purple
-    public static readonly Color WordSplitter = new Color(0.20f, 0.95f, 0.85f);  // teal
-    public static readonly Color WordSplitling = new Color(0.60f, 1.00f, 0.93f); // light teal
+    public static readonly Color WordSplitter = new Color(1.00f, 0.50f, 0.75f);  // pink
+    public static readonly Color WordSplitling = new Color(1.00f, 0.75f, 0.88f); // light pink
     public static readonly Color WordGhost = new Color(0.86f, 0.80f, 1.00f);     // pale lavender
     public static readonly Color WordBrute = new Color(0.92f, 0.62f, 0.52f);     // red-brown (lighter than the dark body)
     public static readonly Color WordSpitter = new Color(0.80f, 1.00f, 0.15f);   // acid yellow-green
@@ -79,11 +88,11 @@ public static class Palette
             default: return Color.white; // normal zombies are grey
         }
     }
-    public static readonly Color WordChain = new Color(0.82f, 0.52f, 1.00f); // purple: a WORD CHAIN pair (hunt / hunter) and its link line
+    public static readonly Color WordChain = new Color(1.00f, 0.35f, 1.00f); // magenta: a WORD CHAIN pair (hunt / hunter) and its link line (not the shifter's purple)
     public static readonly Color WordOrb = new Color(1.00f, 0.55f, 0.85f);   // pink, like the boss's energy orbs (their words are case-sensitive); lighter than WordFrenzy so the two never look alike
     public static readonly Color WordOrbFlash = new Color(1.00f, 0.92f, 0.97f); // almost white: an orb's word flashes up to this with every throb
-    public static readonly Color WordFrenzy = new Color(1.00f, 0.25f, 0.35f); // vivid red: the short words during a FRENZY
-    public static readonly Color WeaponFrenzy = new Color(1.00f, 0.30f, 0.20f); // the FRENZY weapon: its HUD slot and status line
+    public static readonly Color WordFrenzy = new Color(1.00f, 0.62f, 0.18f); // orange: the short words during a FRENZY (red is the explosive zombie's)
+    public static readonly Color WeaponFrenzy = new Color(1.00f, 0.55f, 0.12f); // the FRENZY power: orange
 
     private static readonly Dictionary<Color, Material> litMaterials = new Dictionary<Color, Material>();
     private static readonly Dictionary<Color, Material> unlitMaterials = new Dictionary<Color, Material>();

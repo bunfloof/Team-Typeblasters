@@ -36,7 +36,7 @@ public class ThrowArc : MonoBehaviour
 
     private void Build()
     {
-        Material material = Palette.Unlit(Palette.BlastOrange);
+        Material material = Palette.Unlit(Palette.LureCrate); // the lure bomb red
 
         dashes = new LineRenderer[DashCount];
         for (int i = 0; i < DashCount; i++)
@@ -73,7 +73,7 @@ public class ThrowArc : MonoBehaviour
             Destroy(ring.gameObject);
         }
         ringRadius = LureBomb.BlastRadius;
-        ring = BlastRing.Create(landingMarker, ringRadius, Palette.BlastOrange);
+        ring = BlastRing.Create(landingMarker, ringRadius, Palette.LureCrate);
     }
 
     // Draws the arc from "from" (the hand) to "to" (the landing point on the ground).

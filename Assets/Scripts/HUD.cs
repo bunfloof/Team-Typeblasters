@@ -93,7 +93,7 @@ public class HUD : MonoBehaviour
     [Header("Boss health bar")]
     [SerializeField] private Vector2 bossBarSize = new Vector2(700f, 26f);
     // The bar sits under the combo plate (top-centre).
-    private const float BossBarTop = 190f; // canvas units from the top of the screen (its title is above it)
+    private const float BossBarTop = 130f; // canvas units from the top of the screen (its title is above it)
     [SerializeField] private Color bossBarColor = new Color(0.85f, 0.1f, 0.1f);
 
     [Header("Enemy words")]
@@ -250,7 +250,7 @@ public class HUD : MonoBehaviour
         SetShown(scoreText.gameObject, HudReveal.IsShown(HudFeature.Score));
         SetShown(healthBar.gameObject, health);
         if (HealthLabel != null) SetShown(HealthLabel.gameObject, health);
-        if (comboPlate != null) SetShown(comboPlate.gameObject, combo || energy);
+        if (comboPlate != null) SetShown(comboPlate.gameObject, combo);
         if (comboText != null) SetShown(comboText.gameObject, combo);
         if (comboRewardText != null) SetShown(comboRewardText.gameObject, energy);
         if (comboRewardBar != null) SetShown(comboRewardBar.gameObject, energy);
@@ -374,13 +374,14 @@ public class HUD : MonoBehaviour
                 break;
             case HudFeature.Combo:
                 comboPopTimer = ComboPopSeconds * 3f;
-                if (comboPlate != null) ShowNewTag(comboPlate, new Vector2(ComboPlateSize.x * 0.5f + 40f, -40f));
+                if (comboPlate != null) ShowNewTag(comboPlate, new Vector2(ComboPlateSize.x * 0.5f + 40f, -ComboPlateSize.y * 0.5f));
                 break;
             case HudFeature.Energy:
                 if (comboRewardText != null)
                 {
+                    PlaceEnergyRow();
                     StartCoroutine(PopIn(comboRewardText.transform));
-                    ShowNewTag(comboRewardText.rectTransform, new Vector2(160f, 0f));
+                    ShowNewTag(comboRewardBar, new Vector2(comboRewardBar.sizeDelta.x + 50f, 0f));
                 }
                 break;
             case HudFeature.Shield:
@@ -591,7 +592,12 @@ public class HUD : MonoBehaviour
         float scale = Mathf.LerpUnclamped(1.25f, 1f, 1f - Mathf.Pow(1f - pop, 3f));
         healthOffer.anchorMin = healthOffer.anchorMax = Centre;
         healthOffer.pivot = new Vector2(0f, 1f);
-        healthOffer.anchoredPosition = new Vector2(left, bottomLeft.y - 14f);
+        float top = bottomLeft.y - 14f;
+        if (comboRewardBar != null && comboRewardBar.gameObject.activeInHierarchy && !float.IsNaN(EnergyRowBottom))
+        {
+            top = Mathf.Min(top, EnergyRowBottom - 10f);
+        }
+        healthOffer.anchoredPosition = new Vector2(left, top);
         healthOffer.localScale = new Vector3(scale, scale, 1f);
     }
 
@@ -613,9 +619,9 @@ public class HUD : MonoBehaviour
     // just under it on the same plate (SetWeaponStatus).
 
     private const float ComboPlateTop = 6f;          // canvas units below the top edge
-    private static readonly Vector2 ComboPlateSize = new Vector2(560f, 184f);
-    private const float ComboTextTop = 10f;
-    private const float ComboFontSize = 64f;
+    private static readonly Vector2 ComboPlateSize = new Vector2(300f, 70f); // compact: ENERGY lives under the health bar now
+    private const float ComboTextTop = 6f;
+    private const float ComboFontSize = 44f;
     private const float ComboPopScale = 1.35f;
     private const float ComboPopSeconds = 0.25f;
     private const float ComboShakeSeconds = 0.3f;
@@ -1161,6 +1167,23 @@ public class HUD : MonoBehaviour
         plates.Add(plate);
     }
 
+    // A word drawn with no plate behind it (the barrels' words: a different
+    // look from every zombie's word). Nothing happens if it has none.
+    public void RemoveWordPlate(TMP_Text label)
+    {
+        int index = plateLabels.IndexOf(label);
+        if (index < 0)
+        {
+            return;
+        }
+        if (plates[index] != null)
+        {
+            Destroy(plates[index].gameObject);
+        }
+        plates.RemoveAt(index);
+        plateLabels.RemoveAt(index);
+    }
+
     // Puts each plate under its word (same place, size and scale, plus padding)
     // and drops the plates of words that are gone.
     public void SyncWordPlates()
@@ -1466,7 +1489,7 @@ public class HUD : MonoBehaviour
             case (int)PowerKind.Lure: return Palette.LureCrate;
             case (int)PowerKind.Freeze: return Palette.FreezeCrate;
             case FrenzyRow: return Palette.WeaponFrenzy;
-            default: return Palette.BlastOrange; // the RPG
+            default: return Palette.Rocket; // the RPG: amber
         }
     }
 
@@ -2130,8 +2153,6 @@ public class HUD : MonoBehaviour
 
     // ---- Combo reward (top-centre, on the combo plate, under the big COMBO) ----
 
-    private const float ComboRewardTop = 82f;     // canvas units below the top of the combo plate
-    private const float ComboBarTop = 168f;
     private const float ComboBarSpeed = 2.5f;     // the bar fills / empties at up to 2.5 whole bars per second
     private static readonly Vector2 ComboBarSize = new Vector2(380f, 8f);
     private static readonly Color SmallTextColor = new Color(0.8f, 0.82f, 0.86f); // light grey
@@ -2157,8 +2178,79 @@ public class HUD : MonoBehaviour
         comboRewardFillImage.color = color;
     }
 
+    // Puts the ENERGY row just under the health bar (every frame: the bar's
+    // length changes with the window, see PlaceComboPlate).
+    private void PlaceEnergyRow()
+    {
+        if (comboRewardBar == null || healthBar == null)
+        {
+            return;
+        }
+        RectTransform bar = (RectTransform)healthBar.transform;
+        Vector3[] corners = new Vector3[4];
+        bar.GetWorldCorners(corners);
+        Vector2 bottomLeft = (Vector2)readoutLayer.InverseTransformPoint(corners[0]) - readoutLayer.rect.center;
+        Vector2 topRight = (Vector2)readoutLayer.InverseTransformPoint(corners[2]) - readoutLayer.rect.center;
+        float y = bottomLeft.y - EnergyRowGap - EnergyBarHeight * 0.5f - 6f;
+        comboRewardBar.anchoredPosition = new Vector2(bottomLeft.x, y);
+        comboRewardBar.sizeDelta = new Vector2(topRight.x - bottomLeft.x, EnergyBarHeight);
+        PlaceRect(comboRewardText.rectTransform, Centre, new Vector2(1f, 0.5f), new Vector2(bottomLeft.x - 14f, y + 1f), new Vector2(260f, 42f));
+        EnergyRowBottom = y - 18f; // the text is a little taller than the bar
+        PlaceTopLeftPlate(bottomLeft, topRight);
+    }
+
+    private Image topLeftPlate; // a dark backing behind health and ENERGY: readable over bright walls in the map view
+
+    private void PlaceTopLeftPlate(Vector2 barBottomLeft, Vector2 barTopRight)
+    {
+        if (topLeftPlate == null)
+        {
+            topLeftPlate = CreateImage("Top Left Plate", readoutLayer, new Color(0.02f, 0.03f, 0.05f, 0.5f));
+            topLeftPlate.raycastTarget = false;
+            topLeftPlate.rectTransform.SetAsFirstSibling(); // behind every readout
+        }
+        bool show = healthBar.gameObject.activeInHierarchy;
+        if (topLeftPlate.gameObject.activeSelf != show)
+        {
+            topLeftPlate.gameObject.SetActive(show);
+        }
+        if (!show)
+        {
+            return;
+        }
+        float left = barBottomLeft.x - 14f - (comboRewardText.gameObject.activeInHierarchy ? comboRewardText.preferredWidth : 0f);
+        // ...and the "Health" text's own left end, wherever it is aligned in its box.
+        TMP_Text labelText = HealthLabel != null ? HealthLabel.GetComponent<TMP_Text>() : null;
+        if (labelText != null && labelText.gameObject.activeInHierarchy)
+        {
+            Vector3[] corners = new Vector3[4];
+            labelText.rectTransform.GetWorldCorners(corners);
+            float boxLeft = ((Vector2)readoutLayer.InverseTransformPoint(corners[0]) - readoutLayer.rect.center).x;
+            float boxRight = ((Vector2)readoutLayer.InverseTransformPoint(corners[2]) - readoutLayer.rect.center).x;
+            float textWidth = labelText.preferredWidth * labelText.rectTransform.lossyScale.x / readoutLayer.lossyScale.x;
+            HorizontalAlignmentOptions align = labelText.horizontalAlignment;
+            float labelLeft = align == HorizontalAlignmentOptions.Left ? boxLeft
+                : align == HorizontalAlignmentOptions.Right ? boxRight - textWidth
+                : (boxLeft + boxRight - textWidth) * 0.5f;
+            left = Mathf.Min(left, labelLeft);
+        }
+        float bottom = comboRewardBar.gameObject.activeInHierarchy ? EnergyRowBottom : barBottomLeft.y - 4f;
+        RectTransform rect = topLeftPlate.rectTransform;
+        rect.anchorMin = rect.anchorMax = Centre;
+        rect.pivot = new Vector2(0f, 0f);
+        rect.anchoredPosition = new Vector2(left - 16f, bottom - 8f);
+        rect.sizeDelta = new Vector2(barTopRight.x + 16f - (left - 16f), barTopRight.y + 14f - (bottom - 8f));
+    }
+
+    private const float EnergyRowGap = 14f;     // between the health bar and the ENERGY row
+    private const float EnergyBarHeight = 12f;
+
+    // The bottom of the ENERGY row (canvas units from the middle), for what goes under it.
+    private float EnergyRowBottom = float.NaN;
+
     private void UpdateComboRewardBar()
     {
+        PlaceEnergyRow();
         if (comboRewardFill == null || comboRewardShown == comboRewardTarget)
         {
             return;
@@ -2169,24 +2261,22 @@ public class HUD : MonoBehaviour
         comboRewardFill.anchorMax = new Vector2(comboRewardShown, 1f);
     }
 
-    // ComboReward (text) and ComboRewardBar (dark) > Fill, centred on the combo plate under the big COMBO.
+    // ENERGY row, under the health bar (top-left): "ENERGY 12" ending just
+    // left of a thin teal bar as long as the health bar.
+    //   Health  [==============]
+    //  ENERGY 12 [=======-------]
     private void BuildComboReward()
     {
-        if (comboPlate == null)
-        {
-            BuildComboPlate();
-        }
-        comboRewardText = CreateText(comboPlate, "ComboReward", "", 56f, Vector2.zero);
-        PlaceRect(comboRewardText.rectTransform, TopCentre, TopCentre, new Vector2(0f, -ComboRewardTop),
-            new Vector2(ComboPlateSize.x - 20f, 76f));
-        comboRewardText.alignment = TextAlignmentOptions.Center;
+        comboRewardText = CreateText(readoutLayer, "Energy", "", 32f, Vector2.zero);
+        comboRewardText.alignment = TextAlignmentOptions.Right;
         comboRewardText.fontStyle = FontStyles.Bold;
         comboRewardText.textWrappingMode = TextWrappingModes.NoWrap;
         comboRewardText.color = SmallTextColor;
+        comboRewardText.fontSharedMaterial = OutlineMaterial(comboRewardText);
 
-        Image bar = CreateImage("ComboRewardBar", comboPlate, new Color(0.2f, 0.21f, 0.24f, 0.9f));
+        Image bar = CreateImage("EnergyBar", readoutLayer, new Color(0.2f, 0.21f, 0.24f, 0.9f));
         comboRewardBar = bar.rectTransform;
-        PlaceRect(comboRewardBar, TopCentre, TopCentre, new Vector2(0f, -ComboBarTop), ComboBarSize);
+        PlaceRect(comboRewardBar, Centre, LeftMiddle, Vector2.zero, ComboBarSize);
 
         // The fill is anchored to the bar's left edge; its right anchor is the progress.
         comboRewardFillImage = CreateImage("Fill", comboRewardBar, Yellow);

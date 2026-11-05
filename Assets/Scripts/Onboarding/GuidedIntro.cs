@@ -13,15 +13,18 @@
 //              two more: keep shooting
 //   Backspace  start a word, then BACKSPACE drops it
 //   energy     COMBO and ENERGY pop in; type the teal ENERGY BOX for +7
-//   barrel     a group walks past a barrel: type the barrel's word
-//   [1]        LURE BOMB: hold 1, aim with the arrow keys, let go
+//   barrel     a group walks into a barrel's ring (held there): type its word
+//   [1]        LURE BOMB: six come out; hold 1, aim with the arrow keys, let go
 //   [2]        FREEZE        [3] FRENZY        [4] RPG (load, then fire)
-//   red        a RED zombie walks in with two others: shoot the red one
+//   red        once the field is clear, a RED zombie with three others in
+//              its ring: shoot the red one
 //   [TAB]      SHIELD: press Tab (one every wave)
 //   end        the whole HUD; the rest of the run plays normally
 //
 // Only NORMAL zombies and one red one come in wave 1 (the other kinds are
 // introduced one at a time in later waves, see WaveSpawner.IntroduceNewKinds).
+// Every lesson waits for a clear field (and a lure bomb to have gone off)
+// before it starts, so two never overlap (Calm).
 // While a card waits for a power key, words cannot be typed (they are
 // ignored, never wrong; the card shakes) and the power's energy is topped
 // up, so a step can never get stuck. Damage is halved during the intro.
@@ -248,8 +251,10 @@ public static class GuidedIntro
             yield return new WaitForSeconds(0.8f);
             group = Group(point, ZombieKind.Normal, 3, GroupLanes);
             yield return new WaitForSeconds(WalkOutSeconds);
-            float giveUp = Time.time + 14f;
-            while (AnyAlive(group) && barrel.IsAlive && !NearBarrel(group, barrel) && Time.time < giveUp)
+            // Hold once EVERY zombie of the group stands inside the barrel's
+            // ring (or, if one lags behind, once the first is about to walk out of it).
+            float giveUp = Time.time + 16f;
+            while (AnyAlive(group) && barrel.IsAlive && !AllNearBarrel(group, barrel) && !LeavingRing(group, barrel) && Time.time < giveUp)
             {
                 yield return null;
             }
@@ -269,18 +274,23 @@ public static class GuidedIntro
             yield return Finish(group, "Finish them off.");
         }
 
-        // [1] LURE BOMB: hold, aim with the arrows, let go.
-        yield return new WaitForSeconds(1f);
-        group = Group(AwayFromBarrels(), ZombieKind.Normal, 3, GroupLanes);
-        yield return UntilClose(group);
+        // [1] LURE BOMB: a crowd of six from the nearest door; the moment the
+        // last one is out, the world waits for the bomb (even a fast typist
+        // has shot two or three at most, so a crowd is left for it).
+        yield return Calm(1f);
+        point = NearPoint();
+        group = Group(point, ZombieKind.Normal, 3, GroupLanes);
+        yield return new WaitForSeconds(0.9f);
+        group.AddRange(Group(point, ZombieKind.Normal, 3, GroupLanes));
+        yield return new WaitForSeconds(WalkOutSeconds);
         yield return OfferPower(HudFeature.Lure, "lure", "throw", Powers.LureCost,
             "LURE BOMB", "Pulls zombies together, then explodes.",
             touch ? new[] { GuideStep.Text("LURE", "TAP OR DRAG") }
                   : new[] { GuideStep.Key("1", "HOLD"), GuideStep.Arrows("AIM"), GuideStep.Key("1", "LET GO") });
         yield return Finish(group, "Keep shooting!");
 
-        // [2] FREEZE.
-        yield return new WaitForSeconds(1f);
+        // [2] FREEZE, only once the lure bomb has gone off and the dust settled.
+        yield return Calm(2.5f);
         group = Pair(ZombieKind.Normal);
         yield return new WaitForSeconds(WalkOutSeconds + 0.5f);
         yield return OfferPower(HudFeature.Freeze, "freeze", "use", Powers.FreezeCost,
@@ -289,7 +299,7 @@ public static class GuidedIntro
         yield return Finish(group, "Frozen! Shoot them now.");
 
         // [3] FRENZY: words far too long, made short.
-        yield return new WaitForSeconds(1f);
+        yield return Calm(1.5f);
         int[] doors = TwoDoors();
         group = new List<Zombie> { spawner.SpawnGuided(doors[0], ZombieKind.Normal, 0f, true), spawner.SpawnGuided(doors[1], ZombieKind.Normal, 0f, true) };
         group.RemoveAll(zombie => zombie == null);
@@ -300,8 +310,8 @@ public static class GuidedIntro
         yield return Finish(group, null); // the FRENZY popup says it already
 
         // [4] RPG: load it, then any finished word fires it into the group.
-        yield return new WaitForSeconds(1f);
-        group = Group(AwayFromBarrels(), ZombieKind.Normal, 3, GroupLanes);
+        yield return Calm(1.5f);
+        group = Group(NearPoint(), ZombieKind.Normal, 3, GroupLanes);
         yield return UntilClose(group);
         yield return OfferPower(HudFeature.Rpg, "rpg", "use", Powers.RocketCost,
             "RPG", "Loads a rocket. Your next word fires it.",
@@ -319,11 +329,14 @@ public static class GuidedIntro
         }
         yield return Finish(group, "Finish them off.");
 
-        // RED ZOMBIE, only once the field is clear: it walks in with two others.
-        yield return new WaitForSeconds(1.2f);
-        point = AwayFromBarrels();
+        // RED ZOMBIE, only once the RPG's group is gone and the field is
+        // clear: it walks in with three others right beside it (in its ring).
+        yield return Calm(2.5f);
+        point = NearPoint();
         Zombie red = spawner.SpawnGuided(point, ZombieKind.Explosive, 0.01f);
         group = new List<Zombie> { red, spawner.SpawnGuided(point, ZombieKind.Normal, -1.3f), spawner.SpawnGuided(point, ZombieKind.Normal, 1.3f) };
+        yield return new WaitForSeconds(0.7f);
+        group.Add(spawner.SpawnGuided(point, ZombieKind.Normal, 0.01f)); // right behind it
         group.RemoveAll(zombie => zombie == null);
         yield return UntilClose(group);
         if (red != null && red.IsAlive)
@@ -339,7 +352,7 @@ public static class GuidedIntro
         yield return Finish(group, "Finish them off.");
 
         // [TAB] SHIELD: two come close.
-        yield return new WaitForSeconds(1f);
+        yield return Calm(1.5f);
         group = Pair(ZombieKind.Normal);
         yield return new WaitForSeconds(WalkOutSeconds);
         float closeBy = Time.time + 10f;
@@ -420,6 +433,17 @@ public static class GuidedIntro
         view.HideLine();
     }
 
+    // Until nothing is left on the field (no zombie, no lure bomb still
+    // ticking), then a breather, so two lessons never overlap.
+    private static IEnumerator Calm(float seconds)
+    {
+        while (spawner.AliveZombies.Count > 0 || LureBomb.Active.Count > 0)
+        {
+            yield return null;
+        }
+        yield return new WaitForSeconds(seconds);
+    }
+
     // ---- Spawning ----
 
     // 'count' zombies side by side out of one spawn point.
@@ -480,6 +504,26 @@ public static class GuidedIntro
         return best;
     }
 
+    // The NEAREST spawn point in front of the player (within 40 degrees):
+    // a crowd from there is soon in reach of a quick lure bomb or rocket.
+    private static int NearPoint()
+    {
+        Encounter fight = spawner.CurrentEncounter;
+        List<SpawnPoint> points = fight.SpawnPoints;
+        int best = FrontPoint();
+        float bestDistance = float.MaxValue;
+        for (int i = 0; i < points.Count; i++)
+        {
+            Vector3 to = Flat(points[i].Exit - fight.StopPosition);
+            if (Vector3.Angle(to, fight.Facing) <= 40f && to.magnitude < bestDistance)
+            {
+                bestDistance = to.magnitude;
+                best = i;
+            }
+        }
+        return best;
+    }
+
     // The leftmost and rightmost spawn points as the player sees them.
     private static int[] TwoDoors()
     {
@@ -528,33 +572,6 @@ public static class GuidedIntro
                     best = barrel;
                     point = i;
                 }
-            }
-        }
-        return best;
-    }
-
-    // The spawn point whose walk passes farthest from every barrel still
-    // standing (a lure bomb or RPG there does not blow the barrels up).
-    private static int AwayFromBarrels()
-    {
-        Encounter fight = spawner.CurrentEncounter;
-        List<SpawnPoint> points = fight.SpawnPoints;
-        int best = FrontPoint();
-        float bestDistance = -1f;
-        for (int i = 0; i < points.Count; i++)
-        {
-            float nearest = float.MaxValue;
-            foreach (Barrel barrel in spawner.ActiveBarrels)
-            {
-                if (barrel != null && barrel.IsAlive) // only woken barrels can be blown up
-                {
-                    nearest = Mathf.Min(nearest, DistanceToPath(barrel.Position, points[i].Exit, fight.StopPosition));
-                }
-            }
-            if (nearest > bestDistance)
-            {
-                bestDistance = nearest;
-                best = i;
             }
         }
         return best;
@@ -628,11 +645,38 @@ public static class GuidedIntro
         return false;
     }
 
-    private static bool NearBarrel(List<Zombie> group, Barrel barrel)
+    // Every zombie of the group still alive stands well inside the barrel's ring.
+    private static bool AllNearBarrel(List<Zombie> group, Barrel barrel)
     {
+        bool any = false;
         foreach (Zombie zombie in group)
         {
-            if (zombie != null && zombie.IsAlive && Flat(zombie.Position - barrel.Position).magnitude <= Barrel.BlastRadius * 0.75f)
+            if (zombie != null && zombie.IsAlive)
+            {
+                if (Flat(zombie.Position - barrel.Position).magnitude > Barrel.BlastRadius * 0.8f)
+                {
+                    return false;
+                }
+                any = true;
+            }
+        }
+        return any;
+    }
+
+    // One of the group is inside the ring but already past the barrel (it is
+    // about to walk out of it toward the player): hold now or never.
+    private static bool LeavingRing(List<Zombie> group, Barrel barrel)
+    {
+        float barrelToPlayer = Flat(barrel.Position - spawner.PlayerPosition).magnitude;
+        foreach (Zombie zombie in group)
+        {
+            if (zombie == null || !zombie.IsAlive)
+            {
+                continue;
+            }
+            float inside = Flat(zombie.Position - barrel.Position).magnitude;
+            float toPlayer = Flat(zombie.Position - spawner.PlayerPosition).magnitude;
+            if (inside <= Barrel.BlastRadius * 0.8f && toPlayer < barrelToPlayer - Barrel.BlastRadius * 0.5f)
             {
                 return true;
             }

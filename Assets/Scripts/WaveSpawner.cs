@@ -356,6 +356,8 @@ public class WaveSpawner : MonoBehaviour
     private const float LabelSwitchBand = 15f;                   // HUD units: dead band for StackUp (more than the camera's breathing plus one letter's kick)
 
     private readonly List<ITypingTarget> labelOrder = new List<ITypingTarget>();
+    private readonly Dictionary<ITypingTarget, int> labelSeq = new Dictionary<ITypingTarget, int>(); // when each word first appeared
+    private int nextLabelSeq;
     private readonly List<Rect> placedLabels = new List<Rect>();
 
     // How far each word is currently pushed up. A word not in here yet (just
@@ -407,16 +409,40 @@ public class WaveSpawner : MonoBehaviour
         labelOrder.Clear();
         labelOrder.AddRange(GetTypingTargets());
         labelOrder.RemoveAll(target => target is IScreenWord); // the HUD draws these in their own place
+        // A STABLE order: the word being typed first, then every word in the
+        // order it first appeared (older ones are usually nearer). Sorting by
+        // distance made two words at about the same distance swap places
+        // every few frames, and the pile of words shuffled around.
+        foreach (ITypingTarget target in labelOrder)
+        {
+            if (!labelSeq.ContainsKey(target))
+            {
+                labelSeq[target] = nextLabelSeq++;
+            }
+        }
         labelOrder.Sort((a, b) =>
         {
             if (a.IsTargeted != b.IsTargeted)
             {
                 return a.IsTargeted ? -1 : 1;
             }
-            float distanceA = (a.LabelAnchor - cameraPosition).sqrMagnitude;
-            float distanceB = (b.LabelAnchor - cameraPosition).sqrMagnitude;
-            return distanceA.CompareTo(distanceB);
+            return labelSeq[a].CompareTo(labelSeq[b]);
         });
+        if (labelSeq.Count > labelOrder.Count + 32)
+        {
+            List<ITypingTarget> gone = new List<ITypingTarget>();
+            foreach (ITypingTarget known in labelSeq.Keys)
+            {
+                if (!labelOrder.Contains(known))
+                {
+                    gone.Add(known);
+                }
+            }
+            foreach (ITypingTarget known in gone)
+            {
+                labelSeq.Remove(known);
+            }
+        }
 
         placedLabels.Clear();
         nextLabelLifts.Clear();
@@ -530,7 +556,7 @@ public class WaveSpawner : MonoBehaviour
             moved = false;
             foreach (Rect placed in placedLabels)
             {
-                if (pushed.Overlaps(placed))
+                if (Padded(pushed).Overlaps(placed))
                 {
                     pushed.y = placed.yMax + labelGap;
                     moved = true;
@@ -696,11 +722,18 @@ public class WaveSpawner : MonoBehaviour
         }
     }
 
+    // A word's box with room around it: side by side, two words always keep
+    // a clear gap (with none, "love" "faith" read as "lovefaith").
+    private static Rect Padded(Rect rect)
+    {
+        return new Rect(rect.x - LabelSideGap * 0.5f, rect.y, rect.width + LabelSideGap, rect.height);
+    }
+
     private bool OverlapsPlaced(Rect rect)
     {
         foreach (Rect placed in placedLabels)
         {
-            if (rect.Overlaps(placed))
+            if (Padded(rect).Overlaps(placed))
             {
                 return true;
             }
@@ -1219,6 +1252,7 @@ public class WaveSpawner : MonoBehaviour
     private IEnumerator RunZombieWave(int wave, Encounter encounter)
     {
         extraZombiesThisWave = 0;
+        spreadApproach = true; // this wave's zombies come in on curves to spots of their own (AssignApproach)
         // 1. This wave's numbers. Wave 1 uses the base values.
         // ADAPTIVE DIFFICULTY: slower typists get a smaller wave (never under 3);
         // faster ones get extra zombies at the end instead (ExtraZombies, below).
@@ -1345,6 +1379,53 @@ public class WaveSpawner : MonoBehaviour
         {
             yield return null;
         }
+        spreadApproach = false;
+    }
+
+    // ---- Spreading a wave out ----
+    // Each zombie of a wave gets the free BEARING (direction from the player,
+    // left / right of where they face) farthest from every other zombie's,
+    // leaning toward its own door's side so the paths do not all cross, and
+    // every other one stands a row further back. They walk there on a curve
+    // (Zombie.ApproachGoal), so a wave fans out in front of the player.
+
+    private bool spreadApproach;          // true while a normal wave runs (not the guided wave, the boss or a ride)
+    private const float FanHalfWidth = 40f;  // degrees left / right of straight ahead (the screen shows about 45)
+    private const float BackRow = 1.8f;      // metres further back for the second row
+    private int approachCount;
+
+    private void AssignApproach(Zombie zombie, Vector3 door)
+    {
+        if (!spreadApproach || CurrentEncounter == null || zombie.Kind == ZombieKind.Spitter)
+        {
+            return;
+        }
+        Vector3 facing = CurrentEncounter.Facing;
+        Vector3 toDoor = door - player.position;
+        toDoor.y = 0f;
+        float doorSide = Mathf.Clamp(Vector3.SignedAngle(facing, toDoor, Vector3.up), -FanHalfWidth, FanHalfWidth);
+
+        float best = doorSide;
+        float bestScore = float.MinValue;
+        for (float bearing = -FanHalfWidth; bearing <= FanHalfWidth + 0.01f; bearing += 5f)
+        {
+            float nearest = 180f;
+            foreach (Zombie other in aliveZombies)
+            {
+                if (other != zombie && other != null && other.IsAlive && other.HasApproach)
+                {
+                    nearest = Mathf.Min(nearest, Mathf.Abs(Mathf.DeltaAngle(bearing, other.ApproachBearing)));
+                }
+            }
+            float score = Mathf.Min(nearest, 60f) - 0.25f * Mathf.Abs(bearing - doorSide);
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = bearing;
+            }
+        }
+        approachCount += 1;
+        zombie.SetApproach(best, approachCount % 2 == 0 ? BackRow : 0f);
     }
 
     // The order new kinds are introduced in (the easiest first).
@@ -1379,6 +1460,24 @@ public class WaveSpawner : MonoBehaviour
                 point.Door.BurstOpen();
             }
             SpawnZombie(point, kind, speed);
+
+            // Never a lesson on its own: two normal zombies come from another door too.
+            SpawnPoint other = OtherSidePoint(point, points, encounter);
+            if (other == null && points.Count > 1)
+            {
+                other = points[door % points.Count];
+            }
+            if (other != null)
+            {
+                yield return new WaitForSeconds(1.5f);
+                if (other.Door != null)
+                {
+                    other.Door.BurstOpen();
+                }
+                SpawnZombieInLane(other, ZombieKind.Normal, speed, -PackLaneWidth * 0.5f);
+                yield return new WaitForSeconds(PackStagger);
+                SpawnZombieInLane(other, ZombieKind.Normal, speed, PackLaneWidth * 0.5f);
+            }
             yield return UntilFieldClear();
         }
         if (hasChain && !chainSeen)
@@ -1726,6 +1825,7 @@ public class WaveSpawner : MonoBehaviour
         zombie.Setup(word, speed, player, this, kind, exit);
         aliveZombies.Add(zombie);
         seenKinds.Add(kind);
+        AssignApproach(zombie, exit);
 
         // Born during a FRENZY: a short word right away (its real word comes back with the others).
         if (Powers.IsFrenzy)
