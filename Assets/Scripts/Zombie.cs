@@ -43,7 +43,8 @@
 // little. When it dies, the capsule is knocked over (see Corpse).
 //
 // A zombie that REACHES the player does not go away: it stays right there and
-// bites again every BiteInterval seconds until it is shot, blown up (barrel,
+// bites again every few seconds (BaseBiteInterval, adaptive) from a few metres
+// away (its stand-off) until it is shot, blown up (barrel,
 // red zombie, RPG, lure bomb) or lured away by a lure bomb. Freeze stops it.
 //
 // THE WORD is not part of the 3D scene: it is a HUD text (HUD.CreateWordLabel)
@@ -448,10 +449,10 @@ public class Zombie : MonoBehaviour, ITypingTarget
             {
                 goal = player.position;
                 chasingPlayer = true;
-                if (Kind == ZombieKind.Spitter)
-                {
-                    stopDistance = SpitRange; // it stops at a distance and spits from there
-                }
+                // It stops a few metres away and attacks from there (a spitter
+                // from much farther): right in front of the camera its word
+                // would be pushed off the top of the screen and jump around.
+                stopDistance = Kind == ZombieKind.Spitter ? SpitRange : StandOffDistance;
             }
         }
 
@@ -483,7 +484,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         }
 
         // 3. Close enough to bite (or to bounce off the shield).
-        if (chasingPlayer && FlatDistance(transform.position, player.position) <= attackDistance)
+        if (chasingPlayer && FlatDistance(transform.position, player.position) <= BiteRange)
         {
             if (Powers.IsShielded)
             {
@@ -878,20 +879,53 @@ public class Zombie : MonoBehaviour, ITypingTarget
     // Text colour of the "WORD SHIFT!" popup (the shifter's purple, lighter).
     private static readonly Color ShifterColor = new Color(0.8f, 0.4f, 1f);
 
-    // At the player: it STAYS and keeps biting, one bite every BiteInterval
-    // seconds (the first one at once), until it is killed or lured away.
-    private const float BiteInterval = 1.5f;
-    private const float BiteRecoil = 0.35f;  // metres it rocks back after each bite (it then steps in again)
-    private float nextBiteTime;
+    // STAND-OFF: in first person a zombie chasing the player stops this far away
+    // (big ones farther: their words sit higher) and attacks from there. In
+    // the map view (seen from above) it may walk right up: attackDistance.
+    private const float StandOff = 3f;
+    private const float BigStandOff = 4f;
+    private const float BiteReach = 0.6f;    // it bites from up to this far beyond its stand-off
+
+    private float StandOffDistance
+    {
+        get
+        {
+            if (CameraDirector.MapBlend > 0.5f)
+            {
+                return attackDistance;
+            }
+            return Kind == ZombieKind.Brute || Kind == ZombieKind.Explosive ? BigStandOff : StandOff;
+        }
+    }
+
+    private float BiteRange
+    {
+        get { return CameraDirector.MapBlend > 0.5f ? attackDistance : StandOffDistance + BiteReach; }
+    }
+
+    // At the player: it STAYS and keeps biting until it is killed or lured away,
+    // with a breather between bites: the first bite comes FirstBiteDelay after
+    // it arrives, then one every BaseBiteInterval seconds, faster or slower
+    // with the player's typing speed (DynamicDifficulty.AttackRateFactor). The
+    // timer only runs while it is free to bite (not frozen).
+    private const float BaseBiteInterval = 2.5f;
+    private const float FirstBiteDelay = 1f;
+    private const float BiteRecoil = 0.25f;  // metres it rocks back after each bite (it then steps in again)
+    private float biteTimer = -1f;           // below 0: it has not reached the player yet
     private int bites;
 
     private void Attack()
     {
-        if (Time.time < nextBiteTime)
+        if (biteTimer < 0f)
+        {
+            biteTimer = FirstBiteDelay; // just arrived: a moment before the first bite
+        }
+        biteTimer -= Time.deltaTime * DynamicDifficulty.AttackRateFactor;
+        if (biteTimer > 0f)
         {
             return;
         }
-        nextBiteTime = Time.time + BiteInterval;
+        biteTimer = BaseBiteInterval;
         bites += 1;
         GameManager.Instance.TakeDamage(BiteDamage, IsAmbusher, BiteEvent(), this);
 

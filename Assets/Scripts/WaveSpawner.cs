@@ -72,6 +72,9 @@ public class WaveSpawner : MonoBehaviour
     [SerializeField] private int chainStartCount = 1;           // pairs in chainFirstWave
     [SerializeField] private int chainPerWave = 1;              // one more pair in every later wave
 
+    [Header("Onboarding")]
+    [SerializeField] private bool guidedFirstWave = false; // Normal only: wave 1 teaches the game (GuidedIntro)
+
     [Header("Boss")]
     [SerializeField] private string bossName = "SUBJECT ZERO";
 
@@ -846,6 +849,14 @@ public class WaveSpawner : MonoBehaviour
             Analytics.Send(waveEnd);
             Analytics.FlushSoon();
 
+            // ADAPTIVE DIFFICULTY: wave 1 was the measurement; from now on the
+            // zombies follow the player's speed (said on the ride to wave 2).
+            if (DynamicDifficulty.HoldingFirstWave)
+            {
+                float wpm = DynamicDifficulty.ApplyNow();
+                ShowAfterFirstWave(wpm, index + 1 < count);
+            }
+
             // 3. Cleared: the next gate opens.
             DeactivateProps();
             if (encounter.ExitGate != null)
@@ -856,6 +867,26 @@ public class WaveSpawner : MonoBehaviour
         }
 
         GameManager.Instance.WinGame();
+    }
+
+    // The message on the ride after wave 1: the measured speed (when the
+    // adaptive difficulty is on) and, where the level teaches the game
+    // (guidedFirstWave), that there is more to discover.
+    private void ShowAfterFirstWave(float wpm, bool moreWaves)
+    {
+        if (!moreWaves)
+        {
+            return;
+        }
+        string text = DynamicDifficulty.Enabled ? "Tuned to your speed: " + Mathf.RoundToInt(wpm) + " WPM" : "";
+        if (guidedFirstWave)
+        {
+            text += (text.Length > 0 ? "\n" : "") + "Keep playing to discover new kinds of zombies";
+        }
+        if (text.Length > 0)
+        {
+            hud.ShowHint(text, 6f);
+        }
     }
 
     // ---- Ambush on the run ----
@@ -1073,7 +1104,9 @@ public class WaveSpawner : MonoBehaviour
     {
         extraZombiesThisWave = 0;
         // 1. This wave's numbers. Wave 1 uses the base values.
-        int zombiesThisWave = zombiesBase + zombiesPerWave * wave;
+        // ADAPTIVE DIFFICULTY: slower typists get a smaller wave (never under 3);
+        // faster ones get extra zombies at the end instead (ExtraZombies, below).
+        int zombiesThisWave = Mathf.Max(3, Mathf.RoundToInt((zombiesBase + zombiesPerWave * wave) * DynamicDifficulty.DensityFactor));
         float speed = zombieSpeed + zombieSpeedPerWave * (wave - 1);
         float interval = spawnInterval - spawnIntervalPerWave * (wave - 1);
         if (interval < MinSpawnInterval)

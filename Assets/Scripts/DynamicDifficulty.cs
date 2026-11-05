@@ -70,8 +70,12 @@
 //                                           tend to get the shorter of two
 //                                           words, faster ones the longer
 //    LongWordChance      fast typists only  some normal zombies carry long words
-//    For players at or below the reference speed the number of zombies never
-//    changes: the level is as long as designed, it just comes slower.
+//    AttackRateFactor    2^(0.45 x level)   how often a zombie at the player bites
+//    DamageFactor        2^(0.3 x level)    every hit the player takes (GameManager)
+//    DensityFactor       2^(0.35 x level)   slower typists only: fewer zombies per wave
+//
+// 6. WAVE 1: the level is held at the first guess while the first wave is
+//    measured, then ApplyNow sets it once wave 1 is over (WaveSpawner).
 //
 // Static (like TypingSettings) so the measured speed carries over from one
 // level to the next and to a Restart in the same session.
@@ -143,6 +147,9 @@ public static class DynamicDifficulty
     private const float TrackingRate = 0.08f;       // ...and after
     private const float DeadBand = 0.04f;
 
+    private const float AttackExponent = 0.45f;   // bites per second: x0.66 at level -1, x1.5 at +1
+    private const float DamageExponent = 0.3f;    // damage per hit:   x0.8 at -1, x1.25 at +1
+    private const float DensityExponent = 0.35f;  // wave size (below 0 only): x0.78 at -1
     private const float PaceExponent = 0.42f;       // below level 0 (slower typists)...
     private const float PaceExponentUp = 0.55f;     // ...and above it (faster typists)
     private const float SpawnExponent = -0.32f;
@@ -228,6 +235,61 @@ public static class DynamicDifficulty
         get { return Mathf.Clamp(LengthBiasSlope * level, -1f, 1f); }
     }
 
+    // Zombie ATTACKS: a zombie standing at the player bites once every
+    // (base interval / this) seconds - slower typists get a longer breather.
+    public static float AttackRateFactor
+    {
+        get { return Mathf.Pow(2f, AttackExponent * level); }
+    }
+
+    // Every hit the player takes is multiplied by this (GameManager.TakeDamage).
+    public static float DamageFactor
+    {
+        get { return Mathf.Pow(2f, DamageExponent * level); }
+    }
+
+    // Slower typists only: a wave's base number of zombies is multiplied by this
+    // (faster typists get ExtraZombies / PackBonus on top instead).
+    public static float DensityFactor
+    {
+        get { return level < 0f ? Mathf.Pow(2f, DensityExponent * level) : 1f; }
+    }
+
+    // ---- Wave 1: measure first, then apply ----
+    // During the first wave of a level the level is HELD at the first guess
+    // (a little gentle) while the player's typing is measured; at the end of
+    // the wave ApplyNow sets it from the measured speed in one step (between
+    // waves, so nothing changes in the middle of a fight), and from then on it
+    // keeps following the player.
+
+    private static bool firstWaveHeld;
+    private static float heldLevel;
+
+    public static bool HoldingFirstWave
+    {
+        get { return firstWaveHeld; }
+    }
+
+    // Called by WaveSpawner when wave 1 is over. Returns the measured WPM.
+    public static float ApplyNow()
+    {
+        if (measuredChars >= 5 && !Calibrated)
+        {
+            FinishCalibration(); // whatever was typed in wave 1 is the measurement (still held: no hint)
+        }
+        firstWaveHeld = false;
+        level = Enabled ? TargetLevel() : 0f;
+        converged = true;
+
+        AnalyticsEvent e = Analytics.NewEvent("dda_applied");
+        e.Add("dda_wpm", EstimatedWpm);
+        e.Add("dda_level", level);
+        e.Add("characters", measuredChars);
+        e.Add("on", Enabled);
+        Analytics.Send(e);
+        return EstimatedWpm;
+    }
+
     // Fast typists only: extra zombies for a wave of 'waveSize' (0 at or below the reference speed).
     public static int ExtraZombies(int waveSize)
     {
@@ -264,6 +326,8 @@ public static class DynamicDifficulty
         hadTargets = false;
         lastKeyTime = Time.time;
         level = Enabled && EasyTutorial.Active == null ? TargetLevel() : 0f;
+        heldLevel = level;      // the first guess (40 WPM, or this session's last speed)
+        firstWaveHeld = true;   // until WaveSpawner calls ApplyNow after wave 1
     }
 
     // Every frame of play (TypingController). anyTargets: something can be typed now.
@@ -279,6 +343,12 @@ public static class DynamicDifficulty
         hadTargets = anyTargets;
 
         damagePenalty *= Mathf.Pow(0.5f, deltaTime / DamageHalfLifeSeconds);
+
+        if (firstWaveHeld)
+        {
+            level = Enabled ? heldLevel : 0f; // measuring only (keys still count, see OnCorrectKey)
+            return;
+        }
 
         float target = Enabled ? TargetLevel() : 0f;
         float difference = target - level;
@@ -376,7 +446,7 @@ public static class DynamicDifficulty
         e.Add("on", Enabled);
         Analytics.Send(e);
 
-        if (Enabled)
+        if (Enabled && !firstWaveHeld) // in wave 1 the ride to wave 2 says it instead (WaveSpawner)
         {
             Tutorial.Once("dda", "AUTO DIFFICULTY: tuned to your speed (about "
                 + Mathf.RoundToInt(EstimatedWpm) + " WPM). Change it in SETTINGS (pause with Esc).", 5f);

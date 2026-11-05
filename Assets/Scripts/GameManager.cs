@@ -547,6 +547,10 @@ public class GameManager : MonoBehaviour
             return;
         }
 
+        // ADAPTIVE DIFFICULTY: every hit is a little lighter for slower typists
+        // and a little heavier for faster ones (bites, spit, boss orbs alike).
+        amount = Mathf.Max(1, Mathf.RoundToInt(amount * DynamicDifficulty.DamageFactor));
+
         // The shield (Tab) blocks every hit while it is up.
         if (Powers.IsShielded)
         {
