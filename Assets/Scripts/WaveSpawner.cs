@@ -716,6 +716,33 @@ public class WaveSpawner : MonoBehaviour
         Analytics.FlushSoon();
     }
 
+    // ---- Guided first wave (GuidedIntro) ----
+
+    // A zombie out of the current fight's spawn point number 'point' (doors
+    // burst open as usual), at the wave's normal speed. lane: metres to the
+    // side, for a group walking side by side. longWord: a long word (FRENZY).
+    public Zombie SpawnGuided(int point, ZombieKind kind, float lane = 0f, bool longWord = false)
+    {
+        List<SpawnPoint> points = CurrentEncounter.SpawnPoints;
+        SpawnPoint spawnPoint = points[Mathf.Abs(point) % points.Count];
+        if (spawnPoint.Door != null)
+        {
+            spawnPoint.Door.BurstOpen();
+        }
+        if (longWord)
+        {
+            List<char> used = UsedFirstLetters();
+            return SpawnZombie(spawnPoint, kind, zombieSpeed, TypingSettings.Style(WordBank.PickWord(used, ZombieKind.Explosive), used));
+        }
+        return lane == 0f ? SpawnZombie(spawnPoint, kind, zombieSpeed) : SpawnZombieInLane(spawnPoint, kind, zombieSpeed, lane);
+    }
+
+    // True when this level's first wave teaches the game (set in Normal only).
+    public bool GuidedFirstWave
+    {
+        get { return guidedFirstWave; }
+    }
+
     public Zombie SpawnTrainingTarget(string word, float distance, float lane, float speed)
     {
         Vector3 forward = CurrentEncounter.Facing;
@@ -771,6 +798,11 @@ public class WaveSpawner : MonoBehaviour
     // and Unity continues it later (after the wait is over, or on the next frame).
     private IEnumerator RunLevel()
     {
+        // Normal: the HUD starts empty and wave 1 teaches the game (unless skipped).
+        if (guidedFirstWave)
+        {
+            GuidedIntro.Begin(this, hud);
+        }
         int count = level.Encounters.Count;
 
         for (int index = 0; index < count; index++)
@@ -830,6 +862,10 @@ public class WaveSpawner : MonoBehaviour
             if (encounter.IsBossFight)
             {
                 yield return RunBossFight(encounter);
+            }
+            else if (wave == 1 && GuidedIntro.Running)
+            {
+                yield return GuidedIntro.RunGuidedWave(); // Normal: wave 1 teaches the game, one thing at a time
             }
             else
             {

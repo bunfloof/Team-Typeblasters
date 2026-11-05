@@ -142,6 +142,12 @@ public class HUD : MonoBehaviour
         {
             SetFlashAlpha(0f);
         }
+        HudReveal.Revealed += RevealFeature;
+    }
+
+    private void OnDestroy()
+    {
+        HudReveal.Revealed -= RevealFeature;
     }
 
     private void Update()
@@ -209,6 +215,205 @@ public class HUD : MonoBehaviour
                 && EasyTutorial.Active.CurrentLesson != 2 && !string.IsNullOrEmpty(targetWordText.text));
             tipsToggle.gameObject.SetActive(false);
         }
+        else if (HudReveal.Gated)
+        {
+            ApplyHudReveal();
+        }
+    }
+
+    // ---- Guided first wave: the HUD appears piece by piece (HudReveal) ----
+
+    private Transform healthLabel;      // the scene's "Health Label" (found once)
+    private bool healthLabelSearched;
+
+    private Transform HealthLabel
+    {
+        get
+        {
+            if (!healthLabelSearched)
+            {
+                healthLabelSearched = true;
+                healthLabel = wordLayer.parent.Find("Health Label");
+            }
+            return healthLabel;
+        }
+    }
+
+    // Shows only the parts of the HUD the guided intro has introduced so far.
+    private void ApplyHudReveal()
+    {
+        bool health = HudReveal.IsShown(HudFeature.Health);
+        bool energy = HudReveal.IsShown(HudFeature.Energy);
+        bool combo = HudReveal.IsShown(HudFeature.Combo);
+        SetShown(waveText.gameObject, HudReveal.IsShown(HudFeature.Wave));
+        SetShown(scoreText.gameObject, HudReveal.IsShown(HudFeature.Score));
+        SetShown(healthBar.gameObject, health);
+        if (HealthLabel != null) SetShown(HealthLabel.gameObject, health);
+        if (comboPlate != null) SetShown(comboPlate.gameObject, combo || energy);
+        if (comboText != null) SetShown(comboText.gameObject, combo);
+        if (comboRewardText != null) SetShown(comboRewardText.gameObject, energy);
+        if (comboRewardBar != null) SetShown(comboRewardBar.gameObject, energy);
+        if (powersPanel != null)
+        {
+            bool anyPower = false;
+            for (int row = 0; row < PowerCount; row++)
+            {
+                bool shown = HudReveal.IsShown(RowFeature(row));
+                SetShown(powerRows[row].gameObject, shown);
+                anyPower |= shown;
+            }
+            SetShown(powersPanel.gameObject, anyPower && !TouchControls.Active);
+        }
+        if (shieldRow != null) SetShown(shieldRow.gameObject, HudReveal.IsShown(HudFeature.Shield));
+        SetShown(targetWordText.transform.parent.gameObject, !string.IsNullOrEmpty(targetWordText.text)); // no empty box
+    }
+
+    // The guided intro is over (or was skipped): every piece of the HUD is shown.
+    public void ShowWholeHud()
+    {
+        SetShown(waveText.gameObject, true);
+        SetShown(scoreText.gameObject, true);
+        SetShown(healthBar.gameObject, true);
+        if (HealthLabel != null) SetShown(HealthLabel.gameObject, true);
+        if (comboPlate != null) SetShown(comboPlate.gameObject, true);
+        if (comboText != null) SetShown(comboText.gameObject, true);
+        if (comboRewardText != null) SetShown(comboRewardText.gameObject, true);
+        if (comboRewardBar != null) SetShown(comboRewardBar.gameObject, true);
+        if (powersPanel != null)
+        {
+            for (int row = 0; row < PowerCount; row++) SetShown(powerRows[row].gameObject, true);
+            SetShown(powersPanel.gameObject, !TouchControls.Active);
+        }
+        if (shieldRow != null) SetShown(shieldRow.gameObject, true);
+    }
+
+    // Where a feature sits on screen (the guided intro puts its message next to it).
+    public RectTransform FeatureRect(HudFeature feature)
+    {
+        switch (feature)
+        {
+            case HudFeature.Health: return (RectTransform)healthBar.transform;
+            case HudFeature.Score: return scoreText.rectTransform;
+            case HudFeature.Wave: return waveText.rectTransform;
+            case HudFeature.Combo: return comboPlate;
+            case HudFeature.Energy: return comboRewardText != null ? comboRewardText.rectTransform : comboPlate;
+            case HudFeature.Shield: return shieldRow;
+            default: return powersPanel != null ? powerRows[RowOf(feature)] : null;
+        }
+    }
+
+    private static void SetShown(GameObject target, bool shown)
+    {
+        if (target.activeSelf != shown)
+        {
+            target.SetActive(shown);
+        }
+    }
+
+    private static HudFeature RowFeature(int row)
+    {
+        return row == 0 ? HudFeature.Lure : row == 1 ? HudFeature.Freeze
+            : row == FrenzyRow ? HudFeature.Frenzy : HudFeature.Rpg;
+    }
+
+    private static int RowOf(HudFeature feature)
+    {
+        return feature == HudFeature.Lure ? 0 : feature == HudFeature.Freeze ? 1
+            : feature == HudFeature.Frenzy ? FrenzyRow : RocketRow;
+    }
+
+    // A feature has just been introduced: it pops in, flashes, and a small
+    // NEW floats off it (HudReveal.Revealed).
+    private void RevealFeature(HudFeature feature)
+    {
+        ApplyHudReveal(); // visible from this very frame
+        switch (feature)
+        {
+            case HudFeature.Health:
+                StartCoroutine(PopIn(healthBar.transform));
+                break;
+            case HudFeature.Score:
+                StartCoroutine(PopIn(scoreText.transform));
+                break;
+            case HudFeature.Wave:
+                StartCoroutine(PopIn(waveText.transform));
+                break;
+            case HudFeature.Combo:
+                comboPopTimer = ComboPopSeconds * 3f;
+                if (comboPlate != null) ShowNewTag(comboPlate, new Vector2(ComboPlateSize.x * 0.5f + 40f, -40f));
+                break;
+            case HudFeature.Energy:
+                if (comboRewardText != null)
+                {
+                    StartCoroutine(PopIn(comboRewardText.transform));
+                    ShowNewTag(comboRewardText.rectTransform, new Vector2(160f, 0f));
+                }
+                break;
+            case HudFeature.Shield:
+                if (shieldRow != null)
+                {
+                    StartCoroutine(RepeatPulse(-1));
+                    ShowNewTag(shieldRow, new Vector2(PowerPipsX + 60f, 0f));
+                }
+                break;
+            default:
+                if (powersPanel != null)
+                {
+                    int row = RowOf(feature);
+                    StartCoroutine(RepeatPulse(row));
+                    ShowNewTag(powerRows[row], new Vector2(PowerPipsX + 60f, 0f));
+                }
+                break;
+        }
+    }
+
+    // Three pulses in a row (row -1 = the shield row), so a new power is noticed.
+    private System.Collections.IEnumerator RepeatPulse(int row)
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            if (row < 0) PulseShield(); else PulseRow(row);
+            yield return new WaitForSecondsRealtime(powerPulseSeconds + 0.08f);
+        }
+    }
+
+    // From big to its normal size, with a little overshoot.
+    private static System.Collections.IEnumerator PopIn(Transform target)
+    {
+        const float Seconds = 0.45f;
+        for (float time = 0f; time < Seconds; time += Time.unscaledDeltaTime)
+        {
+            float t = time / Seconds;
+            float back = 1f + 2.2f * Mathf.Pow(t - 1f, 3f) + 1.2f * Mathf.Pow(t - 1f, 2f); // ease-out-back, 0 -> 1
+            float scale = Mathf.LerpUnclamped(1.8f, 1f, back);
+            target.localScale = new Vector3(scale, scale, 1f);
+            yield return null;
+        }
+        target.localScale = Vector3.one;
+    }
+
+    // A small "NEW" next to a just-introduced piece of the HUD; it rises and fades.
+    private void ShowNewTag(RectTransform anchor, Vector2 offset)
+    {
+        TMP_Text tag = CreateText(anchor, "New Tag", "NEW", 26f, offset);
+        tag.rectTransform.sizeDelta = new Vector2(90f, 34f);
+        tag.fontStyle = FontStyles.Bold;
+        tag.color = new Color(1f, 0.85f, 0.25f);
+        tag.fontSharedMaterial = OutlineMaterial(tag);
+        StartCoroutine(RiseAndFade(tag, offset));
+    }
+
+    private static System.Collections.IEnumerator RiseAndFade(TMP_Text text, Vector2 start)
+    {
+        const float Seconds = 1.6f;
+        for (float time = 0f; time < Seconds; time += Time.unscaledDeltaTime)
+        {
+            float progress = time / Seconds;
+            text.rectTransform.anchoredPosition = start + Vector2.up * 40f * progress;
+            text.alpha = 1f - progress * progress;
+            yield return null;
+        }
+        Destroy(text.gameObject);
     }
 
     // ---- Readouts ----

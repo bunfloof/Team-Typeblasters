@@ -407,6 +407,13 @@ public class Zombie : MonoBehaviour, ITypingTarget
             return;
         }
 
+        // The guided first wave holds the world while it explains something:
+        // zombies wait (no walking, biting or spitting), everything else runs.
+        if (GuidedIntro.Holding)
+        {
+            return;
+        }
+
         // SHIFTER: a new word every few seconds. Never replaces a partially typed
         // word or one with a killing shot in flight (typing it locks it).
         if (Kind == ZombieKind.Shifter && realWord == null && !IsWordComplete)

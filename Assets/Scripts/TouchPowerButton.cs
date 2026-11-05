@@ -35,6 +35,25 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
         Shield
     }
 
+    private bool hiddenByIntro;
+    private float revealTime = -100f;
+
+    // The HUD feature that shows this button (HudReveal).
+    private HudFeature Feature
+    {
+        get
+        {
+            switch (power)
+            {
+                case Power.Lure: return HudFeature.Lure;
+                case Power.Freeze: return HudFeature.Freeze;
+                case Power.Frenzy: return HudFeature.Frenzy;
+                case Power.Rocket: return HudFeature.Rpg;
+                default: return HudFeature.Shield;
+            }
+        }
+    }
+
     private const float DragDeadZone = 35f;    // canvas units the finger must move before the drag steers
     private const float PressedScale = 1.04f;
     private const float DimmedAlpha = 0.45f;   // nothing to use and nothing to buy
@@ -144,6 +163,21 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
             group.blocksRaycasts = false;
             return; // the contextual key card replaces the five-button toolbar
         }
+        // Guided first wave: a button appears only once its power is introduced, with a pop.
+        if (!HudReveal.IsShown(Feature))
+        {
+            group.alpha = 0f;
+            group.blocksRaycasts = false;
+            hiddenByIntro = true;
+            return;
+        }
+        if (hiddenByIntro)
+        {
+            hiddenByIntro = false;
+            revealTime = Time.unscaledTime;
+        }
+        float reveal = Mathf.Clamp01((Time.unscaledTime - revealTime) / 0.45f);
+        transform.localScale = Vector3.one * (1f + (reveal < 1f ? Mathf.Sin(reveal * Mathf.PI) * 0.35f : 0f));
         group.blocksRaycasts = true;
         // The button changed size (the phone turned): lay the texts out again.
         if (((RectTransform)transform).rect.size != laidOutSize)

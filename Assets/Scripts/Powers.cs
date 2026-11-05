@@ -300,6 +300,7 @@ public class Powers : MonoBehaviour
         GameManager game = GameManager.Instance;
         if (game.State != GameState.Playing) return;
         if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower(rocket ? "rpg" : "frenzy")) return;
+        if (!HudReveal.PowerAllowed(rocket ? "rpg" : "frenzy")) return; // the guided intro has not shown it yet
         string item = rocket ? "rpg" : "frenzy";
         if (rocket ? RocketLoaded : IsFrenzy)
         {
@@ -468,6 +469,7 @@ public class Powers : MonoBehaviour
     {
         if (GameManager.Instance.State != GameState.Playing || aiming) return;
         if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower("lure")) return;
+        if (!HudReveal.PowerAllowed("lure")) return; // the guided intro has not shown it yet
         if (GameManager.Instance.SkillEnergy < LureCost)
         {
             hud.ShowHint(LureCost + " ENERGY NEEDED",2f);
@@ -577,6 +579,7 @@ public class Powers : MonoBehaviour
     {
         if (GameManager.Instance.State != GameState.Playing) return;
         if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower("freeze")) return;
+        if (!HudReveal.PowerAllowed("freeze")) return; // the guided intro has not shown it yet
         if (IsFrozen)
         {
             hud.ShowHint("FREEZE ACTIVE",1.5f);
@@ -608,6 +611,7 @@ public class Powers : MonoBehaviour
     public void TryUseShield()
     {
         if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower("shield")) return;
+        if (!HudReveal.PowerAllowed("shield")) return; // the guided intro has not shown it yet
         if (GameManager.Instance.State != GameState.Playing)
         {
             return;

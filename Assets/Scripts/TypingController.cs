@@ -259,6 +259,13 @@ public class TypingController : MonoBehaviour
             return;
         }
 
+        // ---- 3b. Guided first wave (Normal): Enter continues a message, or
+        //          skips the whole intro while that is still offered ----
+        if (enterPressed && GuidedIntro.Running)
+        {
+            GuidedIntro.OnEnter();
+        }
+
         // ADAPTIVE DIFFICULTY: measures typing only while there is something to type.
         DynamicDifficulty.Tick(Time.deltaTime, spawner.GetTypingTargets().Count > 0);
 
@@ -369,6 +376,13 @@ public class TypingController : MonoBehaviour
             bool isLetter = upper >= 'A' && upper <= 'Z';
             if (!isLetter && !SymbolsMatter())
             {
+                continue;
+            }
+            // Guided first wave: while a message waits for a power key, words
+            // wait too (ignored, never a wrong key; the key on screen bounces).
+            if (GuidedIntro.BlocksLetters)
+            {
+                GuidedIntro.Nudge();
                 continue;
             }
             HandleCharacter(character);

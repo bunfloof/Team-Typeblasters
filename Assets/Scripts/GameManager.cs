@@ -550,6 +550,10 @@ public class GameManager : MonoBehaviour
         // ADAPTIVE DIFFICULTY: every hit is a little lighter for slower typists
         // and a little heavier for faster ones (bites, spit, boss orbs alike).
         amount = Mathf.Max(1, Mathf.RoundToInt(amount * DynamicDifficulty.DamageFactor));
+        if (GuidedIntro.Running)
+        {
+            amount = Mathf.Max(1, amount / 2); // Normal's guided first wave is for learning: half damage
+        }
 
         // The shield (Tab) blocks every hit while it is up.
         if (Powers.IsShielded)

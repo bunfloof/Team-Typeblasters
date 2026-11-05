@@ -20443,6 +20443,7 @@ MonoBehaviour:
   chainStartCount: 1
   chainPerWave: 1
   bossName: SUBJECT ZERO
+  guidedFirstWave: 1
   zombiePrefab: {fileID: 6168303598776599510, guid: 4d040f4271f60994fb6456cf14b3d68f, type: 3}
   player: {fileID: 602902100}
   hud: {fileID: 995497774}

@@ -22,6 +22,7 @@ public static class Tutorial
     public static void Once(string key, string text, float seconds = DefaultSeconds)
     {
         if (EasyTutorial.Active != null) return;
+        if (GuidedIntro.Running) return; // the guided first wave explains things itself (not marked shown: it can come later)
         if (shown.Contains(key))
         {
             return;
