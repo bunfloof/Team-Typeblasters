@@ -258,6 +258,8 @@ public class WaveSpawner : MonoBehaviour
         hud.SetWave(1, level.Encounters.Count);
         rail.PlaceAt(level.StartPosition, level.StartFacing);
 
+        BuildSpawnCover();
+
         // No health kits standing in the map any more: health is offered as a
         // word under the health bar (HealthWord, see UpdateHealthOffer).
         HealthWord.Reset();
@@ -1738,7 +1740,113 @@ public class WaveSpawner : MonoBehaviour
     // pair's); null = pick a word whose first letter is not on screen yet.
     private Zombie SpawnZombie(SpawnPoint point, ZombieKind kind, float speed, string forcedWord = null)
     {
-        return SpawnZombieAt(point.Position, point.Exit, point.Spread, kind, speed, forcedWord);
+        return SpawnZombieAt(SpawnFrom(point), point.Exit, point.Spread, kind, speed, forcedWord);
+    }
+
+    // ---- Where zombies come from: never out of thin air ----
+    // A spawn point with a door: out of the building. One without (the end
+    // of a walk, an arcade...) gets a small TOWER built over it when the
+    // level starts: zombies appear inside it (unseen) and walk out of the
+    // dark doorway on the side facing where they head. A spot where a tower
+    // would stand in the ride's way (on the route) gets none: zombies appear
+    // further back instead, at the first spot the camera cannot see.
+
+    private const float TowerWidth = 3.6f;
+    private const float TowerDepth = 3.2f;
+    private const float TowerHeight = 5.2f;
+    private const float RouteClearance = 4.5f;   // metres between a tower and the ride's path, at least
+    private const float HideStep = 1.5f;         // looking for a hidden spot: this much further back each try
+    private const float HideMax = 24f;           // ...up to this far
+
+    private readonly HashSet<SpawnPoint> exposedPoints = new HashSet<SpawnPoint>(); // no door, no tower
+
+    private void BuildSpawnCover()
+    {
+        // The whole ride as a line on the ground.
+        List<Vector3> ride = new List<Vector3> { level.StartPosition };
+        foreach (Encounter encounter in level.Encounters)
+        {
+            ride.AddRange(encounter.Route);
+        }
+
+        Material wall = Palette.Lit(new Color(0.27f, 0.30f, 0.40f));
+        Material trim = Palette.Lit(new Color(0.20f, 0.22f, 0.30f));
+        Material doorway = Palette.Lit(new Color(0.03f, 0.03f, 0.05f));
+        foreach (Encounter encounter in level.Encounters)
+        {
+            foreach (SpawnPoint point in encounter.SpawnPoints)
+            {
+                if (point.Door != null)
+                {
+                    continue;
+                }
+                if (DistanceToLine(point.Position, ride) < RouteClearance + TowerDepth * 0.5f)
+                {
+                    exposedPoints.Add(point);
+                    continue;
+                }
+                Vector3 outward = point.Exit - point.Position;
+                outward.y = 0f;
+                if (outward.sqrMagnitude < 0.01f)
+                {
+                    outward = encounter.StopPosition - point.Position;
+                    outward.y = 0f;
+                }
+                GameObject tower = new GameObject("Spawn Tower (" + point.name + ")");
+                tower.transform.SetPositionAndRotation(new Vector3(point.Position.x, 0f, point.Position.z), Quaternion.LookRotation(outward.normalized));
+                Shapes.Block(PrimitiveType.Cube, "Body", tower.transform, new Vector3(0f, TowerHeight * 0.5f, 0f),
+                    new Vector3(TowerWidth, TowerHeight, TowerDepth), wall);
+                Shapes.Block(PrimitiveType.Cube, "Cap", tower.transform, new Vector3(0f, TowerHeight + 0.2f, 0f),
+                    new Vector3(TowerWidth + 0.5f, 0.4f, TowerDepth + 0.5f), trim);
+                Shapes.Block(PrimitiveType.Cube, "Band", tower.transform, new Vector3(0f, TowerHeight * 0.62f, 0f),
+                    new Vector3(TowerWidth + 0.12f, 0.25f, TowerDepth + 0.12f), trim);
+                // The dark doorway, wide enough for a pack walking side by side.
+                Shapes.Block(PrimitiveType.Cube, "Doorway", tower.transform, new Vector3(0f, 1.35f, TowerDepth * 0.5f + 0.01f),
+                    new Vector3(TowerWidth - 0.6f, 2.7f, 0.04f), doorway);
+            }
+        }
+    }
+
+    // Where a zombie of this spawn point appears: the point itself (inside
+    // its building or tower), or for an exposed one the nearest spot further
+    // back (away from its exit) that the camera cannot see.
+    private Vector3 SpawnFrom(SpawnPoint point)
+    {
+        if (!exposedPoints.Contains(point) || CameraDirector.MapBlend > 0.5f)
+        {
+            return point.Position;
+        }
+        Vector3 back = point.Position - point.Exit;
+        back.y = 0f;
+        if (back.sqrMagnitude < 0.01f)
+        {
+            return point.Position;
+        }
+        back.Normalize();
+        for (float along = 0f; along <= HideMax; along += HideStep)
+        {
+            Vector3 spot = point.Position + back * along;
+            if (!CanBeSeen(spot))
+            {
+                return spot;
+            }
+        }
+        return point.Position + back * HideMax; // nothing hides it: at least far away
+    }
+
+    private static float DistanceToLine(Vector3 point, List<Vector3> line)
+    {
+        float best = float.MaxValue;
+        Vector3 p = new Vector3(point.x, 0f, point.z);
+        for (int i = 0; i + 1 < line.Count; i++)
+        {
+            Vector3 a = new Vector3(line[i].x, 0f, line[i].z);
+            Vector3 b = new Vector3(line[i + 1].x, 0f, line[i + 1].z);
+            Vector3 ab = b - a;
+            float t = ab.sqrMagnitude > 0.0001f ? Mathf.Clamp01(Vector3.Dot(p - a, ab) / ab.sqrMagnitude) : 0f;
+            best = Mathf.Min(best, (a + ab * t - p).magnitude);
+        }
+        return best;
     }
 
     // Like SpawnZombie, but 'lane' metres to the side of the door (across the
@@ -1749,7 +1857,7 @@ public class WaveSpawner : MonoBehaviour
         walk.y = 0f;
         Vector3 across = walk.sqrMagnitude > 0.001f ? new Vector3(walk.z, 0f, -walk.x).normalized : Vector3.right;
         Vector3 shift = across * lane;
-        return SpawnZombieAt(point.Position + shift * 0.5f, point.Exit + shift, point.Spread * 0.5f, kind, speed);
+        return SpawnZombieAt(SpawnFrom(point) + shift * 0.5f, point.Exit + shift, point.Spread * 0.5f, kind, speed);
     }
 
     // A spawn point on the other side of the player's view (left / right of the

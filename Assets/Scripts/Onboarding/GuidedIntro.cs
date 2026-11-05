@@ -290,8 +290,12 @@ public static class GuidedIntro
         yield return Finish(group, "Keep shooting!");
 
         // [2] FREEZE, only once the lure bomb has gone off and the dust settled.
+        // Five come out (three from one side, two from the other): plenty to freeze.
         yield return Calm(2.5f);
-        group = Pair(ZombieKind.Normal);
+        int[] sides = TwoDoors();
+        group = Group(sides[0], ZombieKind.Normal, 3, GroupLanes);
+        yield return new WaitForSeconds(0.6f);
+        group.AddRange(Group(sides[1], ZombieKind.Normal, 2, PairLanes));
         yield return new WaitForSeconds(WalkOutSeconds + 0.5f);
         yield return OfferPower(HudFeature.Freeze, "freeze", "use", Powers.FreezeCost,
             "FREEZE", "Stops every zombie for a few seconds.",
@@ -310,23 +314,40 @@ public static class GuidedIntro
         yield return Finish(group, null); // the FRENZY popup says it already
 
         // [4] RPG: load it, then any finished word fires it into the group.
+        // A crowd of five; the card shows the moment they are all out.
         yield return Calm(1.5f);
-        group = Group(NearPoint(), ZombieKind.Normal, 3, GroupLanes);
-        yield return UntilClose(group);
+        point = NearPoint();
+        group = Group(point, ZombieKind.Normal, 3, GroupLanes);
+        yield return new WaitForSeconds(0.9f);
+        group.AddRange(Group(point, ZombieKind.Normal, 2, PairLanes));
+        yield return new WaitForSeconds(WalkOutSeconds);
         yield return OfferPower(HudFeature.Rpg, "rpg", "use", Powers.RocketCost,
             "RPG", "Loads a rocket. Your next word fires it.",
             new[] { touch ? GuideStep.Text("RPG", "TAP") : GuideStep.Key("4", "PRESS"), GuideStep.Text("TYPE", "A WORD") });
-        if (!powerActions.Contains("rpg:fire") && AnyAlive(group))
+        // The lesson is not over until the rocket has really flown: the world
+        // waits, and if every target is somehow gone, new ones walk out.
+        Holding = true;
+        bool fireShown = false;
+        while (!powerActions.Contains("rpg:fire") && GameManager.Instance.Powers.RocketLoaded)
         {
-            view.ShowCard("FIRE!", "Finish any word: the rocket hits the whole group.", null, false);
-            view.PointAt(Middle(group));
-            while (!powerActions.Contains("rpg:fire") && AnyAlive(group))
+            if (!AnyAlive(group))
             {
-                yield return null;
+                Holding = false;
+                group = Group(NearPoint(), ZombieKind.Normal, 3, GroupLanes);
+                yield return new WaitForSeconds(WalkOutSeconds);
+                Holding = true;
             }
-            view.PointAt(null);
-            view.HideCard();
+            if (!fireShown)
+            {
+                view.ShowCard("FIRE!", "Finish any word: the rocket hits the whole group.", null, false);
+                fireShown = true;
+            }
+            view.PointAt(Middle(group));
+            yield return null;
         }
+        view.PointAt(null);
+        view.HideCard();
+        Holding = false;
         yield return Finish(group, "Finish them off.");
 
         // RED ZOMBIE, only once the RPG's group is gone and the field is
@@ -437,7 +458,7 @@ public static class GuidedIntro
     // ticking), then a breather, so two lessons never overlap.
     private static IEnumerator Calm(float seconds)
     {
-        while (spawner.AliveZombies.Count > 0 || LureBomb.Active.Count > 0)
+        while (spawner.AliveZombies.Count > 0 || LureBomb.Active.Count > 0 || GameManager.Instance.Powers.RocketLoaded)
         {
             yield return null;
         }

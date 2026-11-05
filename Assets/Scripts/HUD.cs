@@ -286,6 +286,7 @@ public class HUD : MonoBehaviour
             SetShown(powersPanel.gameObject, !TouchControls.Active);
         }
         if (shieldRow != null) SetShown(shieldRow.gameObject, true);
+        SetShown(targetWordText.transform.parent.gameObject, true); // the word box (hidden while empty during the intro)
     }
 
     // The right end (screen x) of the visible power list and shield row in
