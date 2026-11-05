@@ -75,6 +75,9 @@ public class WaveSpawner : MonoBehaviour
     [Header("Onboarding")]
     [SerializeField] private bool guidedFirstWave = false; // Normal only: wave 1 teaches the game (GuidedIntro)
 
+    [Header("Crowding")]
+    [SerializeField] private int maxOnScreen = 5;          // zombies alive at once at the designed level (more for fast typists, fewer for slow ones)
+
     [Header("Boss")]
     [SerializeField] private string bossName = "SUBJECT ZERO";
 
@@ -86,7 +89,7 @@ public class WaveSpawner : MonoBehaviour
 
     private const float MinSpawnInterval = 0.8f; // the spawn interval never goes below this
     private const float PackStagger = 0.6f;      // seconds between the zombies of one pack
-    private const float PackLaneWidth = 1.4f;    // metres between the lanes of a pack's zombies (side by side)
+    private const float PackLaneWidth = 2.2f;    // metres between the lanes of a pack's zombies (side by side: their words never touch)
     private const float BannerSeconds = 2f;      // how long the "Wave N" banner stays up
     private const float GateSeconds = 1.5f;      // time for a gate to open before the ride goes on
 
@@ -108,6 +111,30 @@ public class WaveSpawner : MonoBehaviour
 
     // The barrels of the area being fought (Explosion sets them off).
     public List<Barrel> ActiveBarrels { get; } = new List<Barrel>();
+
+    // The supply crates of the area being fought (only energy crates now: health is a word under the health bar, see HealthWord).
+    public List<SupplyCrate> ActiveCrates
+    {
+        get { return activeCrates; }
+    }
+
+    // Kinds of zombie the player has already met this run, and whether a WORD
+    // CHAIN pair has come yet. A wave that brings new ones introduces them one
+    // at a time before the rest of it (IntroduceNewKinds).
+    private readonly HashSet<ZombieKind> seenKinds = new HashSet<ZombieKind>();
+    private bool chainSeen;
+
+    // True while a fight is on (after its banner, until its gate opens): the health word can be offered.
+    private bool fightOn;
+    private bool healthOfferedThisWave;
+
+    // How many zombies may be alive at once: a wave waits to send more until
+    // some are shot, so the screen never fills with words. Follows the
+    // player's measured speed (ADAPTIVE DIFFICULTY).
+    private int MaxOnScreen
+    {
+        get { return Mathf.Clamp(Mathf.RoundToInt(maxOnScreen + 1.5f * DynamicDifficulty.Level), 3, maxOnScreen + 3); }
+    }
 
     // The boss being fought, or null.
     public Boss CurrentBoss
@@ -195,6 +222,10 @@ public class WaveSpawner : MonoBehaviour
         {
             typingTargets.Add(ShieldWord.Current); // Tab's shield word (drawn by the HUD, not in the world)
         }
+        if (HealthWord.Current != null && HealthWord.Current.IsAlive)
+        {
+            typingTargets.Add(HealthWord.Current); // "type medkit for health", under the health bar
+        }
         return typingTargets;
     }
 
@@ -226,6 +257,43 @@ public class WaveSpawner : MonoBehaviour
 
         hud.SetWave(1, level.Encounters.Count);
         rail.PlaceAt(level.StartPosition, level.StartFacing);
+
+        // No health kits standing in the map any more: health is offered as a
+        // word under the health bar (HealthWord, see UpdateHealthOffer).
+        HealthWord.Reset();
+        foreach (Encounter encounter in level.Encounters)
+        {
+            foreach (SupplyCrate crate in encounter.Crates)
+            {
+                if (crate.Kind == SupplyKind.Health)
+                {
+                    crate.gameObject.SetActive(false);
+                }
+            }
+        }
+    }
+
+    private void Update()
+    {
+        UpdateHealthOffer();
+    }
+
+    // One health word per wave from wave 2 on, once the player has lost at
+    // least what it gives back ("type medkit for health" under the bar).
+    private void UpdateHealthOffer()
+    {
+        GameManager game = GameManager.Instance;
+        if (!fightOn || healthOfferedThisWave || HealthWord.Current != null || game == null
+            || game.State != GameState.Playing || CurrentWave < 2 || GuidedIntro.Running)
+        {
+            return;
+        }
+        if (game.Health > game.MaxHealth - SupplyCrate.HealAmount)
+        {
+            return;
+        }
+        healthOfferedThisWave = true;
+        HealthWord.Open(WordBank.PickCrateWord(SupplyKind.Health, UsedFirstLetters()), hud);
     }
 
     private void LateUpdate()
@@ -338,7 +406,7 @@ public class WaveSpawner : MonoBehaviour
 
         labelOrder.Clear();
         labelOrder.AddRange(GetTypingTargets());
-        labelOrder.RemoveAll(target => target is ShieldWord); // the HUD draws it in its own box
+        labelOrder.RemoveAll(target => target is IScreenWord); // the HUD draws these in their own place
         labelOrder.Sort((a, b) =>
         {
             if (a.IsTargeted != b.IsTargeted)
@@ -803,6 +871,8 @@ public class WaveSpawner : MonoBehaviour
         {
             GuidedIntro.Begin(this, hud);
         }
+        seenKinds.Clear();
+        chainSeen = false;
         int count = level.Encounters.Count;
 
         for (int index = 0; index < count; index++)
@@ -850,8 +920,15 @@ public class WaveSpawner : MonoBehaviour
             yield return new WaitForSeconds(BannerSeconds);
             hud.HideBanner();
             GameManager.Instance.Powers.OnWaveStart(); // a new combo weapon can be bought
-            ActivateProps(encounter);
+            // The guided first wave wakes each barrel / box only when it teaches
+            // it (fewer words on screen, and a blast cannot use them up early).
+            if (!(wave == 1 && GuidedIntro.Running))
+            {
+                ActivateProps(encounter);
+            }
             StartCoroutine(ShowPropHints());
+            fightOn = true;
+            healthOfferedThisWave = false;
 
             float fightStart = stats.Seconds;
             int killsAtStart = stats.Kills;
@@ -894,6 +971,8 @@ public class WaveSpawner : MonoBehaviour
             }
 
             // 3. Cleared: the next gate opens.
+            fightOn = false;
+            HealthWord.Close(); // an unused health word does not carry over
             DeactivateProps();
             if (encounter.ExitGate != null)
             {
@@ -914,7 +993,8 @@ public class WaveSpawner : MonoBehaviour
         {
             return;
         }
-        string text = DynamicDifficulty.Enabled ? "Tuned to your speed: " + Mathf.RoundToInt(wpm) + " WPM" : "";
+        string speed = wpm > 200f ? "200+" : Mathf.RoundToInt(wpm).ToString(); // a few lightning-fast words can read absurdly high
+        string text = DynamicDifficulty.Enabled ? "Tuned to your speed: " + speed + " WPM" : "";
         if (guidedFirstWave)
         {
             text += (text.Length > 0 ? "\n" : "") + "Keep playing to discover new kinds of zombies";
@@ -1097,7 +1177,7 @@ public class WaveSpawner : MonoBehaviour
         {
             zombie.EnterFrenzy(WordBank.PickFrenzyWord(UsedFirstLetters())); // nothing happens if it already has a frenzy word
         }
-        Tutorial.Once("ambush", "AMBUSH! Shoot the zombie in the road before you run into it.", 4f);
+        Tutorial.Once("ambush", "AMBUSH: shoot the zombie in the road.", 4f);
     }
 
     // Called by GameManager when the run ends during a ride: the ambush
@@ -1154,8 +1234,13 @@ public class WaveSpawner : MonoBehaviour
         HashSet<int> pairStarts;
         ZombieKind[] plan = AddChainPairs(PlanKinds(zombiesThisWave, wave), wave, out pairStarts);
         zombiesThisWave = plan.Length;
-        Tutorial.Once("type", "Type the word above a zombie to shoot it. Every letter is a bullet!", 6f);
+        Tutorial.Once("type", "Type the word above a zombie to shoot it.", 5f);
         LogWaveStart(plan, pairStarts.Count, speed, interval, encounter); // the level's own numbers (the "dda_" fields say how they were scaled)
+
+        // 1b. Kinds the player has never met come first, ONE AT A TIME: one
+        //     zombie of the new kind on its own (with its one-line hint), and
+        //     the next only once it is dead. Then the wave as planned.
+        yield return IntroduceNewKinds(plan, pairStarts.Count > 0, encounter, speed);
 
         // 2. Zombies come out in packs of GroupSize, from the spawn points in turn
         //    (a shuffled order, so it is not the same door every time).
@@ -1170,6 +1255,11 @@ public class WaveSpawner : MonoBehaviour
         int next = 0;
         while (spawned < zombiesThisWave)
         {
+            // Never too many at once: wait until some are shot.
+            while (aliveZombies.Count >= MaxOnScreen)
+            {
+                yield return null;
+            }
             SpawnPoint point = order[next % order.Count];
             next += 1;
 
@@ -1235,6 +1325,10 @@ public class WaveSpawner : MonoBehaviour
         extraZombiesThisWave = extra;
         for (int i = 0; i < extra; i++)
         {
+            while (aliveZombies.Count >= MaxOnScreen)
+            {
+                yield return null;
+            }
             SpawnPoint point = order[next % order.Count];
             next += 1;
             if (point.Door != null)
@@ -1247,6 +1341,66 @@ public class WaveSpawner : MonoBehaviour
         }
 
         // 3. Wait until every zombie of this wave is dead or removed.
+        while (aliveZombies.Count > 0)
+        {
+            yield return null;
+        }
+    }
+
+    // The order new kinds are introduced in (the easiest first).
+    private static readonly ZombieKind[] IntroOrder =
+    {
+        ZombieKind.Explosive, ZombieKind.Runner, ZombieKind.Splitter, ZombieKind.Ghost,
+        ZombieKind.Armored, ZombieKind.Brute, ZombieKind.Spitter
+    };
+
+    // Each kind in the plan the player has not met yet: wait for a clear
+    // field, a short breather, then ONE of it (its hint says what it does);
+    // the next one only when it is dead. A first WORD CHAIN pair the same way.
+    private IEnumerator IntroduceNewKinds(ZombieKind[] plan, bool hasChain, Encounter encounter, float speed)
+    {
+        List<SpawnPoint> points = encounter.SpawnPoints;
+        if (points.Count == 0)
+        {
+            yield break;
+        }
+        int door = Random.Range(0, points.Count);
+        foreach (ZombieKind kind in IntroOrder)
+        {
+            if (seenKinds.Contains(kind) || System.Array.IndexOf(plan, kind) < 0)
+            {
+                continue;
+            }
+            yield return UntilFieldClear();
+            yield return new WaitForSeconds(1.2f);
+            SpawnPoint point = points[door++ % points.Count];
+            if (point.Door != null)
+            {
+                point.Door.BurstOpen();
+            }
+            SpawnZombie(point, kind, speed);
+            yield return UntilFieldClear();
+        }
+        if (hasChain && !chainSeen)
+        {
+            yield return UntilFieldClear();
+            yield return new WaitForSeconds(1.2f);
+            SpawnPoint point = points[door++ % points.Count];
+            if (point.Door != null)
+            {
+                point.Door.BurstOpen();
+            }
+            if (SpawnChainPair(point, points, speed))
+            {
+                Tutorial.Once("chain", "WORD CHAIN: type the longer word to shoot both.", 6f);
+                chainSeen = true;
+                yield return UntilFieldClear();
+            }
+        }
+    }
+
+    private IEnumerator UntilFieldClear()
+    {
         while (aliveZombies.Count > 0)
         {
             yield return null;
@@ -1467,9 +1621,7 @@ public class WaveSpawner : MonoBehaviour
         longOne.MarkChainLinked();
         ChainLink.Create(shortOne, longOne);
 
-        GameManager.Instance.RequestTip("word chain", "WORD CHAIN!",
-            "",
-            Palette.WordChain);
+        chainSeen = true;
         return true;
     }
 
@@ -1573,6 +1725,7 @@ public class WaveSpawner : MonoBehaviour
         Zombie zombie = Instantiate(zombiePrefab, position, rotation);
         zombie.Setup(word, speed, player, this, kind, exit);
         aliveZombies.Add(zombie);
+        seenKinds.Add(kind);
 
         // Born during a FRENZY: a short word right away (its real word comes back with the others).
         if (Powers.IsFrenzy)
@@ -1583,35 +1736,35 @@ public class WaveSpawner : MonoBehaviour
         // The first time each special kind shows up, say what it does.
         if (kind == ZombieKind.Shifter)
         {
-            Tutorial.Once("shifter", "PURPLE SHIFTER: its word CHANGES if you wait. Start typing it to lock the word!", 6f);
+            Tutorial.Once("shifter", "SHIFTER: its word changes. Start typing it to lock it.", 6f);
         }
         else if (kind == ZombieKind.Explosive)
         {
-            Tutorial.Once("explosive", "RED ZOMBIE: finish its word to blow up EVERYTHING in its ring!", 6f);
+            Tutorial.Once("explosive", "RED ZOMBIE: its blast kills every zombie in its ring.", 6f);
         }
         else if (kind == ZombieKind.Runner)
         {
-            Tutorial.Once("runner", "RUNNER! Fast and yellow - shoot it before the slow ones.", 6f);
+            Tutorial.Once("runner", "RUNNER: fast. Shoot it first.", 6f);
         }
         else if (kind == ZombieKind.Armored)
         {
-            Tutorial.Once("armored", "ARMORED: the first word breaks its armor. Explosions kill it at once!", 6f);
+            Tutorial.Once("armored", "ARMORED: one word breaks the armor, the next one kills.", 6f);
         }
         else if (kind == ZombieKind.Splitter)
         {
-            Tutorial.Once("splitter", "TEAL SPLITTER: its word BREAKS IN TWO. Each half hides in a new word (underlined)!", 6f);
+            Tutorial.Once("splitter", "SPLITTER: it splits in two. Each half hides in a new word.", 6f);
         }
         else if (kind == ZombieKind.Ghost)
         {
-            Tutorial.Once("ghost", "GHOST: slow, but its long word VANISHES - even while you type it. Memorize it!", 6f);
+            Tutorial.Once("ghost", "GHOST: its word fades away. Remember it.", 6f);
         }
         else if (kind == ZombieKind.Brute)
         {
-            Tutorial.Once("brute", "BRUTE: type its whole PHRASE, SPACES included. Its bite hurts double!", 6f);
+            Tutorial.Once("brute", "BRUTE: type the whole phrase, spaces too.", 6f);
         }
         else if (kind == ZombieKind.Spitter)
         {
-            Tutorial.Once("spitter", "SPITTER: it stays back and spits acid. Type the glob's word to pop it, then shoot the spitter!", 6f);
+            Tutorial.Once("spitter", "SPITTER: pop its acid by typing the glob's word.", 6f);
         }
         return zombie;
     }
@@ -1634,21 +1787,41 @@ public class WaveSpawner : MonoBehaviour
     {
         foreach (Barrel barrel in encounter.Barrels)
         {
-            if (barrel != null && !barrel.IsExploded)
-            {
-                barrel.Activate(WordBank.PickBarrelWord(UsedFirstLetters()), hud);
-                ActiveBarrels.Add(barrel);
-                LogProp("barrel", barrel.Word, barrel.Position, Barrel.BlastRadius);
-            }
+            ActivateProp(barrel);
         }
         foreach (SupplyCrate crate in encounter.Crates)
         {
-            if (crate != null && !crate.IsOpened)
-            {
-                crate.Activate(WordBank.PickCrateWord(crate.Kind, UsedFirstLetters()), hud);
-                activeCrates.Add(crate);
-                LogProp("crate_" + crate.Kind.ToString().ToLowerInvariant(), crate.Word, crate.Position, 0f);
-            }
+            ActivateProp(crate);
+        }
+    }
+
+    // Every barrel and box of the fight being fought (the guided wave is over).
+    public void ActivateAllProps()
+    {
+        if (CurrentEncounter != null && fightOn)
+        {
+            ActivateProps(CurrentEncounter);
+        }
+    }
+
+    // One barrel gets its word (nothing happens if it already has one or is gone).
+    public void ActivateProp(Barrel barrel)
+    {
+        if (barrel != null && !barrel.IsExploded && !ActiveBarrels.Contains(barrel))
+        {
+            barrel.Activate(WordBank.PickBarrelWord(UsedFirstLetters()), hud);
+            ActiveBarrels.Add(barrel);
+            LogProp("barrel", barrel.Word, barrel.Position, Barrel.BlastRadius);
+        }
+    }
+
+    public void ActivateProp(SupplyCrate crate)
+    {
+        if (crate != null && !crate.IsOpened && crate.gameObject.activeInHierarchy && !activeCrates.Contains(crate))
+        {
+            crate.Activate(WordBank.PickCrateWord(crate.Kind, UsedFirstLetters()), hud);
+            activeCrates.Add(crate);
+            LogProp("crate_" + crate.Kind.ToString().ToLowerInvariant(), crate.Word, crate.Position, 0f);
         }
     }
 
@@ -1698,7 +1871,7 @@ public class WaveSpawner : MonoBehaviour
         {
             if (barrel != null && barrel.IsAlive)
             {
-                Tutorial.Once("barrel", "BARREL: type its orange word to blow up everything in its ring. Wait for zombies to walk in!", 7f);
+                Tutorial.Once("barrel", "BARREL: type its word to blast every zombie near it.", 7f);
                 break;
             }
         }
@@ -1708,7 +1881,7 @@ public class WaveSpawner : MonoBehaviour
         {
             if (crate != null && crate.IsAlive)
             {
-                Tutorial.Once("crate", "SUPPLY CRATE: type its green word to grab what is inside.", 6f);
+                Tutorial.Once("crate", "ENERGY BOX: type its word for +" + SupplyCrate.EnergyAmount + " energy.", 6f);
                 break;
             }
         }

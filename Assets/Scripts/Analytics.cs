@@ -383,6 +383,10 @@ public static class Analytics
         {
             return "shield_word";
         }
+        if (target is HealthWord)
+        {
+            return "health_word";
+        }
         if (target is QuizAnswer)
         {
             return "quiz_answer";

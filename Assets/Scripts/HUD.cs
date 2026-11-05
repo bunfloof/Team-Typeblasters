@@ -161,6 +161,7 @@ public class HUD : MonoBehaviour
         UpdateHint();
         UpdateQuizPop();
         UpdateAdaptiveReadout();
+        UpdateHealthOffer();
     }
 
     // ---- Adaptive difficulty readout (Unity editor only, top-left under the health bar) ----
@@ -285,6 +286,39 @@ public class HUD : MonoBehaviour
             SetShown(powersPanel.gameObject, !TouchControls.Active);
         }
         if (shieldRow != null) SetShown(shieldRow.gameObject, true);
+    }
+
+    // The right end (screen x) of the visible power list and shield row in
+    // the bottom-left corner, or NaN when none is shown. The guided intro's
+    // card keeps clear of it.
+    public float PowersRightEdge()
+    {
+        float right = float.NaN;
+        Vector3[] corners = new Vector3[4];
+        if (powersPanel != null && powersPanel.gameObject.activeInHierarchy)
+        {
+            for (int row = 0; row < PowerCount; row++)
+            {
+                if (powerRows[row].gameObject.activeInHierarchy)
+                {
+                    right = MaxRight(right, powerNames[row], corners);
+                }
+            }
+        }
+        if (shieldRow != null && shieldRow.gameObject.activeInHierarchy)
+        {
+            right = MaxRight(right, shieldName, corners);
+            shieldPipStrip.GetWorldCorners(corners);
+            right = float.IsNaN(right) ? corners[2].x : Mathf.Max(right, corners[2].x);
+        }
+        return right;
+    }
+
+    private static float MaxRight(float right, TMP_Text text, Vector3[] corners)
+    {
+        text.rectTransform.GetWorldCorners(corners);
+        float end = corners[0].x + text.preferredWidth * text.rectTransform.lossyScale.x;
+        return float.IsNaN(right) ? end : Mathf.Max(right, end);
     }
 
     // Where a feature sits on screen (the guided intro puts its message next to it).
@@ -435,6 +469,130 @@ public class HUD : MonoBehaviour
     {
         healthBar.maxValue = maxHealth;
         healthBar.value = health;
+    }
+
+    // ---- Health word (under the health bar, see HealthWord) ----
+    //   type  medkit  for health
+    // A small line on a dark pill just under the bar; it pops in when offered.
+
+    private RectTransform healthOffer;   // null until first offered
+    private CanvasGroup healthOfferGroup;
+    private TMP_Text healthOfferWord;
+    private float healthOfferShownAt;
+    private bool healthOfferOn;
+
+    public TMP_Text HealthOfferLabel
+    {
+        get
+        {
+            if (healthOffer == null)
+            {
+                BuildHealthOffer();
+            }
+            return healthOfferWord;
+        }
+    }
+
+    public void ShowHealthOffer(bool on)
+    {
+        if (healthOffer == null)
+        {
+            BuildHealthOffer();
+        }
+        if (on && !healthOfferOn)
+        {
+            healthOfferShownAt = Time.unscaledTime;
+        }
+        healthOfferOn = on;
+        if (on)
+        {
+            healthOffer.gameObject.SetActive(true);
+        }
+    }
+
+    public void SetHealthOffer(string coloredWord)
+    {
+        HealthOfferLabel.text = "<color=#B8BEC8>type</color>  <b>" + coloredWord + "</b>  <color=#B8BEC8>for health</color>";
+        Vector2 size = healthOfferWord.GetPreferredValues(healthOfferWord.text);
+        healthOffer.sizeDelta = new Vector2(size.x + 36f, 46f);
+    }
+
+    // "+30 HEALTH" rises off the health bar.
+    public void ShowHealthGain(int amount)
+    {
+        RectTransform bar = (RectTransform)healthBar.transform;
+        TMP_Text text = CreateText(readoutLayer, "Health Gain", "+" + amount + " HEALTH", 30f, Vector2.zero);
+        text.fontStyle = FontStyles.Bold;
+        text.color = Palette.WordCrate;
+        text.fontSharedMaterial = OutlineMaterial(text);
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        Vector3[] corners = new Vector3[4];
+        bar.GetWorldCorners(corners);
+        Vector2 at = (Vector2)readoutLayer.InverseTransformPoint((corners[2] + corners[3]) * 0.5f) - readoutLayer.rect.center; // the bar's right end
+        PlaceRect(text.rectTransform, Centre, LeftMiddle, at + new Vector2(16f, 0f), new Vector2(260f, 40f));
+        text.alignment = TextAlignmentOptions.Left;
+        StartCoroutine(RiseAndFade(text, text.rectTransform.anchoredPosition));
+        StartCoroutine(PopIn(bar));
+    }
+
+    private void BuildHealthOffer()
+    {
+        Image pill = CreateImage("Health Word", readoutLayer, new Color(0.03f, 0.05f, 0.08f, 0.78f));
+        healthOffer = pill.rectTransform;
+        pill.raycastTarget = false;
+        healthOfferGroup = pill.gameObject.AddComponent<CanvasGroup>();
+        healthOfferGroup.blocksRaycasts = false;
+        Image strip = CreateImage("Strip", healthOffer, Palette.WordCrate);
+        strip.rectTransform.anchorMin = Vector2.zero;
+        strip.rectTransform.anchorMax = new Vector2(0f, 1f);
+        strip.rectTransform.pivot = LeftMiddle;
+        strip.rectTransform.sizeDelta = new Vector2(5f, 0f);
+        strip.rectTransform.anchoredPosition = Vector2.zero;
+        healthOfferWord = CreateText(healthOffer, "Text", "", 26f, Vector2.zero);
+        StretchToParent(healthOfferWord.rectTransform);
+        healthOfferWord.rectTransform.offsetMin = new Vector2(18f, 0f);
+        healthOfferWord.alignment = TextAlignmentOptions.Left;
+        healthOfferWord.textWrappingMode = TextWrappingModes.NoWrap;
+        healthOfferWord.color = Palette.WordCrate;
+        healthOffer.gameObject.SetActive(false);
+    }
+
+    // Every frame while it is up: just under the health bar, fading in / out.
+    private void UpdateHealthOffer()
+    {
+        if (healthOffer == null || !healthOffer.gameObject.activeSelf)
+        {
+            return;
+        }
+        float target = healthOfferOn && healthBar.gameObject.activeInHierarchy ? 1f : 0f;
+        healthOfferGroup.alpha = Mathf.MoveTowards(healthOfferGroup.alpha, target, Time.unscaledDeltaTime * 5f);
+        if (!healthOfferOn && healthOfferGroup.alpha <= 0f)
+        {
+            healthOffer.gameObject.SetActive(false);
+            return;
+        }
+
+        // Under the bar, lined up with the "Health" label on its left.
+        RectTransform bar = (RectTransform)healthBar.transform;
+        Vector3[] corners = new Vector3[4];
+        bar.GetWorldCorners(corners);
+        Vector2 bottomLeft = (Vector2)readoutLayer.InverseTransformPoint(corners[0]) - readoutLayer.rect.center;
+        float left = bottomLeft.x;
+        if (HealthLabel != null)
+        {
+            RectTransform label = HealthLabel as RectTransform;
+            if (label != null)
+            {
+                label.GetWorldCorners(corners);
+                left = Mathf.Min(left, ((Vector2)readoutLayer.InverseTransformPoint(corners[0]) - readoutLayer.rect.center).x);
+            }
+        }
+        float pop = Mathf.Clamp01((Time.unscaledTime - healthOfferShownAt) / 0.35f);
+        float scale = Mathf.LerpUnclamped(1.25f, 1f, 1f - Mathf.Pow(1f - pop, 3f));
+        healthOffer.anchorMin = healthOffer.anchorMax = Centre;
+        healthOffer.pivot = new Vector2(0f, 1f);
+        healthOffer.anchoredPosition = new Vector2(left, bottomLeft.y - 14f);
+        healthOffer.localScale = new Vector3(scale, scale, 1f);
     }
 
     public void SetWave(int wave, int waveCount)
@@ -1788,6 +1946,9 @@ public class HUD : MonoBehaviour
     // see-through black box, sized to fit the text.
     public void SetAimHint(bool show)
     {
+        // The dashed arc already shows where the bomb will land, so no text box
+        // covers the view any more (the guided intro draws the arrow keys once).
+        show = false;
         // In the tutorial only the LURE lesson (3) shows how to aim (demo and practice).
         if (EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave && EasyTutorial.Active.CurrentLesson != 3) show = false;
         if (!show)
@@ -2064,6 +2225,10 @@ public class HUD : MonoBehaviour
         {
             hintTimeLeft = 0f;
             return;
+        }
+        if (GuidedIntroView.CardVisible)
+        {
+            return; // the guided intro's card sits in the same place and says what matters now
         }
 
         if (hintBox == null)
@@ -2567,6 +2732,10 @@ public class HUD : MonoBehaviour
             shieldGlow.gameObject.SetActive(false);
         }
         HideShieldPrompt();
+        if (healthOffer != null)
+        {
+            healthOffer.gameObject.SetActive(false);
+        }
 
         TMP_Text message;
         if (won)

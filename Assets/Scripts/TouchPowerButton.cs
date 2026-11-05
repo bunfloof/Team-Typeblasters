@@ -206,8 +206,8 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
                 break;
             case Power.Shield:
                 countText.text = "x" + powers.ShieldCharges;
-                statusText.text = Powers.IsShielded ? "ACTIVE" : (ShieldWord.Current != null ? "CANCEL" : "TAP: TYPE WORD");
-                usable = Powers.IsShielded || ShieldWord.Current != null || powers.ShieldCharges > 0;
+                statusText.text = Powers.IsShielded ? "ACTIVE" : powers.ShieldCharges > 0 ? "TAP" : "NEXT WAVE";
+                usable = Powers.IsShielded || powers.ShieldCharges > 0;
                 break;
             default:
                 bool rocket = power == Power.Rocket;

@@ -73,6 +73,12 @@ public class GameManager : MonoBehaviour
     public int SkillEnergy { get; private set; }
     public int Health { get; private set; }
 
+    // Full health (the health bar's length).
+    public int MaxHealth
+    {
+        get { return startingHealth; }
+    }
+
     // The numbers shown on the end screen.
     public RunStats Stats { get; private set; }
 

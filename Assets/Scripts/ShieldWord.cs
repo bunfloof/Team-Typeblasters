@@ -15,7 +15,7 @@
 using TMPro;
 using UnityEngine;
 
-public class ShieldWord : ITypingTarget
+public class ShieldWord : IScreenWord
 {
     // The open shield word, or null. Reset by Powers.Awake (statics survive a scene reload).
     public static ShieldWord Current { get; private set; }

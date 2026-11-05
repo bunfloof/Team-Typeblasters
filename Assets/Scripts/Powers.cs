@@ -14,12 +14,9 @@
 //
 // Charges (max maxCharges of each) come ONLY from supply crates in the level.
 //
-//   [Tab] SHIELD  - NOT from crates: shieldChargesPerLevel charges for the
-//       whole level (1 by default, given at the start). Tab only brings up a
-//       SHIELD WORD (ShieldWord, e.g. "protect", styled for the typing
-//       difficulty): the player must TYPE it within shieldWordSeconds, while
-//       the enemies keep coming. Too slow, or Tab again: no shield, but the
-//       charge is kept. Once the word is typed, for shieldSeconds the
+//   [Tab] SHIELD  - NOT from crates: one charge every wave (shieldChargesPerLevel,
+//       given again at the start of each wave). Tab raises it at once (no
+//       word to type any more: in a panic one key is enough). For shieldSeconds the
 //       player takes NO damage and every enemy (zombies, energy orbs, the
 //       boss's attack timer) moves at shieldEnemySpeed: time to think and
 //       pick targets. A zombie that reaches the player bounces off the shield
@@ -66,10 +63,10 @@ public class Powers : MonoBehaviour
     [SerializeField] private float freezeSeconds = 4f;
 
     [Header("Shield")]
-    [SerializeField] private int shieldChargesPerLevel = 1;  // given at the start of the level, never refilled
+    [SerializeField] private int shieldChargesPerLevel = 1;  // given again at the start of every wave (the name is kept for the scenes)
     [SerializeField] private float shieldSeconds = 8f;
     [SerializeField, Range(0.1f, 1f)] private float shieldEnemySpeed = 0.35f; // enemies move at this fraction of their speed
-    [SerializeField] private float shieldWordSeconds = 6f;   // time to type the shield word after pressing Tab
+    [SerializeField] private float shieldWordSeconds = 6f;   // unused since Tab raises the shield at once (kept so the scenes still load it)
 
     [Header("References (wired in the scene)")]
     [SerializeField] private HUD hud;
@@ -204,7 +201,6 @@ public class Powers : MonoBehaviour
             if (frenzyTimeLeft <= 0f)
             {
                 RestoreRealWords();
-                hud.ShowHint("Frenzy over.", 1.5f);
 
                 AnalyticsEvent e = PowerEvent("frenzy_end", "frenzy");
                 e.Add("kills_during", GameManager.Instance.Stats.Kills - killsAtFrenzyStart);
@@ -252,6 +248,8 @@ public class Powers : MonoBehaviour
     // Refresh availability at the start of a fight; energy carries between waves.
     public void OnWaveStart()
     {
+        ShieldCharges = shieldChargesPerLevel; // one shield every wave (unused ones do not pile up)
+        RefreshShieldHud();
 
         RefreshWeaponStatus();
     }
@@ -316,7 +314,7 @@ public class Powers : MonoBehaviour
             LogUseRefused(item,"not_enough_energy",via);
             return;
         }
-        if (rocket) { RocketLoaded = true; hud.ShowBigMessage("RPG LOADED!","TYPE A WORD"); }
+        if (rocket) { RocketLoaded = true; if (!GuidedIntroView.CardVisible) hud.ShowBigMessage("RPG LOADED!","TYPE A WORD"); }
         else StartFrenzy();
         RefreshWeaponSlots(); hud.PulseWeapon(rocket); RefreshWeaponStatus();
         AnalyticsEvent e = PowerEvent("use",item);
@@ -335,10 +333,11 @@ public class Powers : MonoBehaviour
     private void StartFrenzy()
     {
         killsAtFrenzyStart = GameManager.Instance.Stats.Kills;
-        frenzyTimeLeft = EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave && !EasyTutorial.Active.IsDemonstrating ? 15f : frenzySeconds;
+        frenzyTimeLeft = EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave && !EasyTutorial.Active.IsDemonstrating ? 15f
+            : GuidedIntro.Running ? frenzySeconds * 2f : frenzySeconds; // first time (guided wave 1): time to see it work
         frenzyDuration = frenzyTimeLeft;
         GiveShortWords();
-        hud.ShowBigMessage("FRENZY!", "every enemy word is SHORT for " + frenzySeconds.ToString("0.#") + "s");
+        hud.ShowBigMessage("FRENZY!", "short words for " + frenzyTimeLeft.ToString("0") + "s");
         CameraDirector.Shake(0.25f);
     }
 
@@ -596,7 +595,8 @@ public class Powers : MonoBehaviour
         bool alreadyFrozen = IsFrozen;
         RefreshHud();
         hud.PulsePower(PowerKind.Freeze);
-        freezeTimeLeft = EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave && !EasyTutorial.Active.IsDemonstrating ? 15f : freezeSeconds;
+        freezeTimeLeft = EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave && !EasyTutorial.Active.IsDemonstrating ? 15f
+            : GuidedIntro.Running ? freezeSeconds * 2f : freezeSeconds; // first time (guided wave 1): time to shoot them
 
         AnalyticsEvent e = PowerEvent("use", "freeze");
         e.Add("energy_before",before); e.Add("energy_spent",FreezeCost); e.Add("energy_after",GameManager.Instance.SkillEnergy);
@@ -606,8 +606,8 @@ public class Powers : MonoBehaviour
 
     // ---- Shield (Tab) ----
 
-    // Called by TypingController when Tab is pressed: brings up the SHIELD
-    // WORD to type (or closes it again if it is already up).
+    // Called by TypingController when Tab is pressed (or the touch SHIELD
+    // button): the shield goes up at once. One charge per wave.
     public void TryUseShield()
     {
         if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower("shield")) return;
@@ -616,48 +616,21 @@ public class Powers : MonoBehaviour
         {
             return;
         }
-        if (ShieldWord.Current != null)
-        {
-            SendPowerEvent(PowerEvent("word_cancelled", "shield"));
-            CloseShieldWord("Shield cancelled. Press Tab to try again.");
-            return;
-        }
         if (IsShielded)
         {
             LogUseRefused("shield", "already_active", "key");
-            hud.ShowHint("Your shield is already up.", 1.5f);
             return;
         }
         if (ShieldCharges <= 0)
         {
             SendPowerEvent(PowerEvent("empty", "shield"));
-            hud.ShowHint("No shield left: you get " + shieldChargesPerLevel + " per level.", 2.5f);
+            hud.ShowHint("No shield left. You get one every wave.", 2f);
             return;
         }
-
-        // A word whose first character nothing on screen uses, styled for the
-        // typing difficulty ("protect", "Protect,", "#Shield_07"...).
-        WaveSpawner spawner = Object.FindFirstObjectByType<WaveSpawner>();
-        List<char> used = spawner != null ? spawner.UsedFirstLetters() : new List<char>();
-        string word = TypingSettings.Style(WordBank.PickShieldWord(used), used);
-        ShieldWord.Open(word, this, hud);
-        AnalyticsEvent started = PowerEvent("word_started", "shield");
-        started.Add("word", word);
-        started.Add("time_limit", EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave ? 30f : shieldWordSeconds);
-        SendPowerEvent(started);
-        shieldWordTimeLeft = EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave ? 30f : shieldWordSeconds;
-        hud.SetShieldPromptTime(1f);
+        RaiseShield();
     }
 
-    // Closes the shield word without raising the shield (the charge is kept).
-    private void CloseShieldWord(string hint)
-    {
-        ShieldWord.Close();
-        shieldWordTimeLeft = 0f;
-        hud.ShowHint(hint, 2.5f);
-    }
-
-    // Called by ShieldWord when its word has been typed: the shield goes up.
+    // The shield goes up (Tab).
     public void RaiseShield()
     {
         shieldWordTimeLeft = 0f;
@@ -675,8 +648,6 @@ public class Powers : MonoBehaviour
         SendPowerEvent(used);
         RefreshShieldHud();
         hud.PulseShield();
-        hud.ShowHint("SHIELD UP! No damage for " + shieldSeconds.ToString("0.#")
-            + " seconds and enemies are slowed. Take your time.", 3f);
     }
 
     // Called when the shield blocks a hit (a zombie bounced off it, an orb or
@@ -692,27 +663,6 @@ public class Powers : MonoBehaviour
     // game is paused or a tip is open.
     private void UpdateShield()
     {
-        if (ShieldWord.Current != null)
-        {
-            GameState state = GameManager.Instance.State;
-            if (state == GameState.Won || state == GameState.Lost)
-            {
-                ShieldWord.Close();
-                shieldWordTimeLeft = 0f;
-            }
-            else if (state == GameState.Playing)
-            {
-                shieldWordTimeLeft -= Time.deltaTime;
-                hud.SetShieldPromptTime(EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave ? shieldWordTimeLeft / 30f
-                    : shieldWordSeconds > 0f ? shieldWordTimeLeft / shieldWordSeconds : 0f);
-                if (shieldWordTimeLeft <= 0f)
-                {
-                    SendPowerEvent(PowerEvent("word_timeout", "shield"));
-                    CloseShieldWord("Too slow: no shield. Press Tab to try again.");
-                }
-            }
-        }
-
         if (shieldTimeLeft <= 0f || GameManager.Instance.State != GameState.Playing)
         {
             return;
@@ -724,7 +674,6 @@ public class Powers : MonoBehaviour
         {
             SendPowerEvent(PowerEvent("end", "shield"));
             shieldSlow = 1f;
-            hud.ShowHint("Shield down!", 1.5f);
         }
     }
 

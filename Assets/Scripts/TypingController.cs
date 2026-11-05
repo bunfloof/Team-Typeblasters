@@ -38,10 +38,10 @@
 //     FRENZY / RPG, HOLD = buy one;
 //     see Powers). No word contains the keys 1-4, and arrow
 //     keys type nothing, so they never clash with typing.
-//   - Tab brings up the SHIELD WORD (see Powers, ShieldWord): typing it
-//     raises the shield (no damage for a few seconds). It is typed like any
-//     word, but no bullets fly: it lives on the HUD, not in the world.
-//     Tab again closes it.
+//   - Tab raises the SHIELD at once (no damage for a few seconds; one per
+//     wave, see Powers). Words drawn on the HUD rather than in the world
+//     (IScreenWord: the health word under the health bar) are typed like any
+//     word, but no bullets fly.
 //   - Backspace drops the current target so the player can retarget.
 //   - Escape pauses the game (and resumes it from the pause panel, see
 //     GameManager.OnPauseKey). Keys typed while paused are ignored.
@@ -289,6 +289,7 @@ public class TypingController : MonoBehaviour
             candidates.Clear();
             lastTypingTime = Time.time;
             EndRun("dropped");
+            GuidedIntro.OnWordDropped(); // the guided first wave teaches Backspace
         }
 
         // ---- 5a. Tab: raise the shield ----
@@ -570,9 +571,9 @@ public class TypingController : MonoBehaviour
         ITypingTarget lastFinished = null;
         foreach (ITypingTarget candidate in candidates)
         {
-            if (candidate.IsWordComplete && candidate is ShieldWord)
+            if (candidate.IsWordComplete && candidate is IScreenWord)
             {
-                candidate.CompleteWord(); // raises the shield at once: no bullet, no kill
+                candidate.CompleteWord(); // acts at once (shield, health): no bullet, no kill
                 anyFinished = true;
                 continue;
             }
@@ -600,7 +601,7 @@ public class TypingController : MonoBehaviour
 
         // Otherwise a normal shot at the nearest candidate (it staggers).
         ITypingTarget nearest = NearestCandidate();
-        if (!anyFinished && nearest != null && !(nearest is ShieldWord))
+        if (!anyFinished && nearest != null && !(nearest is IScreenWord))
         {
             Bullet.Fire(nearest, false);
         }

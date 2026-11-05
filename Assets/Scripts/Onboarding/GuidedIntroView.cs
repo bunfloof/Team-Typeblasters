@@ -1,11 +1,16 @@
 // GuidedIntroView.cs
 // ---------------------------------------------------------------------------
-// What the guided first wave (GuidedIntro) draws, built in code like the HUD:
-//   - a MESSAGE CARD: a title, one short line, and for a power its steps as
-//     key caps / the arrow keys (drawn shapes, no font symbols) with one word
-//     under each; "ENTER to continue" on read-only cards (a tap works too).
-//     It sits next to what it explains (CardPlace);
-//   - a bobbing ARROW over a zombie's word (PointAt);
+// What the guided first wave (GuidedIntro) draws, built in code like the HUD.
+// Everything sits LOW on the screen, just above the bottom word box, so the
+// middle of the view (the zombies, their words, where a lure bomb lands)
+// always stays clear:
+//   - the CARD: a title and one short line on the left, and for a power its
+//     steps on the right as key caps / the arrow keys (drawn shapes, no font
+//     symbols) with one word under each. It fades and rises in, and fades
+//     to half while the player aims a lure bomb;
+//   - a LINE: the same card with a single short sentence ("Keep shooting!"),
+//     which goes away by itself;
+//   - a bobbing ARROW over the word to type (a zombie, a barrel, a box);
 //   - a "skip intro" chip at the start (ENTER, or tap it);
 //   - a light dark TINT over the 3D view while the world is held.
 // ---------------------------------------------------------------------------
@@ -16,21 +21,38 @@ using UnityEngine.UI;
 
 public class GuidedIntroView : MonoBehaviour
 {
-    private static readonly Color CardColor = new Color(0.04f, 0.06f, 0.09f, 0.94f);
+    private static readonly Color CardColor = new Color(0.035f, 0.05f, 0.08f, 1f);
     private static readonly Color Teal = new Color(0.25f, 0.86f, 0.8f);
-    private static readonly Color Gold = new Color(1f, 0.78f, 0.35f);
-    private static readonly Color CapColor = new Color(0.1f, 0.2f, 0.24f, 1f);
-    private static readonly Color Grey = new Color(0.65f, 0.68f, 0.74f);
+    private static readonly Color Gold = new Color(1f, 0.8f, 0.38f);
+    private static readonly Color CapFace = new Color(0.11f, 0.15f, 0.2f, 1f);
+    private static readonly Color CapEdge = new Color(0.36f, 0.42f, 0.5f, 1f);
+    private static readonly Color Grey = new Color(0.62f, 0.66f, 0.72f);
+    private static readonly Color Divider = new Color(1f, 1f, 1f, 0.08f);
 
-    private const float CardWidth = 640f;
-    private const float HoldTint = 0.32f;
+    private const float CardBottom = 182f;     // canvas units above the bottom edge: just above the word box (its top is at 160)
+    private const float Pad = 26f;
+    private const float TextMaxWidth = 520f;   // the left text block wraps at this width when there are steps
+    private const float LineMaxWidth = 980f;   // a text-only card wraps at this width
+    private const float StepWidth = 128f;
+    private const float StepGap = 38f;
+    private const float StepsHeight = 112f;
+    private const float HoldTint = 0.22f;
+    private const float AimingAlpha = 0.45f;   // while 1 is held the card fades, so the landing point shows through
 
-    private RectTransform root, card, steps, pointer, skipChip;
+    private RectTransform root, card, accent, steps, divider, pointer, skipChip;
+    private HUD hud;
+    private float cardShift;                  // canvas units the card is moved right to keep clear of the power list
+    private CanvasGroup cardGroup;
     private Image tint;
     private TMP_Text title, body, continueChip;
     private ITypingTarget pointed;
     private float nudgeAt = -100f;
-    private Vector2 cardHome;
+    private float shownAt = -100f;
+    private bool cardWanted;
+    private float lineUntil = -1f;            // > 0: the card is a LINE and goes away at this time (unscaled)
+
+    // True while a card or line is on screen (HUD keeps its hint box away meanwhile).
+    public static bool CardVisible { get; private set; }
 
     public static GuidedIntroView Create(HUD hud)
     {
@@ -52,102 +74,97 @@ public class GuidedIntroView : MonoBehaviour
         view.tint.color = new Color(0f, 0f, 0f, 0f);
         view.tint.raycastTarget = false;
 
+        view.hud = hud;
         view.Build();
         return view;
     }
 
     private void Build()
     {
-        // The root itself takes no clicks; the card and the chip do.
-        card = Rect("Card", root, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(CardWidth, 200f));
+        card = Rect("Card", root, new Vector2(0.5f, 0f), new Vector2(0f, CardBottom), new Vector2(600f, 120f));
+        card.pivot = new Vector2(0.5f, 0f);
         Image plate = card.gameObject.AddComponent<Image>();
         plate.color = CardColor;
-        Image accent = Rect("Accent", card, new Vector2(0f, 0.5f), Vector2.zero, new Vector2(8f, 200f)).gameObject.AddComponent<Image>();
-        accent.color = Teal;
-        accent.raycastTarget = false;
-        accent.rectTransform.anchorMin = new Vector2(0f, 0f);
-        accent.rectTransform.anchorMax = new Vector2(0f, 1f);
-        accent.rectTransform.pivot = new Vector2(0f, 0.5f);
-        accent.rectTransform.sizeDelta = new Vector2(8f, 0f);
-        accent.rectTransform.anchoredPosition = Vector2.zero;
+        cardGroup = card.gameObject.AddComponent<CanvasGroup>();
         card.gameObject.AddComponent<CardClick>();
 
-        title = Text("Title", card, "", 36f, FontStyles.Bold);
+        // A thin teal strip along the left edge (like the HUD's hint box).
+        accent = Rect("Accent", card, Vector2.zero, Vector2.zero, Vector2.zero);
+        accent.anchorMin = new Vector2(0f, 0f);
+        accent.anchorMax = new Vector2(0f, 1f);
+        accent.pivot = new Vector2(0f, 0.5f);
+        accent.sizeDelta = new Vector2(6f, 0f);
+        Image accentImage = accent.gameObject.AddComponent<Image>();
+        accentImage.color = Teal;
+        accentImage.raycastTarget = false;
+
+        title = Text("Title", card, "", 30f, FontStyles.Bold);
         title.color = Teal;
-        body = Text("Body", card, "", 28f, FontStyles.Normal);
+        title.characterSpacing = 4f;
+        body = Text("Body", card, "", 26f, FontStyles.Normal);
         body.textWrappingMode = TextWrappingModes.Normal;
-        steps = Rect("Steps", card, new Vector2(0.5f, 1f), Vector2.zero, new Vector2(CardWidth - 40f, 120f));
-        steps.pivot = new Vector2(0.5f, 1f);
-        continueChip = Text("Continue", card, "", 20f, FontStyles.Normal);
+
+        divider = Rect("Divider", card, new Vector2(0f, 0.5f), Vector2.zero, new Vector2(2f, 0f));
+        Image dividerImage = divider.gameObject.AddComponent<Image>();
+        dividerImage.color = Divider;
+        dividerImage.raycastTarget = false;
+
+        steps = Rect("Steps", card, new Vector2(0f, 0.5f), Vector2.zero, new Vector2(10f, StepsHeight));
+        steps.pivot = new Vector2(0f, 0.5f);
+
+        continueChip = Text("Continue", card, "", 18f, FontStyles.Bold);
         continueChip.color = Grey;
+        continueChip.characterSpacing = 3f;
         card.gameObject.SetActive(false);
 
         pointer = Rect("Pointer", root, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 60f));
-        Arrow(pointer, Gold, 1f, 0f);
+        Arrow(pointer, Gold, 0.9f, 0f);
         pointer.gameObject.SetActive(false);
 
-        skipChip = Rect("Skip", root, new Vector2(0.5f, 0f), new Vector2(0f, 60f), new Vector2(360f, 56f));
+        skipChip = Rect("Skip", root, new Vector2(0.5f, 0f), new Vector2(0f, 64f), new Vector2(300f, 48f));
         Image skipPlate = skipChip.gameObject.AddComponent<Image>();
-        skipPlate.color = new Color(0.04f, 0.06f, 0.09f, 0.85f);
+        skipPlate.color = new Color(0.035f, 0.05f, 0.08f, 0.8f);
         Button skipButton = skipChip.gameObject.AddComponent<Button>();
         skipButton.targetGraphic = skipPlate;
         skipButton.navigation = new Navigation { mode = Navigation.Mode.None };
         skipButton.onClick.AddListener(GuidedIntro.OnEnter);
-        TMP_Text skipText = Text("Label", skipChip, TouchControls.Active ? "TAP to skip the intro" : "ENTER  skip the intro", 24f, FontStyles.Normal);
+        TMP_Text skipText = Text("Label", skipChip, TouchControls.Active ? "TAP TO SKIP INTRO" : "ENTER   SKIP INTRO", 20f, FontStyles.Bold);
         skipText.color = Grey;
+        skipText.characterSpacing = 3f;
         Fill(skipText.rectTransform);
         skipChip.gameObject.SetActive(false);
     }
 
     // ---- What GuidedIntro calls ----
 
-    public void ShowCard(CardPlace place, string heading, string line, GuideStep[] howSteps, bool showContinue)
+    // A card: heading (may be ""), one short line, and optionally the steps
+    // of a power. showContinue adds "ENTER" (a read-only card).
+    public void ShowCard(string heading, string line, GuideStep[] howSteps, bool showContinue)
     {
-        title.text = heading;
-        title.gameObject.SetActive(heading.Length > 0);
-        body.text = line;
-        foreach (Transform child in steps)
-        {
-            Destroy(child.gameObject);
-        }
-        bool hasSteps = howSteps != null && howSteps.Length > 0;
-        steps.gameObject.SetActive(hasSteps);
-        if (hasSteps)
-        {
-            BuildSteps(howSteps);
-        }
-        continueChip.text = TouchControls.Active ? "TAP to continue" : "ENTER to continue";
-        continueChip.gameObject.SetActive(showContinue);
+        lineUntil = -1f;
+        Layout(heading, line, howSteps, showContinue);
+    }
 
-        // Stack the parts top to bottom and size the card around them.
-        float y = -22f;
-        if (heading.Length > 0)
-        {
-            Place(title.rectTransform, y, 44f);
-            y -= 48f;
-        }
-        float bodyHeight = Mathf.Max(36f, body.GetPreferredValues(line, CardWidth - 64f, 400f).y);
-        Place(body.rectTransform, y, bodyHeight);
-        y -= bodyHeight + 10f;
-        if (hasSteps)
-        {
-            steps.anchoredPosition = new Vector2(0f, y);
-            y -= 128f;
-        }
-        if (showContinue)
-        {
-            Place(continueChip.rectTransform, y, 28f);
-            y -= 32f;
-        }
-        card.sizeDelta = new Vector2(CardWidth, -y + 14f);
-
-        PlaceCard(place);
-        card.gameObject.SetActive(true);
+    // A single sentence that goes away by itself after 'seconds'.
+    public void ShowLine(string line, float seconds)
+    {
+        Layout("", line, null, false);
+        lineUntil = Time.unscaledTime + seconds;
     }
 
     public void HideCard()
     {
-        card.gameObject.SetActive(false);
+        cardWanted = false;
+        lineUntil = -1f;
+    }
+
+    // Hides a LINE (not a card) that is still up.
+    public void HideLine()
+    {
+        if (lineUntil > 0f)
+        {
+            HideCard();
+        }
     }
 
     public void ShowSkip(bool on)
@@ -167,6 +184,7 @@ public class GuidedIntroView : MonoBehaviour
 
     public void Close()
     {
+        CardVisible = false;
         if (tint != null)
         {
             Destroy(tint.gameObject);
@@ -179,26 +197,63 @@ public class GuidedIntroView : MonoBehaviour
     private void LateUpdate()
     {
         // The tint fades in while the world is held.
-        float alpha = Mathf.MoveTowards(tint.color.a, GuidedIntro.Holding ? HoldTint : 0f, Time.unscaledDeltaTime * 1.5f);
-        tint.color = new Color(0f, 0f, 0f, alpha);
+        float tintAlpha = Mathf.MoveTowards(tint.color.a, GuidedIntro.Holding ? HoldTint : 0f, Time.unscaledDeltaTime * 1.2f);
+        tint.color = new Color(0f, 0f, 0f, tintAlpha);
 
-        // Letters typed while a key is wanted: the card shakes.
+        // A line goes away by itself.
+        if (lineUntil > 0f && Time.unscaledTime >= lineUntil)
+        {
+            HideCard();
+        }
+
+        // Fade and rise in; fade out; half see-through while aiming.
+        bool aiming = GameManager.Instance != null && GameManager.Instance.Powers != null && GameManager.Instance.Powers.IsAiming;
+        float wanted = cardWanted ? (aiming ? AimingAlpha : 1f) : 0f;
+        cardGroup.alpha = Mathf.MoveTowards(cardGroup.alpha, wanted, Time.unscaledDeltaTime * (cardWanted ? 6f : 8f));
+        if (!cardWanted && cardGroup.alpha <= 0f && card.gameObject.activeSelf)
+        {
+            card.gameObject.SetActive(false);
+        }
+        CardVisible = card.gameObject.activeSelf;
+
+        float rise = 1f - Mathf.Clamp01((Time.unscaledTime - shownAt) / 0.28f);
+        rise = rise * rise * rise; // ease-out
         float nudge = Mathf.Max(0f, 1f - (Time.unscaledTime - nudgeAt) / 0.35f);
-        card.anchoredPosition = cardHome + Vector2.right * Mathf.Sin(nudge * 30f) * 14f * nudge;
+        cardShift = Mathf.MoveTowards(cardShift, ShiftClearOfPowers(), Time.unscaledDeltaTime * 1200f);
+        card.anchoredPosition = new Vector2(cardShift + Mathf.Sin(nudge * 30f) * 12f * nudge, CardBottom - 18f * rise);
 
-        // The arrow bobs over the pointed zombie's word.
-        bool show = pointed != null && pointed.IsAlive && pointed.Label != null && pointed.Label.enabled;
+        // The arrow bobs over the pointed word.
+        bool show = pointed != null && pointed.IsAlive && pointed.Label != null && pointed.Label.enabled
+            && pointed.Label.gameObject.activeInHierarchy;
         pointer.gameObject.SetActive(show);
         if (show)
         {
             Vector2 at;
-            RectTransformUtility.ScreenPointToLocalPointInRectangle(root, pointed.Label.rectTransform.position, null, out at);
-            pointer.anchoredPosition = at + Vector2.up * (78f + Mathf.Sin(Time.unscaledTime * 4f) * 8f);
+            RectTransform label = pointed.Label.rectTransform;
+            Vector3 top = label.TransformPoint(new Vector3(label.rect.center.x, label.rect.yMax, 0f));
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(root, top, null, out at);
+            pointer.anchoredPosition = at + Vector2.up * (40f + Mathf.Sin(Time.unscaledTime * 5f) * 7f);
         }
+    }
+
+    // How far right the card must move so its left edge stays a little to the
+    // right of the power list (bottom-left); never off the right edge.
+    private float ShiftClearOfPowers()
+    {
+        float powersRight = hud != null && !TouchControls.Active ? hud.PowersRightEdge() : float.NaN;
+        if (float.IsNaN(powersRight))
+        {
+            return 0f;
+        }
+        float right = root.InverseTransformPoint(new Vector3(powersRight, 0f, 0f)).x - root.rect.center.x;
+        float half = card.sizeDelta.x * 0.5f;
+        float shift = Mathf.Max(0f, right + 28f + half);
+        return Mathf.Min(shift, Mathf.Max(0f, root.rect.width * 0.5f - 24f - half));
     }
 
     private void OnDestroy()
     {
+        CardVisible = false;
         if (tint != null)
         {
             Destroy(tint.gameObject);
@@ -208,64 +263,100 @@ public class GuidedIntroView : MonoBehaviour
 
     // ---- Layout ----
 
-    private void PlaceCard(CardPlace place)
+    private void Layout(string heading, string line, GuideStep[] howSteps, bool showContinue)
     {
-        // On a phone the powers list is replaced by buttons: such cards go in the middle.
-        if (place == CardPlace.Powers && TouchControls.Active)
+        foreach (Transform child in steps)
         {
-            place = CardPlace.Center;
+            Destroy(child.gameObject);
         }
-        switch (place)
+        bool hasSteps = howSteps != null && howSteps.Length > 0;
+        bool hasTitle = !string.IsNullOrEmpty(heading);
+        title.text = hasTitle ? heading : "";
+        title.gameObject.SetActive(hasTitle);
+        body.text = line;
+        body.fontSize = hasTitle || hasSteps ? 26f : 30f;
+        continueChip.text = TouchControls.Active ? "TAP TO CONTINUE" : "ENTER  TO CONTINUE";
+        continueChip.gameObject.SetActive(showContinue);
+        steps.gameObject.SetActive(hasSteps);
+        divider.gameObject.SetActive(hasSteps);
+
+        // The text block: as wide as its longest line (up to a limit).
+        float maxText = hasSteps ? TextMaxWidth : LineMaxWidth;
+        Vector2 bodySize = body.GetPreferredValues(line, maxText, 1000f);
+        float textWidth = Mathf.Min(maxText, bodySize.x + 2f);
+        if (hasTitle)
         {
-            case CardPlace.TopLeft:
-                SetAnchor(new Vector2(0f, 1f), new Vector2(40f, -110f));
-                break;
-            case CardPlace.TopRight:
-                SetAnchor(new Vector2(1f, 1f), new Vector2(-40f, -150f));
-                break;
-            case CardPlace.TopCenter:
-                SetAnchor(new Vector2(0.5f, 1f), new Vector2(0f, -215f));
-                break;
-            case CardPlace.Powers:
-                SetAnchor(new Vector2(0f, 0f), new Vector2(520f, 300f)); // above the word box
-                break;
-            default:
-                SetAnchor(new Vector2(0.5f, 0.5f), new Vector2(0f, 270f)); // above where the zombies' words are
-                card.pivot = new Vector2(0.5f, 0.5f);
-                break;
+            textWidth = Mathf.Max(textWidth, title.GetPreferredValues(heading).x + 2f);
         }
+        if (showContinue)
+        {
+            textWidth = Mathf.Max(textWidth, continueChip.GetPreferredValues(continueChip.text).x + 2f);
+        }
+        bodySize = body.GetPreferredValues(line, textWidth, 1000f);
+        float titleHeight = hasTitle ? 38f : 0f;
+        float continueHeight = showContinue ? 30f : 0f;
+        float textHeight = titleHeight + bodySize.y + continueHeight;
+
+        float stepsWidth = hasSteps ? howSteps.Length * StepWidth + (howSteps.Length - 1) * StepGap : 0f;
+        float width = Pad * 2f + textWidth + (hasSteps ? Pad * 2f + stepsWidth : 0f);
+        float height = Mathf.Max(textHeight, hasSteps ? StepsHeight : 0f) + Pad * 1.4f;
+        card.sizeDelta = new Vector2(Mathf.Max(width, 300f), height);
+        float left = (card.sizeDelta.x - width) * 0.5f + Pad; // a text-only card centres its text
+
+        TextAlignmentOptions align = hasSteps ? TextAlignmentOptions.Left : TextAlignmentOptions.Center;
+        title.alignment = align;
+        body.alignment = align;
+        continueChip.alignment = align;
+
+        float y = textHeight * 0.5f; // from the card's middle, going down
+        if (hasTitle)
+        {
+            Place(title.rectTransform, left, y, textWidth, titleHeight);
+            y -= titleHeight;
+        }
+        Place(body.rectTransform, left, y, textWidth, bodySize.y);
+        y -= bodySize.y;
+        if (showContinue)
+        {
+            Place(continueChip.rectTransform, left, y - 4f, textWidth, continueHeight);
+        }
+
+        if (hasSteps)
+        {
+            float dividerX = left + textWidth + Pad;
+            divider.anchoredPosition = new Vector2(dividerX, 0f);
+            divider.sizeDelta = new Vector2(2f, height - Pad);
+            steps.anchoredPosition = new Vector2(dividerX + Pad, 0f);
+            steps.sizeDelta = new Vector2(stepsWidth, StepsHeight);
+            BuildSteps(howSteps);
+        }
+
+        if (!cardWanted || !card.gameObject.activeSelf)
+        {
+            shownAt = Time.unscaledTime;
+            cardGroup.alpha = 0f;
+        }
+        cardWanted = true;
+        card.gameObject.SetActive(true);
+        CardVisible = true;
     }
 
-    private void SetAnchor(Vector2 anchor, Vector2 position)
+    // A text at 'left' from the card's left edge, its top 'top' above the card's middle.
+    private static void Place(RectTransform rect, float left, float top, float width, float height)
     {
-        card.anchorMin = anchor;
-        card.anchorMax = anchor;
-        card.pivot = anchor;
-        card.anchoredPosition = position;
-        cardHome = position;
-    }
-
-    private void Place(RectTransform rect, float top, float height)
-    {
-        rect.anchorMin = new Vector2(0f, 1f);
-        rect.anchorMax = new Vector2(1f, 1f);
-        rect.pivot = new Vector2(0.5f, 1f);
-        rect.offsetMin = new Vector2(32f, 0f);
-        rect.offsetMax = new Vector2(-32f, 0f);
-        rect.anchoredPosition = new Vector2(0f, top);
-        rect.sizeDelta = new Vector2(-64f, height);
+        rect.anchorMin = rect.anchorMax = new Vector2(0f, 0.5f);
+        rect.pivot = new Vector2(0f, 1f);
+        rect.anchoredPosition = new Vector2(left, top);
+        rect.sizeDelta = new Vector2(width, height);
     }
 
     // The steps, side by side with a small arrow between them: [1] HOLD -> arrows AIM -> [1] LET GO.
     private void BuildSteps(GuideStep[] howSteps)
     {
-        const float StepWidth = 150f;
-        const float Gap = 46f;
-        float total = howSteps.Length * StepWidth + (howSteps.Length - 1) * Gap;
         for (int i = 0; i < howSteps.Length; i++)
         {
-            float x = -total * 0.5f + StepWidth * 0.5f + i * (StepWidth + Gap);
-            RectTransform step = Rect("Step", steps, new Vector2(0.5f, 1f), new Vector2(x, 0f), new Vector2(StepWidth, 120f));
+            float x = StepWidth * 0.5f + i * (StepWidth + StepGap);
+            RectTransform step = Rect("Step", steps, new Vector2(0f, 1f), new Vector2(x, 0f), new Vector2(StepWidth, StepsHeight));
             step.pivot = new Vector2(0.5f, 1f);
             if (howSteps[i].IsArrows)
             {
@@ -275,47 +366,56 @@ public class GuidedIntroView : MonoBehaviour
             {
                 KeyCap(step, howSteps[i].KeyText);
             }
-            TMP_Text label = Text("Label", step, howSteps[i].Label, 22f, FontStyles.Bold);
+            TMP_Text label = Text("Label", step, howSteps[i].Label, 18f, FontStyles.Bold);
             label.color = Gold;
+            label.characterSpacing = 3f;
             label.rectTransform.anchorMin = label.rectTransform.anchorMax = new Vector2(0.5f, 0f);
             label.rectTransform.pivot = new Vector2(0.5f, 0f);
-            label.rectTransform.anchoredPosition = new Vector2(0f, 0f);
-            label.rectTransform.sizeDelta = new Vector2(StepWidth + 30f, 28f);
+            label.rectTransform.anchoredPosition = new Vector2(0f, 2f);
+            label.rectTransform.sizeDelta = new Vector2(StepWidth + StepGap, 24f);
 
             if (i < howSteps.Length - 1)
             {
-                RectTransform between = Rect("Then", steps, new Vector2(0.5f, 1f), new Vector2(x + StepWidth * 0.5f + Gap * 0.5f, -44f), new Vector2(30f, 40f));
-                Arrow(between, Grey, 0.6f, 90f); // pointing right
+                RectTransform between = Rect("Then", steps, new Vector2(0f, 1f), new Vector2(x + StepWidth * 0.5f + StepGap * 0.5f, -40f), new Vector2(30f, 40f));
+                Arrow(between, Grey, 0.45f, 90f); // pointing right
             }
         }
     }
 
-    // A key cap with a key on it ("1", "TAB") or a word ("TYPE").
-    private void KeyCap(RectTransform step, string key)
+    // A key cap: a lighter edge, a dark face, the key ("1", "TAB") or a word ("TYPE").
+    private static void KeyCap(RectTransform step, string key)
     {
-        float width = key.Length <= 1 ? 76f : Mathf.Min(150f, 30f + key.Length * 22f);
-        RectTransform cap = Rect("Cap", step, new Vector2(0.5f, 1f), new Vector2(0f, -6f), new Vector2(width, 76f));
-        cap.pivot = new Vector2(0.5f, 1f);
-        Image face = cap.gameObject.AddComponent<Image>();
-        face.color = CapColor;
-        face.raycastTarget = false;
-        TMP_Text text = Text("Key", cap, key, key.Length <= 3 ? 40f : 26f, FontStyles.Bold);
+        float width = key.Length <= 1 ? 68f : Mathf.Min(StepWidth, 30f + key.Length * 17f);
+        RectTransform edge = Rect("Cap", step, new Vector2(0.5f, 1f), new Vector2(0f, -4f), new Vector2(width, 68f));
+        edge.pivot = new Vector2(0.5f, 1f);
+        Image edgeImage = edge.gameObject.AddComponent<Image>();
+        edgeImage.color = CapEdge;
+        edgeImage.raycastTarget = false;
+        RectTransform face = Rect("Face", edge, new Vector2(0.5f, 0.5f), new Vector2(0f, 2f), new Vector2(width - 4f, 62f));
+        Image faceImage = face.gameObject.AddComponent<Image>();
+        faceImage.color = CapFace;
+        faceImage.raycastTarget = false;
+        TMP_Text text = Text("Key", face, key, key.Length <= 3 ? 34f : 20f, FontStyles.Bold);
         Fill(text.rectTransform);
     }
 
-    // The four arrow keys, each with an arrow drawn on it.
-    private void ArrowKeys(RectTransform step)
+    // The four arrow keys in their usual T, each with an arrow drawn on it.
+    private static void ArrowKeys(RectTransform step)
     {
-        Vector2[] spots = { new Vector2(-40f, -62f), new Vector2(40f, -62f), new Vector2(0f, -22f), new Vector2(0f, -62f) };
+        Vector2[] spots = { new Vector2(-36f, -56f), new Vector2(36f, -56f), new Vector2(0f, -20f), new Vector2(0f, -56f) };
         float[] turns = { -90f, 90f, 180f, 0f }; // the drawn arrow points down: turned for left, right, up
         for (int i = 0; i < 4; i++)
         {
-            RectTransform cap = Rect("Arrow Key", step, new Vector2(0.5f, 1f), spots[i], new Vector2(36f, 36f));
-            Image face = cap.gameObject.AddComponent<Image>();
-            face.color = CapColor;
-            face.raycastTarget = false;
-            RectTransform glyph = Rect("Arrow", cap, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 60f));
-            Arrow(glyph, Color.white, 0.42f, turns[i]);
+            RectTransform edge = Rect("Arrow Key", step, new Vector2(0.5f, 1f), spots[i], new Vector2(32f, 32f));
+            Image edgeImage = edge.gameObject.AddComponent<Image>();
+            edgeImage.color = CapEdge;
+            edgeImage.raycastTarget = false;
+            RectTransform face = Rect("Face", edge, new Vector2(0.5f, 0.5f), new Vector2(0f, 1f), new Vector2(29f, 29f));
+            Image faceImage = face.gameObject.AddComponent<Image>();
+            faceImage.color = CapFace;
+            faceImage.raycastTarget = false;
+            RectTransform glyph = Rect("Arrow", face, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(40f, 60f));
+            Arrow(glyph, Color.white, 0.36f, turns[i]);
         }
     }
 
@@ -354,7 +454,7 @@ public class GuidedIntroView : MonoBehaviour
 
     private static TMP_Text Text(string name, Transform parent, string text, float size, FontStyles style)
     {
-        RectTransform rect = Rect(name, parent, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(CardWidth - 64f, size * 1.4f));
+        RectTransform rect = Rect(name, parent, new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(400f, size * 1.4f));
         TextMeshProUGUI label = rect.gameObject.AddComponent<TextMeshProUGUI>();
         label.text = text;
         label.fontSize = size;

@@ -18,6 +18,12 @@ public static class Tutorial
 
     private static readonly HashSet<string> shown = new HashSet<string>();
 
+    // The guided first wave has taught this already: never show its hint.
+    public static void MarkShown(string key)
+    {
+        shown.Add(key);
+    }
+
     // Shows text (for seconds) if the hint called key was never shown before.
     public static void Once(string key, string text, float seconds = DefaultSeconds)
     {

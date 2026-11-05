@@ -518,6 +518,13 @@ public class Zombie : MonoBehaviour, ITypingTarget
     // push is stronger the closer the other zombie is (0 at the wanted distance).
     private Vector3 SeparationPush()
     {
+        // Near the player (first person) they stand further apart, side by
+        // side in a fan, so their words never pile up on top of each other.
+        float gap = separationDistance;
+        if (CameraDirector.MapBlend <= 0.5f && FlatDistance(transform.position, player.position) < StandOffDistance + 3f)
+        {
+            gap = Mathf.Max(gap, NearPlayerGap);
+        }
         Vector3 push = Vector3.zero;
         foreach (Zombie other in spawner.AliveZombies)
         {
@@ -529,7 +536,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
             Vector3 away = transform.position - other.transform.position;
             away.y = 0f;
             float distance = away.magnitude;
-            float wanted = BodyRadius + other.BodyRadius + separationDistance;
+            float wanted = BodyRadius + other.BodyRadius + gap;
             if (distance >= wanted)
             {
                 continue;
@@ -889,6 +896,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
     // STAND-OFF: in first person a zombie chasing the player stops this far away
     // (big ones farther: their words sit higher) and attacks from there. In
     // the map view (seen from above) it may walk right up: attackDistance.
+    private const float NearPlayerGap = 2.2f; // metres between two zombies' bodies when they stand at the player
     private const float StandOff = 3f;
     private const float BigStandOff = 4f;
     private const float BiteReach = 0.6f;    // it bites from up to this far beyond its stand-off

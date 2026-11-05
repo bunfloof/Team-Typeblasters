@@ -37,3 +37,10 @@ public interface ITypingTarget
     // has been typed): a zombie dies or explodes, a boss part breaks.
     void CompleteWord();
 }
+
+// A word drawn by the HUD in its own place, not over something in the world
+// (the shield word, the health word under the health bar). No bullet is fired
+// at it: finishing it acts at once, and WaveSpawner never places its label.
+public interface IScreenWord : ITypingTarget
+{
+}
