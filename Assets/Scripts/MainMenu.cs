@@ -48,6 +48,7 @@ public class MainMenu : MonoBehaviour
     private bool portraitLayout;
     private readonly List<RectTransform> menuItems = new List<RectTransform>(); // buttons the keys can select on the current page
     private int selected;           // index in menuItems
+    private bool keyboardSelectionStarted;
     private bool settingsWasOpen;   // SettingsPanel was open last frame (it closes itself on Esc / Enter)
     private static bool openLevelSelectionOnStart;
 
@@ -178,6 +179,7 @@ public class MainMenu : MonoBehaviour
         mainPage.SetActive(true);
         levelPage.SetActive(false);
         selected = 0;
+        keyboardSelectionStarted = false;
         RefreshHighlight();
     }
 
@@ -187,6 +189,7 @@ public class MainMenu : MonoBehaviour
         mainPage.SetActive(false);
         levelPage.SetActive(true);
         selected = 0;
+        keyboardSelectionStarted = false;
         RefreshHighlight();
     }
 
@@ -320,6 +323,7 @@ public class MainMenu : MonoBehaviour
         int step = (next ? 1 : 0) - (previous ? 1 : 0);
         if (step != 0)
         {
+            keyboardSelectionStarted = true;
             selected = (selected + step + items.Count) % items.Count;
             RefreshHighlight();
         }
@@ -353,7 +357,10 @@ public class MainMenu : MonoBehaviour
         }
         SetHighlight(endlessButton, false);
         SetHighlight(backButton, false);
-        SetHighlight(items[selected], true);
+        if (keyboardSelectionStarted)
+        {
+            SetHighlight(items[selected], true);
+        }
     }
 
     private static void SetHighlight(RectTransform button, bool on)

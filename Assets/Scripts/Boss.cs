@@ -953,7 +953,7 @@ public class Boss : MonoBehaviour
 
     // ---- Dying ----
 
-    private void Die()
+    private void Die(bool awardKill = true)
     {
         IsAlive = false; // TypingController and WaveSpawner see this right away
         StopAllCoroutines(); // any attack or quiz in progress
@@ -961,7 +961,10 @@ public class Boss : MonoBehaviour
         windUp = 0f;
         ClearCharges();
 
-        GameManager.Instance.AddKill();
+        if (awardKill)
+        {
+            GameManager.Instance.AddKill();
+        }
         foreach (BossPart word in words)
         {
             Destroy(word.Label.gameObject); // the words are on the HUD, not children of the boss
@@ -980,6 +983,17 @@ public class Boss : MonoBehaviour
         hud.HideQuiz();
         StartCoroutine(DeathEffect());
     }
+
+#if UNITY_EDITOR
+    // Ends the boss fight for testing without awarding the boss kill.
+    public void CompleteForDebug()
+    {
+        if (IsAlive)
+        {
+            Die(false);
+        }
+    }
+#endif
 
     // Shrinks the boss into the ground, then removes it.
     private IEnumerator DeathEffect()

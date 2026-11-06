@@ -136,6 +136,22 @@ public class WaveSpawner : MonoBehaviour
     private bool fightOn;
     private bool healthOfferedThisWave;
 
+#if UNITY_EDITOR
+    private bool currentWaveActive;
+    private bool debugCompletingWave;
+    private bool debugBossFightActive;
+
+    public bool CanCompleteCurrentWaveForDebug
+    {
+        get
+        {
+            return currentWaveActive
+                && !debugCompletingWave
+                && (!debugBossFightActive || (boss != null && boss.IsAlive));
+        }
+    }
+#endif
+
     // How many zombies may be alive at once: a wave waits to send more until
     // some are shot, so the screen never fills with words. Follows the
     // player's measured speed (ADAPTIVE DIFFICULTY).
@@ -1020,6 +1036,61 @@ public class WaveSpawner : MonoBehaviour
         StopAllCoroutines();
     }
 
+#if UNITY_EDITOR
+    // Completes the active zombie wave or boss fight without awarding rewards.
+    // The existing wave coroutine handles all subsequent cleanup and progression.
+    public bool CompleteCurrentWaveForDebug()
+    {
+        GameManager game = GameManager.Instance;
+
+        if (!Application.isPlaying
+            || game == null
+            || game.State != GameState.Playing
+            || !CanCompleteCurrentWaveForDebug)
+        {
+            return false;
+        }
+
+        if (debugBossFightActive)
+        {
+            if (boss == null || !boss.IsAlive)
+            {
+                return false;
+            }
+        
+            // Boss.Die(false) triggers the normal boss-death cleanup.
+            boss.CompleteForDebug();
+        }
+        else
+        {
+            // Stop any remaining scheduled zombie spawns.
+            debugCompletingWave = true;
+
+            // Remove every currently alive zombie without awarding rewards.
+            foreach (Zombie zombie in aliveZombies.ToArray())
+            {
+                if (zombie != null && zombie.IsAlive)
+                {
+                    zombie.DespawnForDebug();
+                }
+            }
+        }
+
+        // Projectiles from SPITTERS must not carry into the next wave.
+        foreach (EnergyOrb orb in strayOrbs)
+        {
+            if (orb != null && orb.IsAlive)
+            {
+                orb.Dissipate();
+            }
+        }
+
+        strayOrbs.Clear();
+
+        return true;
+    }
+#endif
+
     // Called by a zombie when it dies or reaches the player.
     public void RemoveZombie(Zombie zombie)
     {
@@ -1433,6 +1504,11 @@ public class WaveSpawner : MonoBehaviour
 
     private IEnumerator RunZombieWave(int wave, Encounter encounter)
     {
+    #if UNITY_EDITOR
+        currentWaveActive = true;
+        debugCompletingWave = false;
+        debugBossFightActive = false;
+    #endif
         extraZombiesThisWave = 0;
         spreadApproach = true; // this wave's zombies come in on curves to spots of their own (AssignApproach)
         int difficultyWave = endlessMode ? Mathf.Min(wave, endlessDifficultyCapWave) : wave;
@@ -1473,6 +1549,11 @@ public class WaveSpawner : MonoBehaviour
         if (order.Count == 0)
         {
             Debug.LogError("WaveSpawner: the fight \"" + encounter.name + "\" has no spawn points under it.");
+            #if UNITY_EDITOR
+            currentWaveActive = false;
+            debugCompletingWave = false;
+            #endif
+            spreadApproach = false;
             yield break;
         }
         Shuffle(order);
@@ -1480,11 +1561,22 @@ public class WaveSpawner : MonoBehaviour
         int next = 0;
         while (spawned < zombiesThisWave)
         {
+        #if UNITY_EDITOR
+            if (debugCompletingWave) break;
+        #endif
+
             // Never too many at once: wait until some are shot.
             while (aliveZombies.Count >= MaxOnScreen)
             {
+        #if UNITY_EDITOR
+                if (debugCompletingWave) break;
+        #endif
                 yield return null;
             }
+
+        #if UNITY_EDITOR
+            if (debugCompletingWave) break;
+        #endif
             SpawnPoint point = order[next % order.Count];
             next += 1;
 
@@ -1504,6 +1596,9 @@ public class WaveSpawner : MonoBehaviour
             int member = 0;
             while (packLeft > 0 && spawned < zombiesThisWave)
             {
+            #if UNITY_EDITOR
+                if (debugCompletingWave) break;
+            #endif
                 // A WORD CHAIN pair takes two places of the plan and comes out together.
                 if (pairStarts.Contains(spawned) && SpawnChainPair(point, order, speed))
                 {
@@ -1540,7 +1635,12 @@ public class WaveSpawner : MonoBehaviour
             }
             // ADAPTIVE DIFFICULTY: read at every pack, so a wave already under
             // way follows the player's measured speed too.
-            yield return new WaitForSeconds(interval * pack * DynamicDifficulty.SpawnIntervalFactor);
+        #if UNITY_EDITOR
+            if (!debugCompletingWave)
+        #endif
+            {
+                yield return new WaitForSeconds(interval * pack * DynamicDifficulty.SpawnIntervalFactor);
+            }
         }
 
         // 2b. ADAPTIVE DIFFICULTY: a fast typist gets extra zombies at the end
@@ -1550,10 +1650,19 @@ public class WaveSpawner : MonoBehaviour
         extraZombiesThisWave = extra;
         for (int i = 0; i < extra; i++)
         {
+        #if UNITY_EDITOR
+            if (debugCompletingWave) break;
+        #endif
             while (aliveZombies.Count >= MaxOnScreen)
             {
+            #if UNITY_EDITOR
+                if (debugCompletingWave) break;
+            #endif
                 yield return null;
             }
+            #if UNITY_EDITOR
+            if (debugCompletingWave) break;
+            #endif
             SpawnPoint point = order[next % order.Count];
             next += 1;
             if (point.Door != null)
@@ -1571,6 +1680,10 @@ public class WaveSpawner : MonoBehaviour
             yield return null;
         }
         spreadApproach = false;
+        #if UNITY_EDITOR
+        currentWaveActive = false;
+        debugCompletingWave = false;
+        #endif
     }
 
     // ---- Spreading a wave out ----
@@ -1636,15 +1749,32 @@ public class WaveSpawner : MonoBehaviour
         {
             yield break;
         }
+
         int door = Random.Range(0, points.Count);
+
         foreach (ZombieKind kind in IntroOrder)
         {
+    #if UNITY_EDITOR
+            if (debugCompletingWave) yield break;
+    #endif
+
             if (seenKinds.Contains(kind) || System.Array.IndexOf(plan, kind) < 0)
             {
                 continue;
             }
+
             yield return UntilFieldClear();
+
+    #if UNITY_EDITOR
+            if (debugCompletingWave) yield break;
+    #endif
+
             yield return new WaitForSeconds(1.2f);
+
+    #if UNITY_EDITOR
+            if (debugCompletingWave) yield break;
+    #endif
+
             SpawnPoint point = points[door++ % points.Count];
             if (point.Door != null)
             {
@@ -1658,33 +1788,67 @@ public class WaveSpawner : MonoBehaviour
             {
                 other = points[door % points.Count];
             }
+
             if (other != null)
             {
                 yield return new WaitForSeconds(1.5f);
+
+    #if UNITY_EDITOR
+                if (debugCompletingWave) yield break;
+    #endif
+
                 if (other.Door != null)
                 {
                     other.Door.BurstOpen();
                 }
                 SpawnZombieInLane(other, ZombieKind.Normal, speed, -PackLaneWidth * 0.5f);
+
                 yield return new WaitForSeconds(PackStagger);
+
+    #if UNITY_EDITOR
+                if (debugCompletingWave) yield break;
+    #endif
+
                 SpawnZombieInLane(other, ZombieKind.Normal, speed, PackLaneWidth * 0.5f);
             }
+
             yield return UntilFieldClear();
+
+    #if UNITY_EDITOR
+            if (debugCompletingWave) yield break;
+    #endif
         }
+
         if (hasChain && !chainSeen)
         {
             yield return UntilFieldClear();
+
+    #if UNITY_EDITOR
+            if (debugCompletingWave) yield break;
+    #endif
+
             yield return new WaitForSeconds(1.2f);
+
+    #if UNITY_EDITOR
+            if (debugCompletingWave) yield break;
+    #endif
+
             SpawnPoint point = points[door++ % points.Count];
             if (point.Door != null)
             {
                 point.Door.BurstOpen();
             }
+
             if (SpawnChainPair(point, points, speed))
             {
                 Tutorial.Once("chain", "WORD CHAIN: type the longer word to shoot both.", 6f);
                 chainSeen = true;
+
                 yield return UntilFieldClear();
+
+    #if UNITY_EDITOR
+                if (debugCompletingWave) yield break;
+    #endif
             }
         }
     }
@@ -2306,6 +2470,11 @@ public class WaveSpawner : MonoBehaviour
 
     private IEnumerator RunBossFight(Encounter encounter)
     {
+        #if UNITY_EDITOR
+        currentWaveActive = true;
+        debugCompletingWave = false;
+        debugBossFightActive = true;
+        #endif
         // 1. The boss appears where it fights.
         CameraDirector.Shake(0.4f);
         boss = Boss.Create(encounter.BossStand, player.position, this, hud);
@@ -2350,5 +2519,9 @@ public class WaveSpawner : MonoBehaviour
         yield return new WaitForSeconds(1.5f);
         boss = null;
         hud.HideBossBar();
+        #if UNITY_EDITOR
+        currentWaveActive = false;
+        debugBossFightActive = false;
+        #endif
     }
 }

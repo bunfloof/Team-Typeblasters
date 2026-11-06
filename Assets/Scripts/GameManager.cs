@@ -270,6 +270,16 @@ public class GameManager : MonoBehaviour
     // (Checkpoint); any other Restart starts the level from the beginning.
     public void RestartGame()
     {
+        if (State == GameState.Paused)
+        {
+            hud.ShowConfirmation("Restart this level?", RestartGameConfirmed);
+            return;
+        }
+        RestartGameConfirmed();
+    }
+
+    private void RestartGameConfirmed()
+    {
         string scene = SceneManager.GetActiveScene().name;
         if (State == GameState.Lost && Checkpoint.Has(scene))
         {
@@ -284,6 +294,17 @@ public class GameManager : MonoBehaviour
 
     // Called by ordinary MENU buttons: return to the menu's main page.
     public void LoadMenu()
+    {
+        if (State == GameState.Paused)
+        {
+            hud.ShowConfirmation("Return to main menu?", LoadMenuConfirmed);
+            return;
+        }
+
+        LoadMenuConfirmed();
+    }
+
+    private void LoadMenuConfirmed()
     {
         Checkpoint.Clear();
         LoadLevelScene("Menu");
@@ -376,6 +397,13 @@ public class GameManager : MonoBehaviour
         }
         else if (State == GameState.Paused)
         {
+            // Esc closes the confirmation instead of resuming the game.
+            if (hud != null && hud.IsConfirmationOpen)
+            {
+                hud.CancelConfirmation();
+                return;
+            }
+        
             if (resumeCountdown != null)
             {
                 Pause("esc_key");
@@ -698,6 +726,16 @@ public class GameManager : MonoBehaviour
         {
             WinGame();
         }
+    }
+
+    public void CompleteCurrentWaveForDebug()
+    {
+        if (State != GameState.Playing || spawner == null)
+        {
+            return;
+        }
+
+        spawner.CompleteCurrentWaveForDebug();
     }
 #endif
 
