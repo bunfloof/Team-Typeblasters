@@ -1,15 +1,15 @@
 {
-  "version": "latest-2026-11-04-3a07346",
-  "source_commit": "3a0734694189316b6f4975802cb9462c2d03626e",
-  "commit_message": "Waiting phrases resume after a space; wave 3 gate open from the start",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/41988225820",
+  "version": "latest-2026-11-05-b471681",
+  "source_commit": "b4716818c4f93958cb0d536d1e9ad6c4b87d6c9d",
+  "commit_message": "Improve windowed HUD and guided intro readability",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/42164923023",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-05T07:47:15.571203Z",
+  "published_utc": "2026-11-06T05:01:08.918824Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14265281,
-      "sha256": "4b7e342aa5a0634f64324c57859bcfd29ec79f6ee6aaf2529cd37482f102f496"
+      "bytes": 14265950,
+      "sha256": "4156e468517651a4e801ff3b1577db38dc5feadd6182c2444592cc796f63a925"
     },
     {
       "path": "Build/WebGL.framework.js",
@@ -19,12 +19,12 @@
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "2ae903531197843cb5e49cd617c2fad927d0e9a423a90a17f0d37c9f7ddce6d4"
+      "sha256": "8f6de2e5bc7beeebde24bfa4128c173913be3552ca357a7e3b7a47081698d543"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48139343,
-      "sha256": "89f0965eed8bbc05c2a5b9e0a01f4fbc542ec3255a084078874c57024fc89d33"
+      "bytes": 48145358,
+      "sha256": "89dd663e7cd0622b75a6ff0a359b4412651ac1150de97bf7a0ce4a114971c8a1"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -63,8 +63,8 @@
     },
     {
       "path": "TemplateData/style.css",
-      "bytes": 2042,
-      "sha256": "63030ad12004c31b80df23e695b70c93b962105270f9437c03f50e9076721bf8"
+      "bytes": 2781,
+      "sha256": "f823b08622b58c5ca609f357f88bdb3162555a5bf8a3665c59a5e519907f06fe"
     },
     {
       "path": "TemplateData/unity-logo-dark.png",
@@ -88,8 +88,8 @@
     },
     {
       "path": "index.html",
-      "bytes": 7265,
-      "sha256": "609f3d4e7ff04eb4062b9eac2aa2a3f2441dc55bb5570bbfcd6c7286041e16fe"
+      "bytes": 7415,
+      "sha256": "167c2526a263b68a57b91095a47d6d2d3e62e3cac7b77e631d3f460203916bcc"
     }
   ]
 }

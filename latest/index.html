@@ -66,7 +66,7 @@
         streamingAssetsUrl: "StreamingAssets",
         companyName: "DefaultCompany",
         productName: "The Typeblaster of the Dead",
-        productVersion: "0.0.67",
+        productVersion: "0.0.68",
         showBanner: unityShowBanner,
         // errorHandler: function(err, url, line) {
         //    alert("error " + err + " occurred at line " + line);
@@ -130,8 +130,10 @@
 
       } else {
         // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
-        canvas.style.width = "960px";
-        canvas.style.height = "600px";
+        const aspect = 960 / 600;
+        canvas.style.aspectRatio = "960 / 600";
+        canvas.style.width = `max(1px, min(960px, calc(100vw - 24px), calc((100vh - 62px) * ${aspect})))`;
+        canvas.style.height = "auto";
       }
 
       document.querySelector("#unity-loading-bar").style.display = "block";
