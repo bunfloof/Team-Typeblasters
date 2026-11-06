@@ -447,6 +447,19 @@ public class Powers : MonoBehaviour
         }
     }
 
+    // Unloads a loaded RPG and gives its energy back (the guided intro, when
+    // nothing is left to fire at). Nothing happens if none is loaded.
+    public void UnloadRocket()
+    {
+        if (!RocketLoaded)
+        {
+            return;
+        }
+        RocketLoaded = false;
+        GameManager.Instance.AddSkillEnergy(RocketCost);
+        RefreshWeaponStatus();
+    }
+
     // Called by TypingController when a word is finished: true (once) if the
     // RPG is loaded, and that shot becomes the rocket.
     public bool ConsumeRocket()

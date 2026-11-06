@@ -419,13 +419,6 @@ public class TypingController : MonoBehaviour
             {
                 continue;
             }
-            // Guided first wave: while a message waits for a power key, words
-            // wait too (ignored, never a wrong key; the key on screen bounces).
-            if (GuidedIntro.BlocksLetters)
-            {
-                GuidedIntro.Nudge();
-                continue;
-            }
             HandleCharacter(character);
         }
 
@@ -558,8 +551,11 @@ public class TypingController : MonoBehaviour
 
     private void HandleCharacter(char typed)
     {
-        // The guided intro waits for a power key: nothing is typed (a space neither).
-        if (GuidedIntro.BlocksLetters)
+        // The guided intro waits for a power key: no NEW word can be started
+        // (the letter is ignored, never wrong; the card shakes). A word already
+        // started - being typed or waiting - can always be finished, so a
+        // lesson never leaves one stuck half-typed.
+        if (GuidedIntro.BlocksLetters && !AnyNextIs(candidates, typed) && FindParked(typed) == null)
         {
             GuidedIntro.Nudge();
             return;

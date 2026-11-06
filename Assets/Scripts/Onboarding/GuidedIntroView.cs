@@ -312,7 +312,7 @@ public class GuidedIntroView : MonoBehaviour
         title.gameObject.SetActive(hasTitle);
         body.text = line;
         body.fontSize = hasTitle || hasSteps ? 26f : 30f;
-        continueChip.text = TouchControls.Active ? "TAP TO CONTINUE" : "ENTER  TO CONTINUE";
+        continueChip.text = TouchControls.Active ? "TAP TO SKIP" : "ENTER  TO SKIP";
         continueChip.gameObject.SetActive(showContinue);
         steps.gameObject.SetActive(hasSteps);
         divider.gameObject.SetActive(hasSteps);

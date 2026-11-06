@@ -58,6 +58,16 @@ public static class GuidedIntro
     private static bool skipOffered;
     private static float skipArmedAt;
     private static bool wordDropped;
+
+    // SAFETY: a lesson that waits for the player (a power key, Backspace, a
+    // word) can never hold them forever: after SkipAfterSeconds its card
+    // offers "ENTER to skip" (a tap on the card works too).
+    private const float SkipAfterSeconds = 12f;
+    private static float lessonStarted;
+    private static bool lessonSkippable;
+    private static bool lessonSkipped;
+    private static string lessonTitle, lessonBody;
+    private static GuideStep[] lessonSteps;
     private static WaveSpawner spawner;
     private static HUD hud;
     private static GuidedIntroView view;
@@ -108,6 +118,10 @@ public static class GuidedIntro
             }
             Log("skipped");
             End();
+        }
+        else if (lessonSkippable)
+        {
+            lessonSkipped = true;
         }
     }
 
@@ -209,9 +223,9 @@ public static class GuidedIntro
             Holding = true;
             BlocksLetters = true;
             wordDropped = false;
-            view.ShowCard("CHANGE TARGET", "Drop your current word.",
-                new[] { GuideStep.Key(touch ? "DEL" : "BACKSPACE", touch ? "TAP" : "PRESS") }, false);
-            while (!wordDropped && typing != null && typing.IsTypingWord)
+            BeginLesson("CHANGE TARGET", "Drop your current word.",
+                new[] { GuideStep.Key(touch ? "DEL" : "BACKSPACE", touch ? "TAP" : "PRESS") });
+            while (!wordDropped && typing != null && typing.IsTypingWord && !LessonSkipped())
             {
                 yield return null;
             }
@@ -230,11 +244,12 @@ public static class GuidedIntro
         if (box != null)
         {
             spawner.ActivateProp(box);
+            yield return UntilNotTyping();
             Holding = true;
-            view.ShowCard("ENERGY", "Type the teal crate's word for +" + SupplyCrate.EnergyAmount + " energy.", null, false);
+            BeginLesson("ENERGY", "Type the teal crate's word for +" + SupplyCrate.EnergyAmount + " energy.", null);
             view.PointAt(box);
             float giveUp = Time.time + 25f;
-            while (!box.IsOpened && Time.time < giveUp)
+            while (!box.IsOpened && Time.time < giveUp && !LessonSkipped())
             {
                 yield return null;
             }
@@ -266,9 +281,9 @@ public static class GuidedIntro
             if (AnyAlive(group) && barrel.IsAlive)
             {
                 Holding = true;
-                view.ShowCard("BARREL", "Type the barrel's word to blow it up.", null, false);
+                BeginLesson("BARREL", "Type the barrel's word to blow it up.", null);
                 view.PointAt(barrel);
-                while (barrel.IsAlive && AnyAlive(group))
+                while (barrel.IsAlive && AnyAlive(group) && !LessonSkipped())
                 {
                     yield return null;
                 }
@@ -332,7 +347,7 @@ public static class GuidedIntro
         // waits, and if every target is somehow gone, new ones walk out.
         Holding = true;
         bool fireShown = false;
-        while (!powerActions.Contains("rpg:fire") && GameManager.Instance.Powers.RocketLoaded)
+        while (!powerActions.Contains("rpg:fire") && GameManager.Instance.Powers.RocketLoaded && !LessonSkipped())
         {
             if (!AnyAlive(group))
             {
@@ -343,7 +358,7 @@ public static class GuidedIntro
             }
             if (!fireShown)
             {
-                view.ShowCard("RPG LOADED", "Finish a word to fire.", null, false);
+                BeginLesson("RPG LOADED", "Finish a word to fire.", null);
                 fireShown = true;
             }
             view.PointAt(Middle(group));
@@ -366,10 +381,14 @@ public static class GuidedIntro
         yield return UntilClose(group);
         if (red != null && red.IsAlive)
         {
+            yield return UntilNotTyping();
             Holding = true; // the others stay in its ring until it goes off
-            view.ShowCard("RED ZOMBIE", "Type the red zombie's word to set off its blast.", null, false);
+            BeginLesson("RED ZOMBIE", "Type the red zombie's word to set off its blast.", null);
             view.PointAt(red);
-            yield return UntilDead(red);
+            while (red != null && red.IsAlive && !LessonSkipped())
+            {
+                yield return null;
+            }
             view.PointAt(null);
             view.HideCard();
             Holding = false;
@@ -388,13 +407,14 @@ public static class GuidedIntro
         {
             yield return null;
         }
+        yield return UntilNotTyping();
         Powers powers = GameManager.Instance.Powers;
         powers.RefillTrainingSupplies();
         Holding = true;
         BlocksLetters = true;
         HudReveal.Reveal(HudFeature.Shield);
-        view.ShowCard("SHIELD", touch ? "Tap Shield to block hits." : "Press Tab to block hits.", null, false);
-        while (!Powers.IsShielded)
+        BeginLesson("SHIELD", touch ? "Tap Shield to block hits." : "Press Tab to block hits.", null);
+        while (!Powers.IsShielded && !LessonSkipped())
         {
             if (powers.ShieldCharges == 0)
             {
@@ -433,12 +453,13 @@ public static class GuidedIntro
     {
         powerActions.Remove(item + ":" + done);
         powerActions.Remove("rpg:fire");
+        yield return UntilNotTyping(); // never cut into a word being typed
         Holding = true;
         BlocksLetters = true;
         GameManager.Instance.GrantTrainingEnergy(cost);
         HudReveal.Reveal(feature);
-        view.ShowCard(title, body, steps, false);
-        while (!powerActions.Contains(item + ":" + done))
+        BeginLesson(title, body, steps);
+        while (!powerActions.Contains(item + ":" + done) && !LessonSkipped())
         {
             GameManager.Instance.GrantTrainingEnergy(cost); // never stuck for lack of energy
             yield return null;
@@ -446,6 +467,48 @@ public static class GuidedIntro
         view.HideCard();
         BlocksLetters = false;
         Holding = false;
+    }
+
+    // A lesson card that waits for the player. It can be skipped after a while (LessonSkipped).
+    private static void BeginLesson(string title, string body, GuideStep[] steps)
+    {
+        lessonStarted = Time.time;
+        lessonSkippable = false;
+        lessonSkipped = false;
+        lessonTitle = title;
+        lessonBody = body;
+        lessonSteps = steps;
+        view.ShowCard(title, body, steps, false);
+    }
+
+    // Every frame of a lesson's wait: after SkipAfterSeconds the card offers
+    // "ENTER to skip"; true once the player has skipped it.
+    private static bool LessonSkipped()
+    {
+        if (!lessonSkippable && Time.time - lessonStarted >= SkipAfterSeconds)
+        {
+            lessonSkippable = true;
+            view.ShowCard(lessonTitle, lessonBody, lessonSteps, true);
+        }
+        if (lessonSkipped)
+        {
+            lessonSkippable = false;
+            lessonSkipped = false;
+            Log("lesson_skipped:" + lessonTitle);
+            return true;
+        }
+        return false;
+    }
+
+    // Until the player is not in the middle of a word (at most a few
+    // seconds), so a lesson never cuts into one.
+    private static IEnumerator UntilNotTyping()
+    {
+        float giveUp = Time.time + 4f;
+        while (typing != null && typing.IsTypingWord && Time.time < giveUp)
+        {
+            yield return null;
+        }
     }
 
     // Until the group is dead, with a short line saying so.
@@ -468,10 +531,18 @@ public static class GuidedIntro
     // ticking), then a breather, so two lessons never overlap.
     private static IEnumerator Calm(float seconds)
     {
-        while (spawner.AliveZombies.Count > 0 || LureBomb.Active.Count > 0 || GameManager.Instance.Powers.RocketLoaded)
+        float rocketWait = Time.time + 5f;
+        while (spawner.AliveZombies.Count > 0 || LureBomb.Active.Count > 0
+            || (GameManager.Instance.Powers.RocketLoaded && Time.time < rocketWait))
         {
+            if (!GameManager.Instance.Powers.RocketLoaded)
+            {
+                rocketWait = Time.time + 5f;
+            }
             yield return null;
         }
+        // A rocket loaded with nothing left to fire at would hit the next lesson's group: unloaded (energy back).
+        GameManager.Instance.Powers.UnloadRocket();
         yield return new WaitForSeconds(seconds);
     }
 
