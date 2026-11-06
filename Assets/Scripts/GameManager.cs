@@ -282,11 +282,18 @@ public class GameManager : MonoBehaviour
         LoadLevelScene(scene);
     }
 
-    // Called by the MENU buttons (Start, pause, win and lose panels): back to the Menu scene.
+    // Called by ordinary MENU buttons: return to the menu's main page.
     public void LoadMenu()
     {
         Checkpoint.Clear();
         LoadLevelScene("Menu");
+    }
+
+    // Called after the final campaign level: open Menu directly on SELECT LEVEL.
+    public void LoadLevelSelectionMenu()
+    {
+        Checkpoint.Clear();
+        LoadLevelScene("Menu", true);
     }
 
     // Level choices are available before play and after a run ends.
@@ -310,13 +317,17 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void LoadLevelScene(string sceneName)
+    private void LoadLevelScene(string sceneName, bool openLevelSelection = false)
     {
         if (loadingLevel) return;
         if (!Application.CanStreamedLevelBeLoaded(sceneName))
         {
             Debug.LogError("Level is missing from Build Settings: " + sceneName);
             return;
+        }
+        if (openLevelSelection)
+        {
+            MainMenu.RequestLevelSelection();
         }
         loadingLevel = true;
         // Restarted in the middle of a run (from the pause panel): it ends here.
@@ -667,6 +678,24 @@ public class GameManager : MonoBehaviour
     {
         EndGame(true);
     }
+
+#if UNITY_EDITOR
+    public void CompleteLevelForDebug()
+    {
+        if (State != GameState.Playing)
+            return;
+
+        // Stop the current wave/level coroutine so it cannot continue spawning.
+        if (spawner != null)
+            spawner.StopWaves();
+
+        // Clean up any active guided-intro state.
+        GuidedIntro.Abandon();
+
+        // Use the existing victory flow.
+        WinGame();
+    }
+#endif
 
     private void EndGame(bool won)
     {

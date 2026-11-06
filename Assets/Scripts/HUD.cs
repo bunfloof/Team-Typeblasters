@@ -967,7 +967,7 @@ public class HUD : MonoBehaviour
         TMP_Text nextLabel = CreateButton(wonPanel.transform, "Next Level",
             next != null ? "NEXT: " + next : "LEVEL SELECT", new Vector2(200f, -230f),
             () => { if (GameManager.NextLevelName != null) GameManager.Instance.NextLevel();
-                else GameManager.Instance.SelectLevel(0); });
+                else GameManager.Instance.LoadLevelSelectionMenu(); });
         nextLabel.fontSize = 34f;
         RectTransform nextRect = (RectTransform)nextLabel.transform.parent;
         nextRect.sizeDelta = new Vector2(360f, 100f);
