@@ -1,15 +1,15 @@
 {
-  "version": "latest-2026-11-05-28be494",
-  "source_commit": "28be4945d0cd7a651de7cdd1530ee7485cc6f0da",
-  "commit_message": "Make skill energy costs larger and easier to scan",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/42165944862",
+  "version": "latest-2026-11-05-cf5d3ee",
+  "source_commit": "cf5d3ee26b80eccb0be5c65713f7f965421e0328",
+  "commit_message": "Tutorial lessons can never get stuck",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/42174825382",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-06T05:13:19.844261Z",
+  "published_utc": "2026-11-06T06:40:00.295536Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14265919,
-      "sha256": "ebde1ca1be57cf0c1f315caea8a7b344b4efda8ac7f0266b272ed6f246b3d4df"
+      "bytes": 14266915,
+      "sha256": "fecfb60dc062e1a6a4a8851cf2e32fc0c6a20892a4ef0f2535c22d3da44f3d45"
     },
     {
       "path": "Build/WebGL.framework.js",
@@ -19,12 +19,12 @@
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "0d2d2a1b8d90f28be215470c6912a949289d22e072263aa3b6cd99a6d3e23bc7"
+      "sha256": "a9f10a5dd94575c6c427ae7e717227f20558bb1bf1a96c488cfd317ae9c2006e"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48145406,
-      "sha256": "6cea26bfe0b9e2d05d63ecad0c8745b5ae0764ef43f36d771c0e036d1f022687"
+      "bytes": 48146611,
+      "sha256": "3353a91c90bad82c338dd106b2f1128ace19c8bc8fa6ef4d3aad7d5ed1270a74"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7415,
-      "sha256": "a1763afa6bb12a46b529da1198c1412b7231cdcde855c121952c77156afaa8d4"
+      "sha256": "9704a791ea4b14ec475e5a84d1a4333c6115e4c39592bcf36fa0b0dd129baeb4"
     }
   ]
 }
