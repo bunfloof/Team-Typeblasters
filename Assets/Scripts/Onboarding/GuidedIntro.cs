@@ -61,6 +61,11 @@ public static class GuidedIntro
     private static WaveSpawner spawner;
     private static HUD hud;
     private static GuidedIntroView view;
+    internal static bool TryGetCardBounds(RectTransform wordLayer, out Rect bounds)
+    {
+        bounds = default;
+        return view != null && view.TryGetCardBounds(wordLayer, out bounds);
+    }
     private static TypingController typing;
     private static readonly HashSet<string> powerActions = new HashSet<string>(); // "lure:throw", "rpg:fire"...
 
@@ -82,7 +87,7 @@ public static class GuidedIntro
         Powers.ActionPerformed -= OnPower;
         Powers.ActionPerformed += OnPower;
         view = GuidedIntroView.Create(hudRef);
-        view.ShowCard("", "You move automatically, don't worry.", null, false);
+        view.ShowCard("", "You move automatically.", null, false);
         view.ShowSkip(true);
         Log("start");
     }
@@ -187,7 +192,7 @@ public static class GuidedIntro
         // Two more, one from each side: just play.
         yield return new WaitForSeconds(0.8f);
         List<Zombie> group = Pair(ZombieKind.Normal);
-        view.ShowLine("Nice shot! Keep going.", 3f);
+        view.ShowLine("Keep typing enemy words.", 3f);
         yield return UntilAllDead(group);
 
         // BACKSPACE: start a word, then drop it.
@@ -204,8 +209,8 @@ public static class GuidedIntro
             Holding = true;
             BlocksLetters = true;
             wordDropped = false;
-            view.ShowCard("CHANGED YOUR MIND?", "Backspace drops the word you are typing.",
-                new[] { GuideStep.Key(touch ? "DEL" : "BACKSPACE", "PRESS") }, false);
+            view.ShowCard("CHANGE TARGET", "Drop your current word.",
+                new[] { GuideStep.Key(touch ? "DEL" : "BACKSPACE", touch ? "TAP" : "PRESS") }, false);
             while (!wordDropped && typing != null && typing.IsTypingWord)
             {
                 yield return null;
@@ -226,7 +231,7 @@ public static class GuidedIntro
         {
             spawner.ActivateProp(box);
             Holding = true;
-            view.ShowCard("ENERGY", "Every word gives +1. Type the teal box for +" + SupplyCrate.EnergyAmount + ".", null, false);
+            view.ShowCard("ENERGY", "Type the teal crate's word for +" + SupplyCrate.EnergyAmount + " energy.", null, false);
             view.PointAt(box);
             float giveUp = Time.time + 25f;
             while (!box.IsOpened && Time.time < giveUp)
@@ -261,7 +266,7 @@ public static class GuidedIntro
             if (AnyAlive(group) && barrel.IsAlive)
             {
                 Holding = true;
-                view.ShowCard("BARREL", "Type its word: the blast takes out every zombie near it.", null, false);
+                view.ShowCard("BARREL", "Type the barrel's word to blow it up.", null, false);
                 view.PointAt(barrel);
                 while (barrel.IsAlive && AnyAlive(group))
                 {
@@ -284,7 +289,8 @@ public static class GuidedIntro
         group.AddRange(Group(point, ZombieKind.Normal, 3, GroupLanes));
         yield return new WaitForSeconds(WalkOutSeconds);
         yield return OfferPower(HudFeature.Lure, "lure", "throw", Powers.LureCost,
-            "LURE BOMB", "Pulls zombies together, then explodes.",
+            "LURE BOMB", touch ? "Tap Lure to throw or drag to aim."
+                : "Hold 1, aim with the arrows, then release.",
             touch ? new[] { GuideStep.Text("LURE", "TAP OR DRAG") }
                   : new[] { GuideStep.Key("1", "HOLD"), GuideStep.Arrows("AIM"), GuideStep.Key("1", "LET GO") });
         yield return Finish(group, "Keep shooting!");
@@ -298,9 +304,8 @@ public static class GuidedIntro
         group.AddRange(Group(sides[1], ZombieKind.Normal, 2, PairLanes));
         yield return new WaitForSeconds(WalkOutSeconds + 0.5f);
         yield return OfferPower(HudFeature.Freeze, "freeze", "use", Powers.FreezeCost,
-            "FREEZE", "Stops every zombie for a few seconds.",
-            new[] { touch ? GuideStep.Text("FREEZE", "TAP") : GuideStep.Key("2", "PRESS") });
-        yield return Finish(group, "Frozen! Shoot them now.");
+            "FREEZE", touch ? "Tap Freeze to stop the zombies." : "Press 2 to freeze the zombies.", null);
+        yield return Finish(group, "Shoot the frozen zombies.");
 
         // [3] FRENZY: words far too long, made short.
         yield return Calm(1.5f);
@@ -309,8 +314,7 @@ public static class GuidedIntro
         group.RemoveAll(zombie => zombie == null);
         yield return new WaitForSeconds(WalkOutSeconds + 0.5f);
         yield return OfferPower(HudFeature.Frenzy, "frenzy", "use", Powers.FrenzyCost,
-            "FRENZY", "Long words turn short for a few seconds.",
-            new[] { touch ? GuideStep.Text("FRENZY", "TAP") : GuideStep.Key("3", "PRESS") });
+            "FRENZY", touch ? "Tap Frenzy to shorten enemy words." : "Press 3 to shorten enemy words.", null);
         yield return Finish(group, null); // the FRENZY popup says it already
 
         // [4] RPG: load it, then any finished word fires it into the group.
@@ -322,7 +326,7 @@ public static class GuidedIntro
         group.AddRange(Group(point, ZombieKind.Normal, 2, PairLanes));
         yield return new WaitForSeconds(WalkOutSeconds);
         yield return OfferPower(HudFeature.Rpg, "rpg", "use", Powers.RocketCost,
-            "RPG", "Loads a rocket. Your next word fires it.",
+            "RPG", touch ? "Tap RPG, then finish a word to fire." : "Press 4, then finish a word to fire.",
             new[] { touch ? GuideStep.Text("RPG", "TAP") : GuideStep.Key("4", "PRESS"), GuideStep.Text("TYPE", "A WORD") });
         // The lesson is not over until the rocket has really flown: the world
         // waits, and if every target is somehow gone, new ones walk out.
@@ -339,7 +343,7 @@ public static class GuidedIntro
             }
             if (!fireShown)
             {
-                view.ShowCard("FIRE!", "Finish any word: the rocket hits the whole group.", null, false);
+                view.ShowCard("RPG LOADED", "Finish a word to fire.", null, false);
                 fireShown = true;
             }
             view.PointAt(Middle(group));
@@ -363,7 +367,7 @@ public static class GuidedIntro
         if (red != null && red.IsAlive)
         {
             Holding = true; // the others stay in its ring until it goes off
-            view.ShowCard("RED ZOMBIE", "Shoot it: its blast takes out every zombie in its ring.", null, false);
+            view.ShowCard("RED ZOMBIE", "Type the red zombie's word to set off its blast.", null, false);
             view.PointAt(red);
             yield return UntilDead(red);
             view.PointAt(null);
@@ -389,8 +393,7 @@ public static class GuidedIntro
         Holding = true;
         BlocksLetters = true;
         HudReveal.Reveal(HudFeature.Shield);
-        view.ShowCard("SHIELD", "No damage for a few seconds. One every wave.",
-            new[] { touch ? GuideStep.Text("SHIELD", "TAP") : GuideStep.Key("TAB", "PRESS") }, false);
+        view.ShowCard("SHIELD", touch ? "Tap Shield to block hits." : "Press Tab to block hits.", null, false);
         while (!Powers.IsShielded)
         {
             if (powers.ShieldCharges == 0)
@@ -406,7 +409,7 @@ public static class GuidedIntro
         // ...and while it is up, three more walk in and bounce off it: the
         // shield is never shown with nothing to block.
         group.AddRange(Group(NearPoint(), ZombieKind.Normal, 3, GroupLanes));
-        yield return Finish(group, "Shielded! Shoot them while it lasts.");
+        yield return Finish(group, "Shoot the zombies while shielded.");
 
         // Everything has been shown: normal play from here.
         Log("complete");

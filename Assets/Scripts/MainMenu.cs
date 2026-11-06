@@ -40,6 +40,8 @@ public class MainMenu : MonoBehaviour
     private CanvasScaler canvasScaler;
     private TMP_Text mainTitle, levelTitle;
     private RectTransform startButton, backButton;
+    private RectTransform fullscreenButton;
+    private TMP_Text fullscreenHint, fullscreenLabel;
     private readonly List<RectTransform> levelButtons = new List<RectTransform>();
     private Vector2 lastLayoutSize;
     private bool portraitLayout;
@@ -85,6 +87,7 @@ public class MainMenu : MonoBehaviour
     private void Update()
     {
         UpdateResponsiveLayout();
+        UpdateFullscreenLabel();
         HandleKeys();
     }
 
@@ -106,6 +109,14 @@ public class MainMenu : MonoBehaviour
         LayoutTitle(mainTitle, width, portrait ? 210f : 120f, portrait ? 330f : 300f, 84f, portrait);
         LayoutTitle(levelTitle, width, 110f, portrait ? 450f : 300f, 72f, false);
         LayoutButton(startButton, new Vector2(0f, portrait ? -40f : 0f), portrait ? new Vector2(760f, 140f) : new Vector2(360f, 100f), portrait);
+        if (fullscreenButton != null)
+        {
+            LayoutButton(fullscreenButton, new Vector2(0f, portrait ? -315f : -200f),
+                portrait ? new Vector2(620f, 100f) : new Vector2(360f, 76f), portrait);
+            fullscreenLabel.fontSize = portrait ? 42f : 32f;
+            LayoutTitle(fullscreenHint, width, 64f, portrait ? -205f : -117f, portrait ? 34f : 28f, true);
+            fullscreenHint.fontSizeMin = 18f;
+        }
         float rowStep = Mathf.Min(400f, (size.x - 120f) / Mathf.Max(1, levelButtons.Count));
         for (int i = 0; i < levelButtons.Count; i++)
         {
@@ -162,8 +173,36 @@ public class MainMenu : MonoBehaviour
         GameObject page = CreatePage("Main Page", canvas);
         mainTitle = CreateText(page.transform, "Title", gameTitle, 84f, new Vector2(0f, 300f), new Vector2(1700f, 120f));
         startButton = (RectTransform)CreateButton(page.transform, "Start Button", "START", new Vector2(0f, 0f), new Vector2(360f, 100f), ShowLevels).transform;
-        SettingsPanel.AddButton((RectTransform)page.transform, new Vector2(-40f, -40f)); // the SETTINGS gear, top-right
+        BuildFullscreenControl(page.transform);
+        SettingsPanel.AddButton((RectTransform)page.transform, new Vector2(-64f, -48f));
         return page;
+    }
+
+    private void BuildFullscreenControl(Transform page)
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        if (!TouchFullscreenButton.IsSupported()) return;
+#endif
+        fullscreenHint = CreateText(page, "Fullscreen Hint", "", 28f, Vector2.zero, new Vector2(640f, 64f));
+        fullscreenHint.color = new Color(.8f, .85f, .93f);
+        Button button = CreateButton(page, "Fullscreen Button", "FULL SCREEN", Vector2.zero, new Vector2(360f, 76f), null);
+        fullscreenButton = (RectTransform)button.transform;
+        fullscreenLabel = button.GetComponentInChildren<TMP_Text>();
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Pointer-down preserves the browser gesture through the existing WebGL bridge.
+        button.gameObject.AddComponent<TouchFullscreenButton>();
+#else
+        button.onClick.AddListener(TouchFullscreenButton.ToggleFullscreen);
+#endif
+        UpdateFullscreenLabel();
+    }
+
+    private void UpdateFullscreenLabel()
+    {
+        if (fullscreenLabel == null) return;
+        bool fullscreen = TouchFullscreenButton.IsFullscreen;
+        fullscreenLabel.text = fullscreen ? "EXIT FULL SCREEN" : "FULL SCREEN";
+        fullscreenHint.text = fullscreen ? "Full screen is on" : "For the best view, play in full screen.";
     }
 
     private GameObject BuildLevelPage(Transform canvas)
@@ -214,6 +253,7 @@ public class MainMenu : MonoBehaviour
         if (mainPage.activeSelf)
         {
             menuItems.Add(startButton);
+            if (fullscreenButton != null) menuItems.Add(fullscreenButton);
         }
         else
         {
@@ -256,7 +296,11 @@ public class MainMenu : MonoBehaviour
         if (confirm)
         {
             // The same click the mouse does (START -> ShowLevels, a level -> LoadLevel, BACK -> ShowMain).
-            items[Mathf.Clamp(selected, 0, items.Count - 1)].GetComponent<Button>().onClick.Invoke();
+            RectTransform item = items[Mathf.Clamp(selected, 0, items.Count - 1)];
+            if (item == fullscreenButton)
+                TouchFullscreenButton.ToggleFullscreen();
+            else
+                item.GetComponent<Button>().onClick.Invoke();
         }
         else if (back && levelPage.activeSelf)
         {
@@ -271,6 +315,7 @@ public class MainMenu : MonoBehaviour
         selected = Mathf.Clamp(selected, 0, items.Count - 1);
 
         SetHighlight(startButton, false);
+        if (fullscreenButton != null) SetHighlight(fullscreenButton, false);
         foreach (RectTransform level in levelButtons)
         {
             SetHighlight(level, false);

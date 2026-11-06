@@ -29,6 +29,27 @@ public class TouchFullscreenButton : MonoBehaviour, IPointerDownHandler
 
     private TMP_Text label;
 
+    public static bool IsFullscreen
+    {
+        get
+        {
+#if UNITY_WEBGL && !UNITY_EDITOR
+            return TouchControlsWeb_IsFullscreen() == 1;
+#else
+            return Screen.fullScreen;
+#endif
+        }
+    }
+
+    public static void ToggleFullscreen()
+    {
+#if UNITY_WEBGL && !UNITY_EDITOR
+        TouchControlsWeb_ToggleFullscreenOnRelease();
+#else
+        Screen.fullScreen = !Screen.fullScreen;
+#endif
+    }
+
     // Can this browser show the page full screen?
     public static bool IsSupported()
     {
@@ -47,14 +68,16 @@ public class TouchFullscreenButton : MonoBehaviour, IPointerDownHandler
     private void Update()
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
-        label.text = TouchControlsWeb_IsFullscreen() == 1 ? "EXIT\nFULL" : "FULL\nSCREEN";
+        if (label != null)
+            label.text = IsFullscreen ? "EXIT\nFULL" : "FULL\nSCREEN";
 #endif
     }
 
     public void OnPointerDown(PointerEventData eventData)
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
-        TouchControlsWeb_ToggleFullscreenOnRelease();
+        if (eventData.button == PointerEventData.InputButton.Left)
+            ToggleFullscreen();
 #endif
     }
 }

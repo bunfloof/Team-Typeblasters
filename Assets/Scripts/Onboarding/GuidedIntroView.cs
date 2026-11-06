@@ -42,6 +42,8 @@ public class GuidedIntroView : MonoBehaviour
     private RectTransform root, card, accent, steps, divider, pointer, skipChip;
     private HUD hud;
     private float cardShift;                  // canvas units the card is moved right to keep clear of the power list
+    private int cardPositionFrame = -1;
+    private readonly Vector3[] cardCorners = new Vector3[4];
     private CanvasGroup cardGroup;
     private Image tint;
     private TMP_Text title, body, continueChip;
@@ -192,6 +194,26 @@ public class GuidedIntroView : MonoBehaviour
         Destroy(gameObject);
     }
 
+    internal bool TryGetCardBounds(RectTransform wordLayer, out Rect bounds)
+    {
+        bounds = default;
+        if (!card.gameObject.activeInHierarchy) return false;
+
+        PositionCard();
+        card.GetWorldCorners(cardCorners);
+        Vector2 min = wordLayer.InverseTransformPoint(cardCorners[0]);
+        Vector2 max = min;
+        for (int i = 1; i < cardCorners.Length; i++)
+        {
+            Vector2 corner = wordLayer.InverseTransformPoint(cardCorners[i]);
+            min = Vector2.Min(min, corner);
+            max = Vector2.Max(max, corner);
+        }
+        const float gap = 12f;
+        bounds = UnityEngine.Rect.MinMaxRect(min.x - gap, min.y - gap, max.x + gap, max.y + gap);
+        return true;
+    }
+
     // ---- Every frame ----
 
     private void LateUpdate()
@@ -216,11 +238,7 @@ public class GuidedIntroView : MonoBehaviour
         }
         CardVisible = card.gameObject.activeSelf;
 
-        float rise = 1f - Mathf.Clamp01((Time.unscaledTime - shownAt) / 0.28f);
-        rise = rise * rise * rise; // ease-out
-        float nudge = Mathf.Max(0f, 1f - (Time.unscaledTime - nudgeAt) / 0.35f);
-        cardShift = Mathf.MoveTowards(cardShift, ShiftClearOfPowers(), Time.unscaledDeltaTime * 1200f);
-        card.anchoredPosition = new Vector2(cardShift + Mathf.Sin(nudge * 30f) * 12f * nudge, CardBottom - 18f * rise);
+        PositionCard();
 
         // The arrow bobs over the pointed word.
         bool show = pointed != null && pointed.IsAlive && pointed.Label != null && pointed.Label.enabled
@@ -236,9 +254,30 @@ public class GuidedIntroView : MonoBehaviour
         }
     }
 
+    // Resolve the same position for drawing and word placement regardless of LateUpdate order.
+    private void PositionCard()
+    {
+        if (cardPositionFrame == Time.frameCount) return;
+        cardPositionFrame = Time.frameCount;
+
+        float availableWidth = Mathf.Max(1f, root.rect.width - 48f);
+        float scale = Mathf.Min(1f, availableWidth / card.rect.width);
+        card.localScale = new Vector3(scale, scale, 1f);
+        float halfWidth = card.rect.width * scale * 0.5f;
+        float room = Mathf.Max(0f, root.rect.width * 0.5f - 24f - halfWidth);
+        cardShift = Mathf.MoveTowards(cardShift, ShiftClearOfPowers(halfWidth), Time.unscaledDeltaTime * 1200f);
+        cardShift = Mathf.Clamp(cardShift, 0f, room);
+
+        float rise = 1f - Mathf.Clamp01((Time.unscaledTime - shownAt) / 0.28f);
+        rise = rise * rise * rise;
+        float nudge = Mathf.Max(0f, 1f - (Time.unscaledTime - nudgeAt) / 0.35f);
+        float x = Mathf.Clamp(cardShift + Mathf.Sin(nudge * 30f) * 12f * nudge, -room, room);
+        card.anchoredPosition = new Vector2(x, CardBottom - 18f * rise);
+    }
+
     // How far right the card must move so its left edge stays a little to the
     // right of the power list (bottom-left); never off the right edge.
-    private float ShiftClearOfPowers()
+    private float ShiftClearOfPowers(float halfWidth)
     {
         float powersRight = hud != null && !TouchControls.Active ? hud.PowersRightEdge() : float.NaN;
         if (float.IsNaN(powersRight))
@@ -246,9 +285,7 @@ public class GuidedIntroView : MonoBehaviour
             return 0f;
         }
         float right = root.InverseTransformPoint(new Vector3(powersRight, 0f, 0f)).x - root.rect.center.x;
-        float half = card.sizeDelta.x * 0.5f;
-        float shift = Mathf.Max(0f, right + 28f + half);
-        return Mathf.Min(shift, Mathf.Max(0f, root.rect.width * 0.5f - 24f - half));
+        return Mathf.Max(0f, right + 28f + halfWidth);
     }
 
     private void OnDestroy()
@@ -301,6 +338,7 @@ public class GuidedIntroView : MonoBehaviour
         float width = Pad * 2f + textWidth + (hasSteps ? Pad * 2f + stepsWidth : 0f);
         float height = Mathf.Max(textHeight, hasSteps ? StepsHeight : 0f) + Pad * 1.4f;
         card.sizeDelta = new Vector2(Mathf.Max(width, 300f), height);
+        cardPositionFrame = -1;
         float left = (card.sizeDelta.x - width) * 0.5f + Pad; // a text-only card centres its text
 
         TextAlignmentOptions align = hasSteps ? TextAlignmentOptions.Left : TextAlignmentOptions.Center;

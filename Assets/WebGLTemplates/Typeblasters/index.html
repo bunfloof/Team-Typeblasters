@@ -156,8 +156,10 @@
 
       } else {
         // Desktop style: Render the game canvas in a window that can be maximized to fullscreen:
-        canvas.style.width = "{{{ WIDTH }}}px";
-        canvas.style.height = "{{{ HEIGHT }}}px";
+        const aspect = {{{ WIDTH }}} / {{{ HEIGHT }}};
+        canvas.style.aspectRatio = "{{{ WIDTH }}} / {{{ HEIGHT }}}";
+        canvas.style.width = `max(1px, min({{{ WIDTH }}}px, calc(100vw - 24px), calc((100vh - 62px) * ${aspect})))`;
+        canvas.style.height = "auto";
       }
 
 #if BACKGROUND_FILENAME

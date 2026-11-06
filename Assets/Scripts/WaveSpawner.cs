@@ -451,6 +451,10 @@ public class WaveSpawner : MonoBehaviour
         }
 
         placedLabels.Clear();
+        if (GuidedIntro.TryGetCardBounds(layer, out Rect cardBounds))
+            placedLabels.Add(cardBounds);
+        int protectedCount = placedLabels.Count;
+        Rect labelArea = LabelArea(layer.rect);
         nextLabelLifts.Clear();
         float slide = 1f - Mathf.Exp(-labelSlideSharpness * Time.unscaledDeltaTime);
 
@@ -467,7 +471,7 @@ public class WaveSpawner : MonoBehaviour
             Vector3 screenPoint = cam.WorldToScreenPoint(target.LabelAnchor);
             if (screenPoint.z <= 0f)
             {
-                if (!IsCloseZombie(target))
+                if (!target.IsTargeted && !IsCloseZombie(target))
                 {
                     label.enabled = false;
                     continue;
@@ -489,6 +493,10 @@ public class WaveSpawner : MonoBehaviour
             scale *= Mathf.Lerp(1f, MapLabelScale, mapBlend); // seen from high up, words are smaller
             scale = Mathf.Max(scale, minWordFontSize / label.fontSize); // ...but never too small to read
             Vector2 textSize = new Vector2(label.preferredWidth, label.preferredHeight);
+            // On a narrow view, fit the entire word inside the available area.
+            float fitWidth = labelArea.width / Mathf.Max(1f, textSize.x);
+            float fitHeight = labelArea.height / Mathf.Max(1f, textSize.y);
+            scale = Mathf.Min(scale, Mathf.Min(fitWidth, fitHeight));
             labelRect.sizeDelta = textSize;
             labelRect.localScale = new Vector3(scale, scale, 1f);
 
@@ -502,7 +510,20 @@ public class WaveSpawner : MonoBehaviour
             // Map view (seen from above, words crowd together): move it the
             // shortest way, in any direction, to a free spot.
             Rect rect = mapBlend > 0.5f ? SpreadOut(baseRect, layer.rect, LastLift(label)) : StackUp(baseRect, layer.rect, WasMovedAside(label));
-            placedLabels.Add(rect);
+            if (OverlapsProtected(rect, protectedCount))
+            {
+                if (FindFreeSpot(baseRect, layer.rect, out Rect free) || SearchRings(baseRect, labelArea, out free))
+                {
+                    rect = free;
+                }
+                else
+                {
+                    // A crowded view may have no spare slot. Keep the card and
+                    // earlier typing targets readable until a slot opens.
+                    label.enabled = false;
+                    continue;
+                }
+            }
 
             // Slide toward the new spot (new words jump straight there).
             Vector2 targetLift = rect.position - baseRect.position;
@@ -515,6 +536,14 @@ public class WaveSpawner : MonoBehaviour
             {
                 lift = targetLift;
             }
+            Rect visibleRect = new Rect(baseRect.position + lift, size);
+            if (target.IsTargeted || !Contains(labelArea, visibleRect) || OverlapsProtected(visibleRect, protectedCount))
+            {
+                lift = targetLift;
+                visibleRect = rect;
+            }
+            placedLabels.Add(visibleRect);
+            if (target.IsTargeted) protectedCount = placedLabels.Count;
             nextLabelLifts[label] = lift;
 
             labelRect.anchoredPosition = anchor + lift;
@@ -743,6 +772,16 @@ public class WaveSpawner : MonoBehaviour
             {
                 return true;
             }
+        }
+        return false;
+    }
+
+    private bool OverlapsProtected(Rect rect, int count)
+    {
+        Rect padded = Padded(rect);
+        for (int i = 0; i < count; i++)
+        {
+            if (padded.Overlaps(placedLabels[i])) return true;
         }
         return false;
     }
