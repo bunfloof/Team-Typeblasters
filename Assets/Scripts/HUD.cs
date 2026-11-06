@@ -1324,7 +1324,7 @@ public class HUD : MonoBehaviour
     private const float PowerRowGap = 10f;
     private const float PowerKeySize = 40f;
     private const float PowerNameX = 54f;       // the name starts this far right of the row's left end
-    private const float PowerNameWidth = 190f;
+    private const float PowerNameWidth = 300f;
     private const float PowerPipsX = 250f;      // the pips start this far right of the row's left end
     private const float PowerPipSize = 24f;
     private const float PowerPipGap = 6f;
@@ -1561,7 +1561,7 @@ public class HUD : MonoBehaviour
 
             TMP_Text nameText = CreateText(rowRect, "Name", powerName, 30f, Vector2.zero);
             int cost = row == 0 ? Powers.LureCost : row == 1 ? Powers.FreezeCost : row == FrenzyRow ? Powers.FrenzyCost : Powers.RocketCost;
-            nameText.text += " <size=60%>" + cost + " ENERGY</size>";
+            nameText.text += "  " + cost + " E";
             PlaceRect(nameText.rectTransform, LeftMiddle, LeftMiddle, new Vector2(PowerNameX, 0f),
                 new Vector2(PowerNameWidth, PowerRowHeight));
             nameText.alignment = TextAlignmentOptions.Left;

@@ -141,18 +141,21 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
     {
         Vector2 size = ((RectTransform)transform).rect.size;
         laidOutSize = size;
-        float lineHeight = Mathf.Max(1f, (size.y - 2f * Padding) * 0.5f);
+        float textHeight = Mathf.Max(2f, size.y - 2f * Padding);
+        bool showsEnergyCost = power != Power.Shield;
+        float costLineHeight = textHeight * (showsEnergyCost ? 0.56f : 0.5f);
+        float lineHeight = textHeight - costLineHeight;
         float capSize = Mathf.Min(MaxCapSize, lineHeight);
-        float countWidth = Mathf.Min(MaxCountWidth, size.x * 0.4f);
+        float countWidth = Mathf.Min(MaxCountWidth, size.x * (showsEnergyCost ? 0.48f : 0.4f));
 
         TouchUI.Place(cap, new Vector2(0f, 1f), new Vector2(0f, 1f),
             new Vector2(Padding, -Padding - (lineHeight - capSize) * 0.5f), new Vector2(capSize, capSize));
         TouchUI.Place(nameText.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f),
             new Vector2(2f * Padding + capSize, -Padding), new Vector2(Mathf.Max(1f, size.x - 3f * Padding - capSize), lineHeight));
         TouchUI.Place(statusText.rectTransform, new Vector2(0f, 0f), new Vector2(0f, 0f),
-            new Vector2(Padding, Padding), new Vector2(Mathf.Max(1f, size.x - 3f * Padding - countWidth), lineHeight));
+            new Vector2(Padding, Padding), new Vector2(Mathf.Max(1f, size.x - 3f * Padding - countWidth), costLineHeight));
         TouchUI.Place(countText.rectTransform, new Vector2(1f, 0f), new Vector2(1f, 0f),
-            new Vector2(-Padding, Padding), new Vector2(countWidth, lineHeight));
+            new Vector2(-Padding, Padding), new Vector2(countWidth, costLineHeight));
     }
 
     private void Update()
