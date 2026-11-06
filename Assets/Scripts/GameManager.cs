@@ -33,7 +33,8 @@ public enum GameState
     Paused,   // Esc was pressed or the browser tab was hidden: pause panel, or the 3-2-1 countdown before play resumes
     Tip,      // a first-time tip box is showing (game frozen); Enter or OK continues
     Won,      // the last area was cleared, "You survived" panel is showing (Enter / Restart: back to the Start panel)
-    Lost      // health reached 0, "You died" panel is showing (Enter / Restart: back to the Start panel)
+    Lost,     // health reached 0, "You died" panel is showing (Enter / Restart: back to the Start panel)
+    Reward    // choose rewards after completing a wave in endless mode
 }
 
 public class GameManager : MonoBehaviour
@@ -352,7 +353,7 @@ public class GameManager : MonoBehaviour
         }
         loadingLevel = true;
         // Restarted in the middle of a run (from the pause panel): it ends here.
-        if (State == GameState.Playing || State == GameState.Paused || State == GameState.Tip)
+        if (State == GameState.Playing || State == GameState.Paused || State == GameState.Tip || State == GameState.Reward)
         {
             LogRunEnd("restart");
         }
@@ -493,6 +494,116 @@ public class GameManager : MonoBehaviour
         AnalyticsEvent e = Analytics.NewEvent("resume");
         e.Add("paused_seconds", Time.realtimeSinceStartup - pausedSince); // the countdown included
         Analytics.Send(e);
+    }
+
+    // ---- Endless wave rewards ----
+
+    public const int EndlessRewardHealth = 2;
+    public const int EndlessRewardEnergy = 5;
+    private const int EndlessRewardScore = 100;
+
+    // Called by WaveSpawner after an Endless wave has been cleared.
+    public void BeginEndlessWaveReward()
+    {
+        if (State != GameState.Playing || spawner == null || !spawner.IsEndlessMode)
+            return;
+
+        State = GameState.Reward;
+        Time.timeScale = 0f;
+
+        // Decide the weapon once, before displaying the reward card.
+        // An already-loaded RPG means FRENZY is guaranteed.
+        bool rewardRocket = !powers.RocketLoaded && Random.value < 0.5f;
+
+        hud.ShowEndlessWaveReward(
+            rewardRocket ? "RPG" : "FRENZY",
+            choice => CompleteEndlessWaveReward(choice, rewardRocket));
+    }
+
+    private void CompleteEndlessWaveReward(EndlessWaveRewardChoice choice, bool rewardRocket)
+    {
+        if (State != GameState.Reward)
+            return;
+
+        int healthBefore = Health;
+        int energyBefore = SkillEnergy;
+        int scoreBefore = Score;
+
+        string weapon = null;
+
+        switch (choice)
+        {
+            case EndlessWaveRewardChoice.Health:
+                Heal(EndlessRewardHealth);
+                break;
+
+            case EndlessWaveRewardChoice.Energy:
+                SkillEnergy = Mathf.Min(
+                    MaxSkillEnergy,
+                    SkillEnergy + EndlessRewardEnergy);
+
+                powers.OnComboChanged(Combo);
+                break;
+
+            case EndlessWaveRewardChoice.FreeWeapon:
+                weapon = powers.GrantFreeWeaponReward(rewardRocket);
+                break;
+
+            case EndlessWaveRewardChoice.Skip:
+                Score += EndlessRewardScore;
+                hud.SetScore(Score);
+                break;
+
+            default:
+                return;
+        }
+
+        int healthGained = Health - healthBefore;
+        int energyGained = SkillEnergy - energyBefore;
+        int scoreGained = Score - scoreBefore;
+
+        // Record the reward selection.
+        string choiceName = choice == EndlessWaveRewardChoice.FreeWeapon
+            ? "free_weapon"
+            : choice.ToString().ToLowerInvariant();
+
+        AnalyticsEvent e = Analytics.NewEvent("wave_reward");
+        e.Add("wave_number", spawner.CurrentWave);
+        e.Add("choice", choiceName);
+        e.Add("health_gained", healthGained);
+        e.Add("energy_gained", energyGained);
+        e.Add("score_gained", scoreGained);
+
+        if (!string.IsNullOrEmpty(weapon))
+            e.Add("weapon", weapon);
+
+        Analytics.AddPlayerState(e);
+        Analytics.Send(e);
+        Analytics.FlushSoon();
+
+        // Show the actual amount gained (rewards may be capped).
+        switch (choice)
+        {
+            case EndlessWaveRewardChoice.Health:
+                hud.ShowHint(
+                    healthGained > 0 ? "+" + healthGained + " HEALTH" : "HEALTH FULL",
+                    2f);
+                break;
+
+            case EndlessWaveRewardChoice.Energy:
+                hud.ShowHint(
+                    energyGained > 0 ? "+" + energyGained + " ENERGY" : "ENERGY FULL",
+                    2f);
+                break;
+
+            case EndlessWaveRewardChoice.Skip:
+                hud.ShowHint("+100 SCORE", 2f);
+                break;
+        }
+
+        // Resume the existing Endless run.
+        State = GameState.Playing;
+        Time.timeScale = 1f;
     }
 
     // ---- Typing statistics (called by TypingController) ----

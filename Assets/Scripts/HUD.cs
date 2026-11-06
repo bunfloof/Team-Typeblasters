@@ -137,6 +137,8 @@ public class HUD : MonoBehaviour
     [SerializeField] private float floatingTextSeconds = 1.1f;  // lifetime of a floating text
     [SerializeField] private float floatingTextRise = 70f;      // canvas units it rises during its life
 
+    private EndlessWaveReward endlessWaveReward;
+
     // Anchor and pivot points used by the code-built pieces (0,0 = bottom-left, 1,1 = top-right).
     private static readonly Vector2 Centre = new Vector2(0.5f, 0.5f);
     private static readonly Vector2 LeftMiddle = new Vector2(0f, 0.5f);
@@ -168,6 +170,12 @@ public class HUD : MonoBehaviour
         {
             SetFlashAlpha(0f);
         }
+
+        endlessWaveReward = GetComponent<EndlessWaveReward>();
+        if (endlessWaveReward == null)
+            endlessWaveReward = gameObject.AddComponent<EndlessWaveReward>();
+        endlessWaveReward.Initialize(transform);
+
         HudReveal.Revealed += RevealFeature;
     }
 
@@ -1023,6 +1031,7 @@ public class HUD : MonoBehaviour
         HideCountdown();
         HidePowerTip();
         HideQuiz();
+        HideEndlessWaveReward();
         multiKillText.gameObject.SetActive(false);
     }
 
@@ -1489,6 +1498,18 @@ public class HUD : MonoBehaviour
         Image image = bar.GetComponent<Image>();
         image.color = PauseFrameColor;
         image.raycastTarget = false;
+    }
+
+    public void ShowEndlessWaveReward(string weaponName, System.Action<EndlessWaveRewardChoice> onChoice)
+    {
+        if (endlessWaveReward != null)
+            endlessWaveReward.Show(onChoice, weaponName);
+    }
+
+    public void HideEndlessWaveReward()
+    {
+        if (endlessWaveReward != null)
+            endlessWaveReward.Hide();
     }
 
     // ---- Confirmation dialog ----

@@ -954,6 +954,19 @@ public class WaveSpawner : MonoBehaviour
             HealthWord.Close();
             DeactivateProps();
 
+            // Reward intermission: the game remains frozen until the player chooses.
+            game.BeginEndlessWaveReward();
+            
+            while (game != null && game.State == GameState.Reward)
+            {
+                yield return null;
+            }
+            
+            if (game == null || game.State != GameState.Playing)
+            {
+                yield break;
+            }
+
             // Short breathing period before the next wave.
             if (endlessWaveBreakSeconds > 0f)
             {

@@ -333,6 +333,52 @@ public class Powers : MonoBehaviour
         SendPowerEvent(e);
     }
 
+    // Grants the weapon already selected and displayed by the reward card.
+    // No energy is spent.
+    public string GrantFreeWeaponReward(bool giveRocket)
+    {
+        GameManager game = GameManager.Instance;
+    
+        if (game == null || game.State != GameState.Reward)
+            return null;
+    
+        // Safety check: never replace an already-loaded RPG.
+        if (giveRocket && RocketLoaded)
+            giveRocket = false;
+    
+        if (giveRocket)
+        {
+            RocketLoaded = true;
+    
+            RefreshWeaponSlots();
+            hud.ShowBigMessage("RPG LOADED!", "FREE WEAPON REWARD");
+        }
+        else
+        {
+            if (IsFrenzy)
+            {
+                frenzyTimeLeft += frenzySeconds;
+                frenzyDuration += frenzySeconds;
+    
+                hud.ShowBigMessage(
+                    "FRENZY EXTENDED!",
+                    "+" + frenzySeconds.ToString("0") + " SECONDS");
+            }
+            else
+            {
+                StartFrenzy();
+            }
+        }
+    
+        string item = giveRocket ? "rpg" : "frenzy";
+    
+        AnalyticsEvent e = PowerEvent("reward", item);
+        e.Add("via", "wave_reward");
+        SendPowerEvent(e);
+    
+        return item.ToUpperInvariant();
+    }
+
     // FRENZY: every enemy word is short for frenzySeconds.
     private void StartFrenzy()
     {
