@@ -75,6 +75,14 @@ public class WaveSpawner : MonoBehaviour
     [Header("Onboarding")]
     [SerializeField] private bool guidedFirstWave = false; // Normal only: wave 1 teaches the game (GuidedIntro)
 
+    [Header("Endless Mode")]
+    [SerializeField] private bool endlessMode = false;
+    [SerializeField, Min(1)] private int endlessDifficultyCapWave = 10;
+    [SerializeField, Min(3)] private int endlessMaxBaseZombiesPerWave = 24;
+    [SerializeField, Min(0)] private int endlessMaxChainPairs = 3;
+    [SerializeField, Min(0f)] private float endlessWaveBreakSeconds = 2f;
+    [SerializeField, Min(0.1f)] private float endlessMaxZombieSpeed = 2.5f;
+    
     [Header("Crowding")]
     [SerializeField] private int maxOnScreen = 5;          // zombies alive at once at the designed level (more for fast typists, fewer for slow ones)
 
@@ -146,6 +154,7 @@ public class WaveSpawner : MonoBehaviour
     // and its wave number (1 = the first).
     public Encounter CurrentEncounter { get; private set; }
     public int CurrentWave { get; private set; }
+    public bool IsEndlessMode { get { return endlessMode; } }
 
     // True in the waves listed in mapViewWaves: once the player stops there,
     // the camera rises to show the whole area (see CameraDirector).
@@ -824,6 +833,11 @@ public class WaveSpawner : MonoBehaviour
         {
             return;
         }
+        if (endlessMode)
+        {
+            StartCoroutine(RunEndless());
+            return;
+        }
         if (EasyTutorial.Active != null)
         {
             CurrentEncounter = level.Encounters[0];
@@ -842,6 +856,94 @@ public class WaveSpawner : MonoBehaviour
     public void ResumeFromCheckpoint()
     {
         resumingCheckpoint = true;
+    }
+
+    // Endless mode: stay in one arena and repeat zombie waves forever.
+    // No checkpoint, no ride between encounters, and no health-word offers.
+    private IEnumerator RunEndless()
+    {
+        Encounter arena = level.Encounters[0];
+
+        CurrentEncounter = arena;
+        CurrentWave = 1;
+
+        // Put the player at the arena's stop and keep them there.
+        rail.PlaceAt(arena.StopPosition, arena.Facing);
+
+        // These persist across waves, so new enemy types are introduced only once.
+        seenKinds.Clear();
+        chainSeen = false;
+
+        // IMPORTANT: fightOn remains false in Endless.
+        // UpdateHealthOffer() therefore never offers health regeneration.
+        fightOn = false;
+        healthOfferedThisWave = false;
+        HealthWord.Close();
+
+        GameManager game = GameManager.Instance;
+
+        for (int wave = 1; game != null && game.State == GameState.Playing; wave++)
+        {
+            CurrentWave = wave;
+            hud.SetWave(wave, 0);
+
+            hud.ShowBanner("WAVE " + wave);
+            yield return new WaitForSeconds(BannerSeconds);
+            hud.HideBanner();
+
+            if (game.State != GameState.Playing)
+                yield break;
+
+            // One fresh shield charge per wave.
+            game.Powers.OnWaveStart();
+
+            // Existing barrels and energy crates can still be used.
+            ActivateProps(arena);
+            StartCoroutine(ShowPropHints());
+
+            RunStats stats = game.Stats;
+            float fightStart = stats.Seconds;
+            int killsAtStart = stats.Kills;
+            int correctKeysAtStart = stats.CorrectKeys;
+            int wrongKeysAtStart = stats.WrongKeys;
+            int healthAtStart = game.Health;
+
+            // Reuse the existing zombie spawning and combat implementation.
+            yield return RunZombieWave(wave, arena);
+
+            if (game.State != GameState.Playing)
+                yield break;
+
+            // Record the wave's results.
+            AnalyticsEvent waveEnd = Analytics.NewEvent("wave_end");
+            waveEnd.Add("boss_fight", false);
+            waveEnd.Add("wave_number", wave);
+            waveEnd.Add("seconds", stats.Seconds - fightStart);
+            waveEnd.Add("kills", stats.Kills - killsAtStart);
+            waveEnd.Add("correct_keys", stats.CorrectKeys - correctKeysAtStart);
+            waveEnd.Add("wrong_keys", stats.WrongKeys - wrongKeysAtStart);
+            waveEnd.Add("health_at_start", healthAtStart);
+            waveEnd.Add("dda_extra_zombies", extraZombiesThisWave);
+            Analytics.AddPlayerState(waveEnd);
+            Analytics.Send(waveEnd);
+            Analytics.FlushSoon();
+
+            // Calibrate adaptive difficulty after the first wave.
+            if (DynamicDifficulty.HoldingFirstWave)
+            {
+                float wpm = DynamicDifficulty.ApplyNow();
+                ShowAfterFirstWave(wpm, true);
+            }
+
+            HealthWord.Close();
+            DeactivateProps();
+
+            // Short breathing period before the next wave.
+            if (endlessWaveBreakSeconds > 0f)
+            {
+                yield return new WaitForSeconds(endlessWaveBreakSeconds);
+            }
+        }
     }
 
     public IEnumerator RunTutorialFinalWave()
@@ -1333,12 +1435,21 @@ public class WaveSpawner : MonoBehaviour
     {
         extraZombiesThisWave = 0;
         spreadApproach = true; // this wave's zombies come in on curves to spots of their own (AssignApproach)
+        int difficultyWave = endlessMode ? Mathf.Min(wave, endlessDifficultyCapWave) : wave;
         // 1. This wave's numbers. Wave 1 uses the base values.
         // ADAPTIVE DIFFICULTY: slower typists get a smaller wave (never under 3);
         // faster ones get extra zombies at the end instead (ExtraZombies, below).
-        int zombiesThisWave = Mathf.Max(3, Mathf.RoundToInt((zombiesBase + zombiesPerWave * wave) * DynamicDifficulty.DensityFactor));
-        float speed = zombieSpeed + zombieSpeedPerWave * (wave - 1);
-        float interval = spawnInterval - spawnIntervalPerWave * (wave - 1);
+        int zombiesThisWave = Mathf.Max(3, Mathf.RoundToInt((zombiesBase + zombiesPerWave * difficultyWave) * DynamicDifficulty.DensityFactor));
+        if (endlessMode)
+        {
+            zombiesThisWave = Mathf.Min(zombiesThisWave, Mathf.Max(3, endlessMaxBaseZombiesPerWave));
+        }
+        float speed = zombieSpeed + zombieSpeedPerWave * (difficultyWave - 1);
+        if (endlessMode)
+        {
+            speed = Mathf.Min(speed, endlessMaxZombieSpeed);
+        }
+        float interval = spawnInterval - spawnIntervalPerWave * (difficultyWave - 1);
         if (interval < MinSpawnInterval)
         {
             interval = MinSpawnInterval;
@@ -1346,7 +1457,7 @@ public class WaveSpawner : MonoBehaviour
 
         // The WORD CHAIN pairs come on top of the wave's zombies (2 more each).
         HashSet<int> pairStarts;
-        ZombieKind[] plan = AddChainPairs(PlanKinds(zombiesThisWave, wave), wave, out pairStarts);
+        ZombieKind[] plan = AddChainPairs(PlanKinds(zombiesThisWave, difficultyWave), difficultyWave, out pairStarts);
         zombiesThisWave = plan.Length;
         Tutorial.Once("type", "Type the word above a zombie to shoot it.", 5f);
         LogWaveStart(plan, pairStarts.Count, speed, interval, encounter); // the level's own numbers (the "dda_" fields say how they were scaled)
@@ -1449,7 +1560,7 @@ public class WaveSpawner : MonoBehaviour
             {
                 point.Door.BurstOpen();
             }
-            ZombieKind kind = wave >= runnerFirstWave && i % 3 == 2 ? ZombieKind.Runner : ZombieKind.Normal;
+            ZombieKind kind = difficultyWave >= runnerFirstWave && i % 3 == 2 ? ZombieKind.Runner : ZombieKind.Normal;
             SpawnZombie(point, kind, speed);
             yield return new WaitForSeconds(interval * 0.6f * DynamicDifficulty.SpawnIntervalFactor);
         }
@@ -1717,6 +1828,10 @@ public class WaveSpawner : MonoBehaviour
     {
         pairStarts = new HashSet<int>();
         int pairs = CountForWave(wave, chainFirstWave, chainStartCount, chainPerWave);
+        if (endlessMode)
+        {
+            pairs = Mathf.Min(pairs, endlessMaxChainPairs);
+        }
         if (pairs <= 0)
         {
             return plan;

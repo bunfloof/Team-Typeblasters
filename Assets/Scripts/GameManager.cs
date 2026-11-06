@@ -685,15 +685,19 @@ public class GameManager : MonoBehaviour
         if (State != GameState.Playing)
             return;
 
-        // Stop the current wave/level coroutine so it cannot continue spawning.
         if (spawner != null)
             spawner.StopWaves();
 
-        // Clean up any active guided-intro state.
         GuidedIntro.Abandon();
 
-        // Use the existing victory flow.
-        WinGame();
+        if (spawner != null && spawner.IsEndlessMode)
+        {
+            EndGame(false);
+        }
+        else
+        {
+            WinGame();
+        }
     }
 #endif
 
@@ -718,7 +722,15 @@ public class GameManager : MonoBehaviour
         }
 
         Stats.Score = Score;
-        hud.ShowResults(won, Stats);
+
+        EndlessRecordSnapshot endlessRecord = null;
+        
+        if (spawner != null && spawner.IsEndlessMode)
+        {
+            endlessRecord = EndlessRecords.SubmitRun(spawner.CurrentWave, Score);
+        }
+        
+        hud.ShowResults(won, Stats, endlessRecord);
     }
 
     // The "run_end" analytics event: how the run ended and its statistics.

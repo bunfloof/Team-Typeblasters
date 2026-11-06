@@ -21,7 +21,7 @@ public class RunStats
         get
         {
             int total = CorrectKeys + WrongKeys;
-            return total == 0 ? 100f : 100f * CorrectKeys / total;
+            return total == 0 ? 0f : 100f * CorrectKeys / total;
         }
     }
 
@@ -36,5 +36,10 @@ public class RunStats
             }
             return (CorrectKeys / 5f) / (Seconds / 60f);
         }
+    }
+
+    public bool HasTypingAttempts
+    {
+        get { return CorrectKeys + WrongKeys > 0; }
     }
 }

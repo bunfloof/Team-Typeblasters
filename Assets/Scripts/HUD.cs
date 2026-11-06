@@ -575,7 +575,7 @@ public class HUD : MonoBehaviour
 
     public void SetWave(int wave, int waveCount)
     {
-        waveText.text = "Wave " + wave + " / " + waveCount;
+        waveText.text = waveCount > 0 ? "Wave " + wave + " / " + waveCount : "Wave " + wave;
     }
 
     public void SetScore(int score)
@@ -1002,6 +1002,23 @@ public class HUD : MonoBehaviour
         HidePowerTip();
         HideQuiz();
         multiKillText.gameObject.SetActive(false);
+    }
+
+    private void SetEndlessLostTitle(string title)
+    {
+        foreach (TMP_Text label in lostPanel.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (label == null || label == lostScoreText)
+                continue;
+
+            if (label.text.IndexOf("DIED", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                label.text = title;
+                return;
+            }
+        }
+
+        Debug.LogWarning("HUD: Could not find the 'YOU DIED' title in lostPanel.");
     }
 
     // ---- Boss health bar (top-centre) ----
@@ -2826,7 +2843,7 @@ public class HUD : MonoBehaviour
 
     // Shows the "You survived" (won) or "You died" panel with the run's stats,
     // using the existing panels and their Restart buttons.
-    public void ShowResults(bool won, RunStats stats)
+    public void ShowResults(bool won, RunStats stats, EndlessRecordSnapshot endlessRecord = null)
     {
         if (EasyTutorial.Active != null && won) { HideAllPanels(); EasyTutorial.Active.ShowCompletion(); return; }
         if (stats == null)
@@ -2856,10 +2873,30 @@ public class HUD : MonoBehaviour
         {
             ShowLostPanel(stats.Score);
             message = lostScoreText;
+
+            GameManager game = GameManager.Instance;
+
+            if (game != null && game.Spawner != null && game.Spawner.IsEndlessMode)
+            {
+                SetEndlessLostTitle("REACHED WAVE " + game.Spawner.CurrentWave);
+            }
         }
 
         // The stats replace "Final score: ...".
         message.text = StatsText(stats);
+        if (endlessRecord != null)
+        {
+            string newRecord = endlessRecord.NewBestWave || endlessRecord.NewBestScore
+                ? "  <color=#40DBCC><b>NEW RECORD!</b></color>"
+                : "";
+        
+            message.text += "\n<size=85%>"
+                + StatLabel + "PERSONAL BEST</color>  "
+                + "Wave <b>" + endlessRecord.BestWave + "</b>    "
+                + "Score <b>" + endlessRecord.BestScore + "</b>"
+                + newRecord
+                + "</size>";
+        }
         if (!won && Checkpoint.Has(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name))
         {
             message.text += "\n<color=#40DBCC><b>ENTER</b>  continue from Wave " + (Checkpoint.WaveIndex + 1) + "</color>";
@@ -2888,10 +2925,10 @@ public class HUD : MonoBehaviour
         int seconds = Mathf.FloorToInt(stats.Seconds);
         string time = (seconds / 60) + ":" + (seconds % 60).ToString("00");
         // InvariantCulture: always a dot in "97.5", whatever the computer's language.
-        string accuracy = stats.Accuracy.ToString("0.0", CultureInfo.InvariantCulture);
+        string accuracy = stats.HasTypingAttempts ? stats.Accuracy.ToString("0.0", CultureInfo.InvariantCulture) + "%" : "00.0%";
 
         return "<size=125%>" + StatLabel + "Score</color>  <b>" + stats.Score + "</b></size>\n"
-            + StatLabel + "Accuracy</color>  <b>" + accuracy + "%</b>     "
+            + StatLabel + "Accuracy</color>  <b>" + accuracy + "</b>     "
             + StatLabel + "Speed</color>  <b>" + Mathf.RoundToInt(stats.WordsPerMinute) + " WPM</b>\n"
             + StatLabel + "Kills</color>  <b>" + stats.Kills + "</b>     "
             + StatLabel + "Best combo</color>  <b>x" + stats.BestCombo + "</b>     "
