@@ -1,30 +1,30 @@
 {
-  "version": "latest-2026-11-05-cf5d3ee",
-  "source_commit": "cf5d3ee26b80eccb0be5c65713f7f965421e0328",
-  "commit_message": "Tutorial lessons can never get stuck",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/42174825382",
+  "version": "latest-2026-11-06-8c61b34",
+  "source_commit": "8c61b34aa5b310612c33dc53f0f5249694d7b667",
+  "commit_message": "Merge pull request from feature/easy-version branch",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/42321516444",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-06T06:40:00.295536Z",
+  "published_utc": "2026-11-07T01:21:39.875660Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14266915,
-      "sha256": "fecfb60dc062e1a6a4a8851cf2e32fc0c6a20892a4ef0f2535c22d3da44f3d45"
+      "bytes": 14342185,
+      "sha256": "4d95c00d81731930fd17356e9035960b29ce0b4bdfe42300329a01d33d6bfa86"
     },
     {
       "path": "Build/WebGL.framework.js",
       "bytes": 479039,
-      "sha256": "301701ae3288944901374a6814dd238836d8d7110f77d015b2f792bcd67d0f0d"
+      "sha256": "549347ba5875de1a1e22b82c7c014fe53ce5e92c17b85b1109447c8ea2b42e0d"
     },
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "a9f10a5dd94575c6c427ae7e717227f20558bb1bf1a96c488cfd317ae9c2006e"
+      "sha256": "6080aab81bcff7a5d9c072c6f7d59d9875b747a6fd042dc30f15b7244f54fa2e"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48146611,
-      "sha256": "3353a91c90bad82c338dd106b2f1128ace19c8bc8fa6ef4d3aad7d5ed1270a74"
+      "bytes": 48183301,
+      "sha256": "ab0440c6f9fb7562896e0ecdd7b9172bb72a4a5c4e46ff43fb41e7ddee795a33"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7415,
-      "sha256": "9704a791ea4b14ec475e5a84d1a4333c6115e4c39592bcf36fa0b0dd129baeb4"
+      "sha256": "c8cbe9fea498695bdcee4a10b6778d0c587ac580ce60b527537bf945d3870174"
     }
   ]
 }
