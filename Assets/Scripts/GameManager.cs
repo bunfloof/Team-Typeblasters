@@ -360,7 +360,8 @@ public class GameManager : MonoBehaviour
 
         Time.timeScale = 1f; // in case we restart from the pause panel
         Analytics.EndRun();  // the Start panel's events belong to no run
-        SceneManager.LoadScene(sceneName);
+        // All scene transitions initiated by GameManager use the same fade.
+        ScreenFade.LoadSceneWithFade(sceneName, 0f);
     }
 
     // Called by TypingController when Enter is pressed outside of play

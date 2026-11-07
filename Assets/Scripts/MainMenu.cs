@@ -18,6 +18,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.Events;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using System.Collections;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -53,6 +54,10 @@ public class MainMenu : MonoBehaviour
     private static bool openLevelSelectionOnStart;
 
     private const string EndlessScene = "Endless";
+    // Picking a level: the button pulses once, then the screen fades to black.
+    private const float LaunchPulseSeconds = 0.4f;
+    private const float LaunchFadeStartSeconds = 0.4f;   // when the fade to black begins
+    private const float LaunchPulseGrowth = 0.1f;
 
     private const float SelectedScale = 1.05f;
     private const float FrameThickness = 6f;
@@ -247,8 +252,8 @@ public class MainMenu : MonoBehaviour
                 new Vector2(x, 20f), new Vector2(360f, 180f), () => LoadLevel(levelIndex)).transform);
         }
 
-        endlessButton = (RectTransform)CreateButton(page.transform, "Level Endless", "3. ENDLESS\n<size=55%>SURVIVAL</size>",
-            new Vector2(0f, -110f), new Vector2(360f, 120f), () => LoadScene(EndlessScene)).transform;
+        endlessButton = (RectTransform)CreateButton(page.transform, "Level Endless", "ENDLESS\n<size=55%>SURVIVAL</size>",
+            new Vector2(0f, -110f), new Vector2(360f, 120f), () => LoadScene(EndlessScene, endlessButton)).transform;
 
         levelMessage = CreateText(page.transform, "Message", "", 32f, new Vector2(0f, -225f), new Vector2(1700f, 50f));
         levelMessage.color = new Color(1f, 0.4f, 0.3f);
@@ -259,24 +264,43 @@ public class MainMenu : MonoBehaviour
 
     private void LoadLevel(int index)
     {
-        LoadScene(GameManager.LevelName(index));
+        LoadScene(GameManager.LevelName(index), levelButtons[index]);
     }
 
     // Any scene by name (a level, or the Endless scene).
-    private void LoadScene(string sceneName)
+    private void LoadScene(string sceneName, RectTransform pressed)
     {
         if (loading)
         {
             return;
         }
+
         if (!Application.CanStreamedLevelBeLoaded(sceneName))
         {
             Debug.LogError("MainMenu: scene \"" + sceneName + "\" is missing from Build Settings.");
             levelMessage.text = sceneName + " is not available yet.";
             return;
         }
-        loading = true;
-        SceneManager.LoadScene(sceneName);
+
+        loading = true; // from now on no other button or key does anything
+
+        StartCoroutine(PulseButton(pressed));
+        ScreenFade.LoadSceneWithFade(sceneName, LaunchFadeStartSeconds);
+    }
+
+    // One gentle pulse: the button grows a little and comes back.
+    private IEnumerator PulseButton(RectTransform button)
+    {
+        Vector3 rest = button.localScale;
+
+        for (float time = 0f; time < LaunchPulseSeconds; time += Time.unscaledDeltaTime)
+        {
+            float grow = Mathf.Sin(time / LaunchPulseSeconds * Mathf.PI);
+            button.localScale = rest * (1f + LaunchPulseGrowth * grow);
+            yield return null;
+        }
+
+        button.localScale = rest;
     }
 
     // The buttons the keyboard can select on the page that is showing, in order.
