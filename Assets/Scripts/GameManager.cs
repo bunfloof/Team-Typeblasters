@@ -33,7 +33,8 @@ public enum GameState
     Paused,   // Esc was pressed or the browser tab was hidden: pause panel, or the 3-2-1 countdown before play resumes
     Tip,      // a first-time tip box is showing (game frozen); Enter or OK continues
     Won,      // the last area was cleared, "You survived" panel is showing (Enter / Restart: back to the Start panel)
-    Lost      // health reached 0, "You died" panel is showing (Enter / Restart: back to the Start panel)
+    Lost,     // health reached 0, "You died" panel is showing (Enter / Restart: back to the Start panel)
+    Reward    // choose rewards after completing a wave in endless mode
 }
 
 public class GameManager : MonoBehaviour
@@ -270,6 +271,16 @@ public class GameManager : MonoBehaviour
     // (Checkpoint); any other Restart starts the level from the beginning.
     public void RestartGame()
     {
+        if (State == GameState.Paused)
+        {
+            hud.ShowConfirmation("Restart this level?", RestartGameConfirmed);
+            return;
+        }
+        RestartGameConfirmed();
+    }
+
+    private void RestartGameConfirmed()
+    {
         string scene = SceneManager.GetActiveScene().name;
         if (State == GameState.Lost && Checkpoint.Has(scene))
         {
@@ -282,11 +293,29 @@ public class GameManager : MonoBehaviour
         LoadLevelScene(scene);
     }
 
-    // Called by the MENU buttons (Start, pause, win and lose panels): back to the Menu scene.
+    // Called by ordinary MENU buttons: return to the menu's main page.
     public void LoadMenu()
+    {
+        if (State == GameState.Paused)
+        {
+            hud.ShowConfirmation("Return to main menu?", LoadMenuConfirmed);
+            return;
+        }
+
+        LoadMenuConfirmed();
+    }
+
+    private void LoadMenuConfirmed()
     {
         Checkpoint.Clear();
         LoadLevelScene("Menu");
+    }
+
+    // Called after the final campaign level: open Menu directly on SELECT LEVEL.
+    public void LoadLevelSelectionMenu()
+    {
+        Checkpoint.Clear();
+        LoadLevelScene("Menu", true);
     }
 
     // Level choices are available before play and after a run ends.
@@ -310,7 +339,7 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void LoadLevelScene(string sceneName)
+    private void LoadLevelScene(string sceneName, bool openLevelSelection = false)
     {
         if (loadingLevel) return;
         if (!Application.CanStreamedLevelBeLoaded(sceneName))
@@ -318,16 +347,21 @@ public class GameManager : MonoBehaviour
             Debug.LogError("Level is missing from Build Settings: " + sceneName);
             return;
         }
+        if (openLevelSelection)
+        {
+            MainMenu.RequestLevelSelection();
+        }
         loadingLevel = true;
         // Restarted in the middle of a run (from the pause panel): it ends here.
-        if (State == GameState.Playing || State == GameState.Paused || State == GameState.Tip)
+        if (State == GameState.Playing || State == GameState.Paused || State == GameState.Tip || State == GameState.Reward)
         {
             LogRunEnd("restart");
         }
 
         Time.timeScale = 1f; // in case we restart from the pause panel
         Analytics.EndRun();  // the Start panel's events belong to no run
-        SceneManager.LoadScene(sceneName);
+        // All scene transitions initiated by GameManager use the same fade.
+        ScreenFade.LoadSceneWithFade(sceneName, 0f);
     }
 
     // Called by TypingController when Enter is pressed outside of play
@@ -365,6 +399,13 @@ public class GameManager : MonoBehaviour
         }
         else if (State == GameState.Paused)
         {
+            // Esc closes the confirmation instead of resuming the game.
+            if (hud != null && hud.IsConfirmationOpen)
+            {
+                hud.CancelConfirmation();
+                return;
+            }
+        
             if (resumeCountdown != null)
             {
                 Pause("esc_key");
@@ -454,6 +495,116 @@ public class GameManager : MonoBehaviour
         AnalyticsEvent e = Analytics.NewEvent("resume");
         e.Add("paused_seconds", Time.realtimeSinceStartup - pausedSince); // the countdown included
         Analytics.Send(e);
+    }
+
+    // ---- Endless wave rewards ----
+
+    public const int EndlessRewardHealth = 2;
+    public const int EndlessRewardEnergy = 5;
+    private const int EndlessRewardScore = 100;
+
+    // Called by WaveSpawner after an Endless wave has been cleared.
+    public void BeginEndlessWaveReward()
+    {
+        if (State != GameState.Playing || spawner == null || !spawner.IsEndlessMode)
+            return;
+
+        State = GameState.Reward;
+        Time.timeScale = 0f;
+
+        // Decide the weapon once, before displaying the reward card.
+        // An already-loaded RPG means FRENZY is guaranteed.
+        bool rewardRocket = !powers.RocketLoaded && Random.value < 0.5f;
+
+        hud.ShowEndlessWaveReward(
+            rewardRocket ? "RPG" : "FRENZY",
+            choice => CompleteEndlessWaveReward(choice, rewardRocket));
+    }
+
+    private void CompleteEndlessWaveReward(EndlessWaveRewardChoice choice, bool rewardRocket)
+    {
+        if (State != GameState.Reward)
+            return;
+
+        int healthBefore = Health;
+        int energyBefore = SkillEnergy;
+        int scoreBefore = Score;
+
+        string weapon = null;
+
+        switch (choice)
+        {
+            case EndlessWaveRewardChoice.Health:
+                Heal(EndlessRewardHealth);
+                break;
+
+            case EndlessWaveRewardChoice.Energy:
+                SkillEnergy = Mathf.Min(
+                    MaxSkillEnergy,
+                    SkillEnergy + EndlessRewardEnergy);
+
+                powers.OnComboChanged(Combo);
+                break;
+
+            case EndlessWaveRewardChoice.FreeWeapon:
+                weapon = powers.GrantFreeWeaponReward(rewardRocket);
+                break;
+
+            case EndlessWaveRewardChoice.Skip:
+                Score += EndlessRewardScore;
+                hud.SetScore(Score);
+                break;
+
+            default:
+                return;
+        }
+
+        int healthGained = Health - healthBefore;
+        int energyGained = SkillEnergy - energyBefore;
+        int scoreGained = Score - scoreBefore;
+
+        // Record the reward selection.
+        string choiceName = choice == EndlessWaveRewardChoice.FreeWeapon
+            ? "free_weapon"
+            : choice.ToString().ToLowerInvariant();
+
+        AnalyticsEvent e = Analytics.NewEvent("wave_reward");
+        e.Add("wave_number", spawner.CurrentWave);
+        e.Add("choice", choiceName);
+        e.Add("health_gained", healthGained);
+        e.Add("energy_gained", energyGained);
+        e.Add("score_gained", scoreGained);
+
+        if (!string.IsNullOrEmpty(weapon))
+            e.Add("weapon", weapon);
+
+        Analytics.AddPlayerState(e);
+        Analytics.Send(e);
+        Analytics.FlushSoon();
+
+        // Show the actual amount gained (rewards may be capped).
+        switch (choice)
+        {
+            case EndlessWaveRewardChoice.Health:
+                hud.ShowHint(
+                    healthGained > 0 ? "+" + healthGained + " HEALTH" : "HEALTH FULL",
+                    2f);
+                break;
+
+            case EndlessWaveRewardChoice.Energy:
+                hud.ShowHint(
+                    energyGained > 0 ? "+" + energyGained + " ENERGY" : "ENERGY FULL",
+                    2f);
+                break;
+
+            case EndlessWaveRewardChoice.Skip:
+                hud.ShowHint("+100 SCORE", 2f);
+                break;
+        }
+
+        // Resume the existing Endless run.
+        State = GameState.Playing;
+        Time.timeScale = 1f;
     }
 
     // ---- Typing statistics (called by TypingController) ----
@@ -668,6 +819,38 @@ public class GameManager : MonoBehaviour
         EndGame(true);
     }
 
+#if UNITY_EDITOR
+    public void CompleteLevelForDebug()
+    {
+        if (State != GameState.Playing)
+            return;
+
+        if (spawner != null)
+            spawner.StopWaves();
+
+        GuidedIntro.Abandon();
+
+        if (spawner != null && spawner.IsEndlessMode)
+        {
+            EndGame(false);
+        }
+        else
+        {
+            WinGame();
+        }
+    }
+
+    public void CompleteCurrentWaveForDebug()
+    {
+        if (State != GameState.Playing || spawner == null)
+        {
+            return;
+        }
+
+        spawner.CompleteCurrentWaveForDebug();
+    }
+#endif
+
     private void EndGame(bool won)
     {
         if (State != GameState.Playing)
@@ -689,7 +872,15 @@ public class GameManager : MonoBehaviour
         }
 
         Stats.Score = Score;
-        hud.ShowResults(won, Stats);
+
+        EndlessRecordSnapshot endlessRecord = null;
+        
+        if (spawner != null && spawner.IsEndlessMode)
+        {
+            endlessRecord = EndlessRecords.SubmitRun(spawner.CurrentWave, Score);
+        }
+        
+        hud.ShowResults(won, Stats, endlessRecord);
     }
 
     // The "run_end" analytics event: how the run ended and its statistics.

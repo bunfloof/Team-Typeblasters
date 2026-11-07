@@ -1075,6 +1075,17 @@ public class Zombie : MonoBehaviour, ITypingTarget
         }
     }
 
+#if UNITY_EDITOR
+    // Removes a zombie for developer testing without awarding score, kills, or energy.
+    public void DespawnForDebug()
+    {
+        if (IsAlive)
+        {
+            Remove("debug_complete");
+        }
+    }
+#endif
+
     // Takes this zombie out of the game. No score here: also used when it reaches the player.
     // outcome (for analytics): how it left: "shot", "blast", "bite", "rode_past",
     // "never_seen", "lost" or "boss_died" ("run_over" comes from LogRunOver).

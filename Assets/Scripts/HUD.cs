@@ -53,6 +53,10 @@ using System.Globalization;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.Events;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 public class HUD : MonoBehaviour
 {
@@ -81,6 +85,23 @@ public class HUD : MonoBehaviour
     [SerializeField] private Toggle tipsToggle;           // "Show tips" on the Start panel
     [SerializeField] private GameObject pausePanel;       // Esc: its Resume and Restart buttons call GameManager
     [SerializeField] private TMP_Text countdownText;      // the 3-2-1 before play resumes
+    // Keyboard navigation for the pause menu.
+    private readonly List<Button> pauseMenuButtons = new List<Button>();
+    private int selectedPauseButton;
+    private const float PauseSelectedScale = 1.05f;
+    private const float PauseFrameThickness = 6f;
+    private static readonly Color PauseFrameColor = new Color(0.95f, 0.75f, 0.1f);
+    private bool pauseSettingsWasOpen;
+    private bool pauseKeyboardSelectionStarted;
+    // Confirmation dialog
+    private GameObject confirmationPanel;
+    private TMP_Text confirmationMessage;
+    private readonly List<Button> confirmationButtons = new List<Button>();
+    private int selectedConfirmationButton;
+    private bool confirmationKeyboardSelectionStarted;
+    private UnityAction confirmationAction;
+
+    public bool IsConfirmationOpen => confirmationPanel != null && confirmationPanel.activeSelf;
     [SerializeField] private TypingDifficultySelector difficultySelector; // the TYPING DIFFICULTY row on the Start panel (none in Easy)
 
     // Empty full-screen objects in the scene (see DRAWING ORDER at the top).
@@ -116,6 +137,8 @@ public class HUD : MonoBehaviour
     [SerializeField] private float floatingTextSeconds = 1.1f;  // lifetime of a floating text
     [SerializeField] private float floatingTextRise = 70f;      // canvas units it rises during its life
 
+    private EndlessWaveReward endlessWaveReward;
+
     // Anchor and pivot points used by the code-built pieces (0,0 = bottom-left, 1,1 = top-right).
     private static readonly Vector2 Centre = new Vector2(0.5f, 0.5f);
     private static readonly Vector2 LeftMiddle = new Vector2(0f, 0.5f);
@@ -147,6 +170,12 @@ public class HUD : MonoBehaviour
         {
             SetFlashAlpha(0f);
         }
+
+        endlessWaveReward = GetComponent<EndlessWaveReward>();
+        if (endlessWaveReward == null)
+            endlessWaveReward = gameObject.AddComponent<EndlessWaveReward>();
+        endlessWaveReward.Initialize(transform);
+
         HudReveal.Revealed += RevealFeature;
     }
 
@@ -166,6 +195,7 @@ public class HUD : MonoBehaviour
         UpdateHint();
         UpdateQuizPop();
         UpdateHealthOffer();
+        HandlePauseMenuKeys();
     }
 
     private void LateUpdate()
@@ -575,7 +605,7 @@ public class HUD : MonoBehaviour
 
     public void SetWave(int wave, int waveCount)
     {
-        waveText.text = "Wave " + wave + " / " + waveCount;
+        waveText.text = waveCount > 0 ? "Wave " + wave + " / " + waveCount : "Wave " + wave;
     }
 
     public void SetScore(int score)
@@ -967,7 +997,7 @@ public class HUD : MonoBehaviour
         TMP_Text nextLabel = CreateButton(wonPanel.transform, "Next Level",
             next != null ? "NEXT: " + next : "LEVEL SELECT", new Vector2(200f, -230f),
             () => { if (GameManager.NextLevelName != null) GameManager.Instance.NextLevel();
-                else GameManager.Instance.SelectLevel(0); });
+                else GameManager.Instance.LoadLevelSelectionMenu(); });
         nextLabel.fontSize = 34f;
         RectTransform nextRect = (RectTransform)nextLabel.transform.parent;
         nextRect.sizeDelta = new Vector2(360f, 100f);
@@ -1001,7 +1031,25 @@ public class HUD : MonoBehaviour
         HideCountdown();
         HidePowerTip();
         HideQuiz();
+        HideEndlessWaveReward();
         multiKillText.gameObject.SetActive(false);
+    }
+
+    private void SetEndlessLostTitle(string title)
+    {
+        foreach (TMP_Text label in lostPanel.GetComponentsInChildren<TMP_Text>(true))
+        {
+            if (label == null || label == lostScoreText)
+                continue;
+
+            if (label.text.IndexOf("DIED", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                label.text = title;
+                return;
+            }
+        }
+
+        Debug.LogWarning("HUD: Could not find the 'YOU DIED' title in lostPanel.");
     }
 
     // ---- Boss health bar (top-centre) ----
@@ -1238,12 +1286,406 @@ public class HUD : MonoBehaviour
 
     public void ShowPausePanel()
     {
+        pauseKeyboardSelectionStarted = false;
         pausePanel.SetActive(true);
+        BuildPauseMenuSelection();
     }
 
     public void HidePausePanel()
     {
+        CancelConfirmation();
+        ClearPauseMenuSelection();
+        pauseKeyboardSelectionStarted = false;
         pausePanel.SetActive(false);
+    }
+
+    // Finds the buttons under the visible pause panel.
+    // Their hierarchy order determines the keyboard selection order.
+    private void BuildPauseMenuSelection()
+    {
+        pauseMenuButtons.Clear();
+        selectedPauseButton = 0;
+
+        Button[] buttons = pausePanel.GetComponentsInChildren<Button>(false);
+
+        foreach (Button button in buttons)
+        {
+            if (button == null || !button.isActiveAndEnabled || !button.interactable)
+                continue;
+            if (IsPauseSettingsButton(button))
+                continue;
+            RectTransform rect = button.transform as RectTransform;
+            if (rect == null)
+                continue;
+
+            // Use our own selection logic, just like MainMenu.
+            Navigation navigation = button.navigation;
+            navigation.mode = Navigation.Mode.None;
+            button.navigation = navigation;
+
+            AddPauseSelectionFrame(rect);
+            pauseMenuButtons.Add(button);
+        }
+
+        RefreshPauseSelection();
+    }
+
+    private static bool IsPauseSettingsButton(Button button)
+    {
+        if (button.name.IndexOf("settings", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+
+        TMP_Text label = button.GetComponentInChildren<TMP_Text>(true);
+
+        return label != null &&
+            label.text.IndexOf("settings", System.StringComparison.OrdinalIgnoreCase) >= 0;
+    }
+
+    private void ClearPauseMenuSelection()
+    {
+        foreach (Button button in pauseMenuButtons)
+        {
+            SetPauseButtonHighlight(button, false);
+        }
+
+        pauseMenuButtons.Clear();
+        selectedPauseButton = 0;
+    }
+
+    // W A S D / arrow keys move the selection.
+    // Enter / Space activates the selected button.
+    private void HandlePauseMenuKeys()
+    {
+    #if ENABLE_INPUT_SYSTEM
+        if (IsConfirmationOpen)
+        {
+            HandleConfirmationKeys();
+            return;
+        }
+        if (pausePanel == null || !pausePanel.activeInHierarchy || pauseMenuButtons.Count == 0)
+            return;
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null)
+            return;
+        bool settingsBusy = SettingsPanel.IsOpen || pauseSettingsWasOpen;
+        pauseSettingsWasOpen = SettingsPanel.IsOpen;
+        if (settingsBusy)
+            return;
+
+        bool previous =
+            keyboard.upArrowKey.wasPressedThisFrame ||
+            keyboard.leftArrowKey.wasPressedThisFrame ||
+            keyboard.wKey.wasPressedThisFrame ||
+            keyboard.aKey.wasPressedThisFrame;
+
+        bool next =
+            keyboard.downArrowKey.wasPressedThisFrame ||
+            keyboard.rightArrowKey.wasPressedThisFrame ||
+            keyboard.sKey.wasPressedThisFrame ||
+            keyboard.dKey.wasPressedThisFrame;
+
+        bool confirm =
+            keyboard.enterKey.wasPressedThisFrame ||
+            keyboard.numpadEnterKey.wasPressedThisFrame ||
+            keyboard.spaceKey.wasPressedThisFrame;
+
+        int step = (next ? 1 : 0) - (previous ? 1 : 0);
+        if (step != 0)
+        {
+            pauseKeyboardSelectionStarted = true;
+            selectedPauseButton = (selectedPauseButton + step + pauseMenuButtons.Count) % pauseMenuButtons.Count;
+            RefreshPauseSelection();
+        }
+        if (confirm)
+        {
+            Button button = pauseMenuButtons[selectedPauseButton];
+
+            if (button != null && button.isActiveAndEnabled && button.interactable)
+            {
+                button.onClick.Invoke();
+            }
+        }
+    #endif
+    }
+
+    // Updates the yellow selection frame.
+    private void RefreshPauseSelection()
+    {
+        if (pauseMenuButtons.Count == 0)
+            return;
+
+        for (int i = 0; i < pauseMenuButtons.Count; i++)
+        {
+            SetPauseButtonHighlight(pauseMenuButtons[i], pauseKeyboardSelectionStarted && i == selectedPauseButton);
+        }
+    }
+
+    private static void SetPauseButtonHighlight(Button button, bool on)
+    {
+        if (button == null)
+            return;
+
+        RectTransform rect = button.transform as RectTransform;
+        if (rect == null)
+            return;
+        Transform frame = rect.Find("Selection Frame");
+        if (frame != null)
+        {
+            frame.gameObject.SetActive(on);
+        }
+        rect.localScale = on ? new Vector3(PauseSelectedScale, PauseSelectedScale, 1f) : Vector3.one;
+    }
+
+    // Adds the same yellow frame used by MainMenu to a scene button.
+    private static void AddPauseSelectionFrame(RectTransform button)
+    {
+        Transform existing = button.Find("Selection Frame");
+        if (existing != null)
+        {
+            existing.gameObject.SetActive(false);
+            return;
+        }
+
+        RectTransform frame = new GameObject(
+            "Selection Frame",
+            typeof(RectTransform)).GetComponent<RectTransform>();
+
+        frame.SetParent(button, false);
+        frame.anchorMin = Vector2.zero;
+        frame.anchorMax = Vector2.one;
+        frame.offsetMin = Vector2.zero;
+        frame.offsetMax = Vector2.zero;
+
+        AddPauseFrameBar(frame,
+            new Vector2(0f, 1f), new Vector2(1f, 1f),
+            new Vector2(0.5f, 1f), new Vector2(0f, PauseFrameThickness));
+
+        AddPauseFrameBar(frame,
+            new Vector2(0f, 0f), new Vector2(1f, 0f),
+            new Vector2(0.5f, 0f), new Vector2(0f, PauseFrameThickness));
+
+        AddPauseFrameBar(frame,
+            new Vector2(0f, 0f), new Vector2(0f, 1f),
+            new Vector2(0f, 0.5f), new Vector2(PauseFrameThickness, 0f));
+
+        AddPauseFrameBar(frame,
+            new Vector2(1f, 0f), new Vector2(1f, 1f),
+            new Vector2(1f, 0.5f), new Vector2(PauseFrameThickness, 0f));
+
+        frame.gameObject.SetActive(false);
+    }
+
+    private static void AddPauseFrameBar(
+        Transform parent,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        Vector2 pivot,
+        Vector2 size)
+    {
+        GameObject bar = new GameObject(
+            "Bar",
+            typeof(RectTransform),
+            typeof(Image));
+
+        RectTransform rect = bar.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchorMin = anchorMin;
+        rect.anchorMax = anchorMax;
+        rect.pivot = pivot;
+        rect.anchoredPosition = Vector2.zero;
+        rect.sizeDelta = size;
+
+        Image image = bar.GetComponent<Image>();
+        image.color = PauseFrameColor;
+        image.raycastTarget = false;
+    }
+
+    public void ShowEndlessWaveReward(string weaponName, System.Action<EndlessWaveRewardChoice> onChoice)
+    {
+        if (endlessWaveReward != null)
+            endlessWaveReward.Show(onChoice, weaponName);
+    }
+
+    public void HideEndlessWaveReward()
+    {
+        if (endlessWaveReward != null)
+            endlessWaveReward.Hide();
+    }
+
+    // ---- Confirmation dialog ----
+    public void ShowConfirmation(string message, UnityAction onConfirm)
+    {
+        if (confirmationPanel == null)
+        {
+            BuildConfirmationPanel();
+        }
+
+        confirmationMessage.text = message;
+        confirmationAction = onConfirm;
+
+        // Default to CANCEL for safety.
+        selectedConfirmationButton = 1;
+        confirmationKeyboardSelectionStarted = false;
+
+        RefreshConfirmationSelection();
+
+        confirmationPanel.transform.SetAsLastSibling();
+        confirmationPanel.SetActive(true);
+    }
+
+    public void CancelConfirmation()
+    {
+        if (!IsConfirmationOpen)
+            return;
+
+        confirmationAction = null;
+        confirmationKeyboardSelectionStarted = false;
+
+        confirmationPanel.SetActive(false);
+        RefreshConfirmationSelection();
+    }
+
+    private void AcceptConfirmation()
+    {
+        UnityAction action = confirmationAction;
+
+        CancelConfirmation();
+
+        action?.Invoke();
+    }
+
+    private void BuildConfirmationPanel()
+    {
+        // Full-screen overlay: blocks clicks from reaching the pause menu.
+        confirmationPanel = new GameObject(
+            "ConfirmationPanel",
+            typeof(RectTransform),
+            typeof(Image));
+
+        RectTransform panelRect = confirmationPanel.GetComponent<RectTransform>();
+        panelRect.SetParent(transform, false);
+        StretchToParent(panelRect);
+
+        Image background = confirmationPanel.GetComponent<Image>();
+        background.color = new Color(0f, 0f, 0f, 0.72f);
+        background.raycastTarget = true;
+
+        // Dialog box.
+        RectTransform box = CreateRect("ConfirmationBox", panelRect);
+        PlaceRect(box, Centre, Centre, Vector2.zero, new Vector2(760f, 270f));
+
+        Image boxImage = box.gameObject.AddComponent<Image>();
+        boxImage.color = new Color(0.04f, 0.06f, 0.1f, 0.98f);
+        boxImage.raycastTarget = true;
+
+        // Message.
+        confirmationMessage = CreateText(
+            box, "ConfirmationMessage", "", 42f, Vector2.zero);
+
+        PlaceRect(
+            confirmationMessage.rectTransform,
+            TopCentre,
+            TopCentre,
+            new Vector2(0f, -48f),
+            new Vector2(680f, 100f));
+
+        confirmationMessage.fontStyle = FontStyles.Bold;
+        confirmationMessage.textWrappingMode = TextWrappingModes.Normal;
+
+        // YES button.
+        TMP_Text yesLabel = CreateButton(
+            box,
+            "ConfirmationYes",
+            "YES",
+            new Vector2(-150f, -88f),
+            AcceptConfirmation);
+
+        Button yesButton = yesLabel.transform.parent.GetComponent<Button>();
+        yesButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 72f);
+        yesLabel.rectTransform.sizeDelta = new Vector2(260f, 72f);
+        yesLabel.fontSize = 32f;
+
+        // CANCEL button.
+        TMP_Text cancelLabel = CreateButton(
+            box,
+            "ConfirmationCancel",
+            "CANCEL",
+            new Vector2(150f, -88f),
+            CancelConfirmation);
+
+        Button cancelButton = cancelLabel.transform.parent.GetComponent<Button>();
+        cancelButton.GetComponent<RectTransform>().sizeDelta = new Vector2(260f, 72f);
+        cancelLabel.rectTransform.sizeDelta = new Vector2(260f, 72f);
+        cancelLabel.fontSize = 32f;
+
+        // Same yellow keyboard-selection frame used by the pause menu.
+        AddPauseSelectionFrame(yesButton.transform as RectTransform);
+        AddPauseSelectionFrame(cancelButton.transform as RectTransform);
+
+        confirmationButtons.Clear();
+        confirmationButtons.Add(yesButton);
+        confirmationButtons.Add(cancelButton);
+
+        confirmationPanel.SetActive(false);
+    }
+
+    private void HandleConfirmationKeys()
+    {
+    #if ENABLE_INPUT_SYSTEM
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null || confirmationButtons.Count == 0)
+            return;
+
+        bool previous =
+            keyboard.upArrowKey.wasPressedThisFrame ||
+            keyboard.leftArrowKey.wasPressedThisFrame ||
+            keyboard.wKey.wasPressedThisFrame ||
+            keyboard.aKey.wasPressedThisFrame;
+
+        bool next =
+            keyboard.downArrowKey.wasPressedThisFrame ||
+            keyboard.rightArrowKey.wasPressedThisFrame ||
+            keyboard.sKey.wasPressedThisFrame ||
+            keyboard.dKey.wasPressedThisFrame;
+
+        bool confirm =
+            keyboard.enterKey.wasPressedThisFrame ||
+            keyboard.numpadEnterKey.wasPressedThisFrame ||
+            keyboard.spaceKey.wasPressedThisFrame;
+
+        int step = (next ? 1 : 0) - (previous ? 1 : 0);
+
+        if (step != 0)
+        {
+            confirmationKeyboardSelectionStarted = true;
+
+            selectedConfirmationButton =
+                (selectedConfirmationButton + step + confirmationButtons.Count)
+                % confirmationButtons.Count;
+
+            RefreshConfirmationSelection();
+        }
+
+        if (confirm)
+        {
+            Button button = confirmationButtons[selectedConfirmationButton];
+
+            if (button != null && button.isActiveAndEnabled && button.interactable)
+            {
+                button.onClick.Invoke();
+            }
+        }
+    #endif
+    }
+
+    private void RefreshConfirmationSelection()
+    {
+        for (int i = 0; i < confirmationButtons.Count; i++)
+        {
+            SetPauseButtonHighlight(
+                confirmationButtons[i],
+                confirmationKeyboardSelectionStarted && i == selectedConfirmationButton);
+        }
     }
 
     // Big number in the middle of the screen while the game is about to resume.
@@ -2826,7 +3268,7 @@ public class HUD : MonoBehaviour
 
     // Shows the "You survived" (won) or "You died" panel with the run's stats,
     // using the existing panels and their Restart buttons.
-    public void ShowResults(bool won, RunStats stats)
+    public void ShowResults(bool won, RunStats stats, EndlessRecordSnapshot endlessRecord = null)
     {
         if (EasyTutorial.Active != null && won) { HideAllPanels(); EasyTutorial.Active.ShowCompletion(); return; }
         if (stats == null)
@@ -2856,10 +3298,30 @@ public class HUD : MonoBehaviour
         {
             ShowLostPanel(stats.Score);
             message = lostScoreText;
+
+            GameManager game = GameManager.Instance;
+
+            if (game != null && game.Spawner != null && game.Spawner.IsEndlessMode)
+            {
+                SetEndlessLostTitle("REACHED WAVE " + game.Spawner.CurrentWave);
+            }
         }
 
         // The stats replace "Final score: ...".
         message.text = StatsText(stats);
+        if (endlessRecord != null)
+        {
+            string newRecord = endlessRecord.NewBestWave || endlessRecord.NewBestScore
+                ? "  <color=#40DBCC><b>NEW RECORD!</b></color>"
+                : "";
+        
+            message.text += "\n<size=85%>"
+                + StatLabel + "PERSONAL BEST</color>  "
+                + "Wave <b>" + endlessRecord.BestWave + "</b>    "
+                + "Score <b>" + endlessRecord.BestScore + "</b>"
+                + newRecord
+                + "</size>";
+        }
         if (!won && Checkpoint.Has(UnityEngine.SceneManagement.SceneManager.GetActiveScene().name))
         {
             message.text += "\n<color=#40DBCC><b>ENTER</b>  continue from Wave " + (Checkpoint.WaveIndex + 1) + "</color>";
@@ -2888,10 +3350,10 @@ public class HUD : MonoBehaviour
         int seconds = Mathf.FloorToInt(stats.Seconds);
         string time = (seconds / 60) + ":" + (seconds % 60).ToString("00");
         // InvariantCulture: always a dot in "97.5", whatever the computer's language.
-        string accuracy = stats.Accuracy.ToString("0.0", CultureInfo.InvariantCulture);
+        string accuracy = stats.HasTypingAttempts ? stats.Accuracy.ToString("0.0", CultureInfo.InvariantCulture) + "%" : "00.0%";
 
         return "<size=125%>" + StatLabel + "Score</color>  <b>" + stats.Score + "</b></size>\n"
-            + StatLabel + "Accuracy</color>  <b>" + accuracy + "%</b>     "
+            + StatLabel + "Accuracy</color>  <b>" + accuracy + "</b>     "
             + StatLabel + "Speed</color>  <b>" + Mathf.RoundToInt(stats.WordsPerMinute) + " WPM</b>\n"
             + StatLabel + "Kills</color>  <b>" + stats.Kills + "</b>     "
             + StatLabel + "Best combo</color>  <b>x" + stats.BestCombo + "</b>     "

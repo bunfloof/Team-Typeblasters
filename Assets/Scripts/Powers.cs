@@ -66,7 +66,7 @@ public class Powers : MonoBehaviour
     [SerializeField] private int shieldChargesPerLevel = 1;  // given again at the start of every wave (the name is kept for the scenes)
     [SerializeField] private float shieldSeconds = 8f;
     [SerializeField, Range(0.1f, 1f)] private float shieldEnemySpeed = 0.35f; // enemies move at this fraction of their speed
-    [SerializeField] private float shieldWordSeconds = 6f;   // unused since Tab raises the shield at once (kept so the scenes still load it)
+    // [SerializeField] private float shieldWordSeconds = 6f;   // unused since Tab raises the shield at once (kept so the scenes still load it)
 
     [Header("References (wired in the scene)")]
     [SerializeField] private HUD hud;
@@ -114,14 +114,14 @@ public class Powers : MonoBehaviour
         RefreshWeaponStatus();
     }
 
-    private float shieldWordTimeLeft; // > 0 while the shield word is waiting to be typed
+    // private float shieldWordTimeLeft; // > 0 while the shield word is waiting to be typed
 
     public void ResetTrainingState()
     {
         if (EasyTutorial.Active == null) return;
         StopAiming();
         if (IsFrenzy) RestoreRealWords();
-        freezeTimeLeft = frenzyTimeLeft = shieldTimeLeft = shieldWordTimeLeft = 0f;
+        freezeTimeLeft = frenzyTimeLeft = shieldTimeLeft = 0f; // freezeTimeLeft = frenzyTimeLeft = shieldTimeLeft = shieldWordTimeLeft = 0f;
         shieldSlow = 1f;
         ShieldWord.Close();
         RocketLoaded = false;
@@ -331,6 +331,52 @@ public class Powers : MonoBehaviour
         e.Add("reason", reason);
         e.Add("via", via);
         SendPowerEvent(e);
+    }
+
+    // Grants the weapon already selected and displayed by the reward card.
+    // No energy is spent.
+    public string GrantFreeWeaponReward(bool giveRocket)
+    {
+        GameManager game = GameManager.Instance;
+    
+        if (game == null || game.State != GameState.Reward)
+            return null;
+    
+        // Safety check: never replace an already-loaded RPG.
+        if (giveRocket && RocketLoaded)
+            giveRocket = false;
+    
+        if (giveRocket)
+        {
+            RocketLoaded = true;
+    
+            RefreshWeaponSlots();
+            hud.ShowBigMessage("RPG LOADED!", "FREE WEAPON REWARD");
+        }
+        else
+        {
+            if (IsFrenzy)
+            {
+                frenzyTimeLeft += frenzySeconds;
+                frenzyDuration += frenzySeconds;
+    
+                hud.ShowBigMessage(
+                    "FRENZY EXTENDED!",
+                    "+" + frenzySeconds.ToString("0") + " SECONDS");
+            }
+            else
+            {
+                StartFrenzy();
+            }
+        }
+    
+        string item = giveRocket ? "rpg" : "frenzy";
+    
+        AnalyticsEvent e = PowerEvent("reward", item);
+        e.Add("via", "wave_reward");
+        SendPowerEvent(e);
+    
+        return item.ToUpperInvariant();
     }
 
     // FRENZY: every enemy word is short for frenzySeconds.
@@ -656,7 +702,7 @@ public class Powers : MonoBehaviour
     // The shield goes up (Tab).
     public void RaiseShield()
     {
-        shieldWordTimeLeft = 0f;
+        // shieldWordTimeLeft = 0f;
         if (ShieldCharges <= 0 || GameManager.Instance.State != GameState.Playing)
         {
             return;
@@ -682,8 +728,7 @@ public class Powers : MonoBehaviour
         CameraDirector.Shake(0.15f);
     }
 
-    // Game time: the shield (and the shield word's timer) waits while the
-    // game is paused or a tip is open.
+    // Game time: the shield timer waits while the game is paused or a tip is open.
     private void UpdateShield()
     {
         if (shieldTimeLeft <= 0f || GameManager.Instance.State != GameState.Playing)

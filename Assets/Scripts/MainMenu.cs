@@ -18,6 +18,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.Events;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using System.Collections;
 #if ENABLE_INPUT_SYSTEM
 using UnityEngine.InputSystem;
 #endif
@@ -40,6 +41,7 @@ public class MainMenu : MonoBehaviour
     private CanvasScaler canvasScaler;
     private TMP_Text mainTitle, levelTitle;
     private RectTransform startButton, backButton;
+    private RectTransform endlessButton;
     private RectTransform fullscreenButton;
     private TMP_Text fullscreenHint, fullscreenLabel;
     private readonly List<RectTransform> levelButtons = new List<RectTransform>();
@@ -47,7 +49,15 @@ public class MainMenu : MonoBehaviour
     private bool portraitLayout;
     private readonly List<RectTransform> menuItems = new List<RectTransform>(); // buttons the keys can select on the current page
     private int selected;           // index in menuItems
+    private bool keyboardSelectionStarted;
     private bool settingsWasOpen;   // SettingsPanel was open last frame (it closes itself on Esc / Enter)
+    private static bool openLevelSelectionOnStart;
+
+    private const string EndlessScene = "Endless";
+    // Picking a level: the button pulses once, then the screen fades to black.
+    private const float LaunchPulseSeconds = 0.4f;
+    private const float LaunchFadeStartSeconds = 0.4f;   // when the fade to black begins
+    private const float LaunchPulseGrowth = 0.1f;
 
     private const float SelectedScale = 1.05f;
     private const float FrameThickness = 6f;
@@ -81,7 +91,15 @@ public class MainMenu : MonoBehaviour
         levelPage = BuildLevelPage(canvas);
         Canvas.ForceUpdateCanvases();
         UpdateResponsiveLayout();
-        ShowMain();
+        if (openLevelSelectionOnStart)
+        {
+            openLevelSelectionOnStart = false;
+            ShowLevels();
+        }
+        else
+        {
+            ShowMain();
+        }
     }
 
     private void Update()
@@ -117,15 +135,25 @@ public class MainMenu : MonoBehaviour
             LayoutTitle(fullscreenHint, width, 64f, portrait ? -205f : -117f, portrait ? 34f : 28f, true);
             fullscreenHint.fontSizeMin = 18f;
         }
-        float rowStep = Mathf.Min(400f, (size.x - 120f) / Mathf.Max(1, levelButtons.Count));
+        int modeButtonCount = levelButtons.Count + 1;
+        float rowStep = Mathf.Min(400f, (size.x - 120f) / Mathf.Max(1, modeButtonCount));
+        Vector2 landscapeModeSize = new Vector2(Mathf.Min(360f, rowStep - 24f), 180f);
+
         for (int i = 0; i < levelButtons.Count; i++)
         {
             Vector2 position = portrait ? new Vector2(0f, 260f - i * 180f)
-                : new Vector2((i - (levelButtons.Count - 1) * .5f) * rowStep, 20f);
-            LayoutButton(levelButtons[i], position, portrait ? new Vector2(760f, 140f) : new Vector2(Mathf.Min(360f, rowStep - 24f), 180f), portrait);
+                : new Vector2((i - (modeButtonCount - 1) * .5f) * rowStep, 60f);
+            LayoutButton(levelButtons[i], position, portrait ? new Vector2(760f, 140f) : landscapeModeSize, portrait);
         }
-        LayoutButton(backButton, new Vector2(0f, portrait ? -380f : -300f), portrait ? new Vector2(500f, 110f) : new Vector2(360f, 100f), portrait);
-        levelMessage.rectTransform.anchoredPosition = new Vector2(0f, portrait ? -240f : -140f);
+
+        // Keep the portrait layout stacked, but place ENDLESS in the same landscape row.
+        float endlessY = portrait ? 260f - levelButtons.Count * 180f : 60f;
+        float endlessX = portrait ? 0f : (levelButtons.Count - (modeButtonCount - 1) * .5f) * rowStep;
+        LayoutButton(endlessButton, new Vector2(endlessX, endlessY),
+            portrait ? new Vector2(760f, 140f) : landscapeModeSize, portrait);
+
+        LayoutButton(backButton, new Vector2(0f, portrait ? endlessY - 250f : -300f), portrait ? new Vector2(500f, 110f) : new Vector2(360f, 100f), portrait);
+        levelMessage.rectTransform.anchoredPosition = new Vector2(0f, portrait ? endlessY - 130f : -225f);
         levelMessage.rectTransform.sizeDelta = new Vector2(width, portrait ? 80f : 50f);
         levelMessage.textWrappingMode = TextWrappingModes.Normal;
     }
@@ -156,6 +184,7 @@ public class MainMenu : MonoBehaviour
         mainPage.SetActive(true);
         levelPage.SetActive(false);
         selected = 0;
+        keyboardSelectionStarted = false;
         RefreshHighlight();
     }
 
@@ -165,6 +194,7 @@ public class MainMenu : MonoBehaviour
         mainPage.SetActive(false);
         levelPage.SetActive(true);
         selected = 0;
+        keyboardSelectionStarted = false;
         RefreshHighlight();
     }
 
@@ -216,13 +246,16 @@ public class MainMenu : MonoBehaviour
             int levelIndex = i; // copy for the lambda
             string label = (i + 1) + ". " + GameManager.LevelName(i);
             string[] maps = { "CAMPUS", "HOLLOW FOREST" };
-            label += "\n<size=55%>" + maps[i] + "</size>";
+            label += "\n<size=55%>" + (i < maps.Length ? maps[i] : "") + "</size>";
             float x = (i - (count - 1) * 0.5f) * 400f;
             levelButtons.Add((RectTransform)CreateButton(page.transform, "Level " + GameManager.LevelName(i), label,
                 new Vector2(x, 20f), new Vector2(360f, 180f), () => LoadLevel(levelIndex)).transform);
         }
 
-        levelMessage = CreateText(page.transform, "Message", "", 32f, new Vector2(0f, -140f), new Vector2(1700f, 50f));
+        endlessButton = (RectTransform)CreateButton(page.transform, "Level Endless", "ENDLESS\n<size=55%>SURVIVAL</size>",
+            new Vector2(0f, -110f), new Vector2(360f, 120f), () => LoadScene(EndlessScene, endlessButton)).transform;
+
+        levelMessage = CreateText(page.transform, "Message", "", 32f, new Vector2(0f, -225f), new Vector2(1700f, 50f));
         levelMessage.color = new Color(1f, 0.4f, 0.3f);
 
         backButton = (RectTransform)CreateButton(page.transform, "Back Button", "BACK", new Vector2(0f, -300f), new Vector2(360f, 100f), ShowMain).transform;
@@ -231,19 +264,43 @@ public class MainMenu : MonoBehaviour
 
     private void LoadLevel(int index)
     {
+        LoadScene(GameManager.LevelName(index), levelButtons[index]);
+    }
+
+    // Any scene by name (a level, or the Endless scene).
+    private void LoadScene(string sceneName, RectTransform pressed)
+    {
         if (loading)
         {
             return;
         }
-        string sceneName = GameManager.LevelName(index);
+
         if (!Application.CanStreamedLevelBeLoaded(sceneName))
         {
             Debug.LogError("MainMenu: scene \"" + sceneName + "\" is missing from Build Settings.");
             levelMessage.text = sceneName + " is not available yet.";
             return;
         }
-        loading = true;
-        SceneManager.LoadScene(sceneName);
+
+        loading = true; // from now on no other button or key does anything
+
+        StartCoroutine(PulseButton(pressed));
+        ScreenFade.LoadSceneWithFade(sceneName, LaunchFadeStartSeconds);
+    }
+
+    // One gentle pulse: the button grows a little and comes back.
+    private IEnumerator PulseButton(RectTransform button)
+    {
+        Vector3 rest = button.localScale;
+
+        for (float time = 0f; time < LaunchPulseSeconds; time += Time.unscaledDeltaTime)
+        {
+            float grow = Mathf.Sin(time / LaunchPulseSeconds * Mathf.PI);
+            button.localScale = rest * (1f + LaunchPulseGrowth * grow);
+            yield return null;
+        }
+
+        button.localScale = rest;
     }
 
     // The buttons the keyboard can select on the page that is showing, in order.
@@ -258,6 +315,7 @@ public class MainMenu : MonoBehaviour
         else
         {
             menuItems.AddRange(levelButtons);
+            menuItems.Add(endlessButton);
             menuItems.Add(backButton);
         }
         return menuItems;
@@ -289,6 +347,7 @@ public class MainMenu : MonoBehaviour
         int step = (next ? 1 : 0) - (previous ? 1 : 0);
         if (step != 0)
         {
+            keyboardSelectionStarted = true;
             selected = (selected + step + items.Count) % items.Count;
             RefreshHighlight();
         }
@@ -320,8 +379,12 @@ public class MainMenu : MonoBehaviour
         {
             SetHighlight(level, false);
         }
+        SetHighlight(endlessButton, false);
         SetHighlight(backButton, false);
-        SetHighlight(items[selected], true);
+        if (keyboardSelectionStarted)
+        {
+            SetHighlight(items[selected], true);
+        }
     }
 
     private static void SetHighlight(RectTransform button, bool on)
@@ -452,5 +515,10 @@ public class MainMenu : MonoBehaviour
         Image image = bar.GetComponent<Image>();
         image.color = FrameColor;
         image.raycastTarget = false; // clicks still reach the button
+    }
+
+    public static void RequestLevelSelection()
+    {
+        openLevelSelectionOnStart = true;
     }
 }

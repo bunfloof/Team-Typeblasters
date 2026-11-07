@@ -148,6 +148,10 @@ public static class GuidedIntro
         BlocksLetters = false;
         skipOffered = false;
         Powers.ActionPerformed -= OnPower;
+    
+        if (view != null)
+            view.Close();
+    
         view = null;
     }
 
