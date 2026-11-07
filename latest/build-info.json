@@ -1,15 +1,15 @@
 {
-  "version": "latest-2026-11-06-8c61b34",
-  "source_commit": "8c61b34aa5b310612c33dc53f0f5249694d7b667",
-  "commit_message": "Merge pull request from feature/easy-version branch",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/42321516444",
+  "version": "latest-2026-11-06-5c93a24",
+  "source_commit": "5c93a2418b8633b40dd629a8e5c7f8ee3daaaaf8",
+  "commit_message": "Fix Endless mode free weapon reward handling",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/42327951698",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-07T01:21:39.875660Z",
+  "published_utc": "2026-11-07T02:19:49.151715Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14342185,
-      "sha256": "4d95c00d81731930fd17356e9035960b29ce0b4bdfe42300329a01d33d6bfa86"
+      "bytes": 14342149,
+      "sha256": "cbb2d9104ddf5c46427feb2e215b46b4c6ce971d51abb16a8e7c3e65fc60853b"
     },
     {
       "path": "Build/WebGL.framework.js",
@@ -19,12 +19,12 @@
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "6080aab81bcff7a5d9c072c6f7d59d9875b747a6fd042dc30f15b7244f54fa2e"
+      "sha256": "a6661522fc501ce455b5420681c60bf2a922e37194c242a45833577ac33414ae"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48183301,
-      "sha256": "ab0440c6f9fb7562896e0ecdd7b9172bb72a4a5c4e46ff43fb41e7ddee795a33"
+      "bytes": 48182308,
+      "sha256": "e5f8f97615d74d92933564aaacb59a9417f20f049571d7521522e5151a2b28c6"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7415,
-      "sha256": "c8cbe9fea498695bdcee4a10b6778d0c587ac580ce60b527537bf945d3870174"
+      "sha256": "dcb093525aad8c151e138ff05767b3c546a447f2af73ac55c7d51c47ec07ec61"
     }
   ]
 }
