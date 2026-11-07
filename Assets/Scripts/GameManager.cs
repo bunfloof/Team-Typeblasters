@@ -513,8 +513,7 @@ public class GameManager : MonoBehaviour
         Time.timeScale = 0f;
 
         // Decide the weapon once, before displaying the reward card.
-        // An already-loaded RPG means FRENZY is guaranteed.
-        bool rewardRocket = !powers.RocketLoaded && Random.value < 0.5f;
+        bool rewardRocket = Random.value < 0.5f;
 
         hud.ShowEndlessWaveReward(
             rewardRocket ? "RPG" : "FRENZY",

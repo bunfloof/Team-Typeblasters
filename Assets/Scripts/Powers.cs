@@ -145,8 +145,8 @@ public class Powers : MonoBehaviour
     // True once a kept RPG is used (loaded) and not fired yet.
     public bool RocketLoaded { get; private set; }
 
-    // Legacy telemetry/scene compatibility. Inventory is no longer awarded or displayed.
-    public const int MaxKept = 2;         // slots per weapon
+    // One stored free Frenzy use can be held at a time.
+    public const int MaxKept = 1;
     public int FrenzyKept { get; private set; }
     public int RocketKept { get; private set; }
 
@@ -257,9 +257,12 @@ public class Powers : MonoBehaviour
     // Availability uses independent energy and refuses to charge an active skill.
     public bool CanUseNow(bool rocket)
     {
-        return GameManager.Instance.State == GameState.Playing
+        GameManager game = GameManager.Instance;
+        return game.State == GameState.Playing
             && !(rocket ? RocketLoaded : IsFrenzy)
-            && GameManager.Instance.SkillEnergy >= (rocket ? RocketCost : FrenzyCost);
+            && (rocket
+                ? RocketKept > 0 || GameManager.Instance.SkillEnergy >= RocketCost
+                : FrenzyKept > 0 || GameManager.Instance.SkillEnergy >= FrenzyCost);
     }
 
     // ---- Analytics: one "power" event per thing done with a power or weapon ----
@@ -302,29 +305,65 @@ public class Powers : MonoBehaviour
         GameManager game = GameManager.Instance;
         if (game.State != GameState.Playing) return;
         if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower(rocket ? "rpg" : "frenzy")) return;
-        if (!HudReveal.PowerAllowed(rocket ? "rpg" : "frenzy")) return; // the guided intro has not shown it yet
+        if (!HudReveal.PowerAllowed(rocket ? "rpg" : "frenzy")) return;
+
         string item = rocket ? "rpg" : "frenzy";
+
         if (rocket ? RocketLoaded : IsFrenzy)
         {
-            hud.ShowHint(rocket ? "RPG LOADED" : "FRENZY ACTIVE",1.5f);
-            LogUseRefused(item,"already_active",via);
+            hud.ShowHint(rocket ? "RPG LOADED" : "FRENZY ACTIVE", 1.5f);
+            LogUseRefused(item, "already_active", via);
             return;
         }
+
+        bool freeReward = rocket ? RocketKept > 0 : FrenzyKept > 0;
         int cost = rocket ? RocketCost : FrenzyCost;
         int before = game.SkillEnergy;
-        if (!game.TrySpendSkillEnergy(cost))
+
+        if (!freeReward && !game.TrySpendSkillEnergy(cost))
         {
-            hud.ShowHint(cost + " ENERGY NEEDED  |  ENERGY " + before,2f);
-            LogUseRefused(item,"not_enough_energy",via);
+            hud.ShowHint(cost + " ENERGY NEEDED  |  ENERGY " + before, 2f);
+            LogUseRefused(item, "not_enough_energy", via);
             return;
         }
-        if (rocket) { RocketLoaded = true; if (!GuidedIntroView.CardVisible) hud.ShowBigMessage("RPG LOADED!","TYPE A WORD"); }
-        else StartFrenzy();
-        RefreshWeaponSlots(); hud.PulseWeapon(rocket); RefreshWeaponStatus();
-        AnalyticsEvent e = PowerEvent("use",item);
-        e.Add("via",via); e.Add("energy_before",before); e.Add("energy_spent",cost); e.Add("energy_after",game.SkillEnergy);
+
+        // Consume the stored reward only after activation succeeds.
+        if (freeReward)
+        {
+            if (rocket)
+                RocketKept = 0;
+            else
+                FrenzyKept = 0;
+        }
+
+        if (rocket)
+        {
+            RocketLoaded = true;
+
+            if (!GuidedIntroView.CardVisible)
+                hud.ShowBigMessage("RPG LOADED!", "TYPE A WORD");
+        }
+        else
+        {
+            StartFrenzy();
+        }
+
+        RefreshWeaponSlots();
+        hud.PulseWeapon(rocket);
+        RefreshWeaponStatus();
+
+        AnalyticsEvent e = PowerEvent("use", item);
+        e.Add("via", via);
+        e.Add("energy_before", before);
+        e.Add("energy_spent", freeReward ? 0 : cost);
+        e.Add("energy_after", game.SkillEnergy);
+
+        if (freeReward)
+            e.Add("free_reward", true);
+
         SendPowerEvent(e);
     }
+
     private static void LogUseRefused(string item, string reason, string via)
     {
         AnalyticsEvent e = PowerEvent("use_refused", item);
@@ -342,33 +381,24 @@ public class Powers : MonoBehaviour
         if (game == null || game.State != GameState.Reward)
             return null;
     
-        // Safety check: never replace an already-loaded RPG.
-        if (giveRocket && RocketLoaded)
-            giveRocket = false;
-    
         if (giveRocket)
         {
-            RocketLoaded = true;
+            // Ignore duplicate RPG rewards.
+            if (RocketLoaded || RocketKept > 0)
+                return null;
     
-            RefreshWeaponSlots();
-            hud.ShowBigMessage("RPG LOADED!", "FREE WEAPON REWARD");
+            RocketKept = 1;
         }
         else
         {
-            if (IsFrenzy)
-            {
-                frenzyTimeLeft += frenzySeconds;
-                frenzyDuration += frenzySeconds;
+            // Ignore duplicate FRENZY rewards.
+            if (FrenzyKept > 0)
+                return null;
     
-                hud.ShowBigMessage(
-                    "FRENZY EXTENDED!",
-                    "+" + frenzySeconds.ToString("0") + " SECONDS");
-            }
-            else
-            {
-                StartFrenzy();
-            }
+            FrenzyKept = 1;
         }
+    
+        RefreshWeaponSlots();
     
         string item = giveRocket ? "rpg" : "frenzy";
     

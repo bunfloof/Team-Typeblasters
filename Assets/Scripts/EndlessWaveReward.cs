@@ -1,4 +1,31 @@
-
+// EndlessWaveReward.cs
+// ---------------------------------------------------------------------------
+// The reward panel of ENDLESS mode. After every cleared wave the game freezes
+// and this panel asks the player to CHOOSE ONE reward:
+//   HEALTH       + GameManager.EndlessRewardHealth health
+//   ENERGY       + GameManager.EndlessRewardEnergy skill energy
+//   FREE WEAPON  GameManager decides which one before showing the card, 
+//                and Show() prints its name on it
+//   SKIP         + 100 score
+// Endless mode has no other way to get health back.
+//
+// How it is used:
+//   HUD:         creates this component in Awake and calls Initialize(canvas);
+//                ShowEndlessWaveReward / HideEndlessWaveReward call Show / Hide.
+//   GameManager: BeginEndlessWaveReward() sets the state to Reward and freezes
+//                time, then Show() is called with a callback; the callback
+//                (CompleteEndlessWaveReward) applies the choice and resumes play.
+//
+// The panel is built in code like the rest of the HUD (no prefab, no images):
+// a dark full-screen backdrop, a box, three reward cards and a SKIP button.
+// It re-lays itself out when the screen size changes: three cards side by side
+// on a wide screen, stacked in a column on a narrow or portrait one.
+//
+// Controls: click a card, or use W A S D / the arrow keys to move the
+// selection and Enter / Space to pick it. The yellow selection frame only
+// appears after the first key press, so a mouse player never sees it.
+// Update still runs while the game is frozen (it uses no game time).
+// ---------------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
 using TMPro;
