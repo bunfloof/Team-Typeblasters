@@ -29,6 +29,11 @@
 //   - SPITTER   (acid green): stops at a distance and SPITS acid globs at the
 //               player, each with its own short word (an EnergyOrb: type it to
 //               pop it, or it hurts). It keeps spitting until it is shot.
+//   - SNIPER    (khaki, ENDLESS only): appears on a perch in the STANDS and
+//               never moves. Every few seconds it AIMS (a red laser at the
+//               player, blinking faster just before the shot) and FIRES one
+//               bullet with a short word (an EnergyOrb: type it to stop it, or
+//               it hurts). Its own word kills it. See WaveSpawner's snipers.
 //
 // Every kind's word is a light shade of its body colour (Palette.WordFor).
 // The word itself is styled for the TYPING DIFFICULTY (TypingSettings.Style):
@@ -70,7 +75,8 @@ public enum ZombieKind
     Splitling,  // one of the two halves of a Splitter
     Ghost,
     Brute,
-    Spitter
+    Spitter,
+    Sniper      // Endless: shoots from the stands (keep it last: kinds are saved as numbers)
 }
 
 public class Zombie : MonoBehaviour, ITypingTarget
@@ -110,6 +116,89 @@ public class Zombie : MonoBehaviour, ITypingTarget
 
     // If it has not reached its doorway exit after this long, it gives up on it.
     private const float ExitTimeout = 8f;
+    // Inside its doorway / tunnel a zombie moves this much faster: it is out
+    // of sight there (no word yet), so the player should not wait for it.
+    private const float EmergeSpeedMultiplier = 2.5f;
+
+    // ---- No walking through walls ----
+    // Zombies walk straight (no path finding), but every move goes through
+    // MoveBy: a sphere at waist height is swept along the move, and if it
+    // would hit the scene (a wall, a building, the stands) the zombie slides
+    // along that surface instead of going in. Things that are not walls never
+    // stop it: other zombies, barrels, crates, bodies, orbs, lure bombs, doors
+    // (they swing open), gates, and anything low enough to step over (below
+    // the sphere: curbs, low walls, the ground). A zombie that starts inside a
+    // building (a spawn point behind a door) is not stopped by that building:
+    // a sweep ignores what it starts in, so it can still walk out.
+    private const float WallProbeHeight = 1.0f;   // metres above the feet
+    private const float WallProbeRadius = 0.35f;
+    private const float WallSkin = 0.05f;         // stop this far short of a wall
+    private static readonly RaycastHit[] wallHits = new RaycastHit[8];
+
+    private void MoveBy(Vector3 move)
+    {
+        move.y = 0f;
+        for (int attempt = 0; attempt < 2 && move.sqrMagnitude > 0.000001f; attempt++)
+        {
+            RaycastHit wall;
+            if (!FindWall(move, out wall))
+            {
+                transform.position += move;
+                return;
+            }
+            // Go up to the wall, then slide along it with what is left of the move.
+            float distance = move.magnitude;
+            Vector3 direction = move / distance;
+            float allowed = Mathf.Max(0f, wall.distance - WallSkin);
+            transform.position += direction * allowed;
+            Vector3 normal = wall.normal;
+            normal.y = 0f;
+            if (normal.sqrMagnitude < 0.0001f)
+            {
+                return;
+            }
+            normal.Normalize();
+            Vector3 left = direction * (distance - allowed);
+            move = left - normal * Vector3.Dot(left, normal); // the part along the wall
+        }
+    }
+
+    private bool FindWall(Vector3 move, out RaycastHit wall)
+    {
+        wall = default(RaycastHit);
+        float distance = move.magnitude;
+        Vector3 origin = transform.position + Vector3.up * WallProbeHeight;
+        int count = Physics.SphereCastNonAlloc(origin, WallProbeRadius, move / distance, wallHits, distance + WallSkin,
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        bool found = false;
+        for (int i = 0; i < count; i++)
+        {
+            RaycastHit hit = wallHits[i];
+            if (hit.collider == null || hit.distance <= 0f || !IsWall(hit.collider) || (player != null && hit.collider.transform.IsChildOf(player)))
+            {
+                continue; // distance 0: it started inside it (e.g. its own spawn building)
+            }
+            if (!found || hit.distance < wall.distance)
+            {
+                wall = hit;
+                found = true;
+            }
+        }
+        return found;
+    }
+
+    private static bool IsWall(Collider collider)
+    {
+        if (collider.attachedRigidbody != null)
+        {
+            return false; // anything that moves on its own (bodies, debris)
+        }
+        return collider.GetComponentInParent<Zombie>() == null && collider.GetComponentInParent<Barrel>() == null
+            && collider.GetComponentInParent<SupplyCrate>() == null && collider.GetComponentInParent<Corpse>() == null
+            && collider.GetComponentInParent<EnergyOrb>() == null && collider.GetComponentInParent<LureBomb>() == null
+            && collider.GetComponentInParent<Door>() == null && collider.GetComponentInParent<Gate>() == null
+            && collider.GetComponentInParent<Boss>() == null;
+    }
 
     // TextMeshPro rich-text colour for the letters typed so far (yellow).
     // Letters already typed turn dim grey, so what is left stands out (yellow
@@ -140,7 +229,22 @@ public class Zombie : MonoBehaviour, ITypingTarget
 
     // Where it walks first (out of its doorway), and whether it got there.
     private Vector3 exitPoint;
+
+    // Where it walks out of its doorway (CameraDirector waits for zombies about to appear there).
+    public Vector3 ExitPoint
+    {
+        get { return exitPoint; }
+    }
     private bool reachedExit;
+
+    // True once it has walked out of its doorway / tunnel (reached its Exit).
+    // Before that it is still out of sight inside, so its word is not shown
+    // and it cannot be typed (WaveSpawner.GetTypingTargets): no killing a
+    // zombie the player has not seen yet.
+    public bool HasEmerged
+    {
+        get { return reachedExit; }
+    }
     private float exitTimer;
 
     // How close it stands to a lure bomb (each zombie a bit different, so they crowd around it).
@@ -222,6 +326,11 @@ public class Zombie : MonoBehaviour, ITypingTarget
         {
             size = new Vector3(1f, 0.95f, 1f);
             bodyRenderer.sharedMaterial = Palette.Lit(Palette.SpitterAcid);
+        }
+        else if (kind == ZombieKind.Sniper)
+        {
+            size = new Vector3(0.8f, 0.95f, 0.8f);
+            bodyRenderer.sharedMaterial = Palette.Lit(Palette.SniperKhaki);
         }
         if (kind == ZombieKind.Shifter)
         {
@@ -412,12 +521,15 @@ public class Zombie : MonoBehaviour, ITypingTarget
         SetFrozenLook(Powers.IsFrozen);
         if (Powers.IsFrozen)
         {
+            ShowLaser(false); // a frozen sniper stops aiming (no-op for the others)
             return;
         }
 
         // The guided first wave holds the world while it explains something:
         // zombies wait (no walking, biting or spitting), everything else runs.
-        if (GuidedIntro.Holding)
+        // One still in its doorway first walks out (its word only shows outside,
+        // and the lesson may be waiting for the player to type it).
+        if (GuidedIntro.Holding && reachedExit)
         {
             return;
         }
@@ -437,6 +549,20 @@ public class Zombie : MonoBehaviour, ITypingTarget
                 RefreshLabel();
                 spawner.Hud.ShowFloatingText(LabelAnchor, "WORD SHIFT!", ShifterColor);
             }
+        }
+
+        // SNIPER: stands on its perch, turns to the player, aims and fires.
+        if (Kind == ZombieKind.Sniper)
+        {
+            reachedExit = true; // it is in plain sight on the stands from the start
+            Vector3 toPlayer = player.position - transform.position;
+            toPlayer.y = 0f;
+            if (toPlayer.sqrMagnitude > 0.01f)
+            {
+                transform.rotation = Quaternion.LookRotation(toPlayer);
+            }
+            UpdateSnipe();
+            return;
         }
 
         // 1. Where to go: out of the doorway first, then to a lure bomb or the player.
@@ -488,12 +614,16 @@ public class Zombie : MonoBehaviour, ITypingTarget
         direction = Vector3.ClampMagnitude(direction, 1f);
 
         float currentSpeed = speed * Powers.EnemySpeedFactor; // slower while the shield is up
+        if (!reachedExit)
+        {
+            currentSpeed *= EmergeSpeedMultiplier; // bursts out of its doorway / tunnel, then walks
+        }
         if (flinchTimer > 0f)
         {
             flinchTimer -= Time.deltaTime;
             currentSpeed *= flinchSlowdown;
         }
-        transform.position += direction * currentSpeed * Time.deltaTime;
+        MoveBy(direction * currentSpeed * Time.deltaTime); // slides along walls instead of going through
 
         // SPITTER: in range of the player, it spits acid globs.
         if (Kind == ZombieKind.Spitter && chasingPlayer
@@ -590,7 +720,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         push.y = 0f;
         if (push.sqrMagnitude > 0.0001f)
         {
-            transform.position += push.normalized * 0.06f;
+            MoveBy(push.normalized * 0.06f);
         }
     }
 
@@ -708,7 +838,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
             report.Add("typing_starts", typingStarts);                // more than 1: started, dropped, started again
             report.Add("typing_seconds", GameManager.Instance.Stats.Seconds - lastStartPlayTime); // last start to blast
             report.Add("distance_to_player", FlatDistance(transform.position, player.position));
-            Explosion.Detonate(transform.position, BlastRadius, null, BlastBossDamage, report);
+            Explosion.Detonate(transform.position, BlastRadius, null, BlastBossDamage, report, true); // its word was typed: the kills earn energy
             return;
         }
 
@@ -803,7 +933,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         {
             away = -player.forward;
         }
-        transform.position += away.normalized * ShieldBounceDistance;
+        MoveBy(away.normalized * ShieldBounceDistance);
         flinchTimer = ShieldStaggerSeconds;
         spawner.Hud.ShowFloatingText(LabelAnchor, "BLOCKED", Palette.Shield);
         GameManager.Instance.TakeDamage(BiteDamage, IsAmbusher, BiteEvent(), this);
@@ -907,6 +1037,102 @@ public class Zombie : MonoBehaviour, ITypingTarget
         lastGlob = EnergyOrb.Launch(mouth, word, SpitFlightSeconds, SpitDamage, spawner.Hud, Palette.SpitterAcid, "spitter");
         spawner.AddStrayOrb(lastGlob);
         Flinch(transform.position - player.position); // a little recoil
+    }
+
+    // ---- SNIPER ----
+    // Never moves (WaveSpawner puts it on a perch in the stands). It waits
+    // for its interval, AIMS for SnipeAimSeconds (a red laser from its rifle to
+    // the player, blinking faster and faster), then FIRES: an EnergyOrb with a
+    // short word that reaches the player in flightSeconds, unless it is typed.
+    // One bullet in the air at a time. WaveSpawner sets the pace per wave
+    // (SetSniperPace): later waves shoot more often and faster.
+
+    private const float SnipeAimSeconds = 1.4f;
+    private const float SnipeFirstDelay = 2.5f;   // after it appears, the first aim starts this much sooner than a full interval
+    private const int SnipeDamage = 8;
+    private static readonly Color SnipeLaser = new Color(1f, 0.12f, 0.12f);
+    private float snipeInterval = 7f;              // seconds from one shot (or its end) to the next aim
+    private float snipeFlightSeconds = 4f;
+    private float snipeTimer;
+    private float snipeAim = -1f;                  // seconds into the aim; below 0 = not aiming
+    private EnergyOrb lastBullet;
+    private LineRenderer laser;
+
+    // Called by WaveSpawner right after Setup.
+    public void SetSniperPace(float interval, float flightSeconds)
+    {
+        snipeInterval = Mathf.Max(1f, interval);
+        snipeFlightSeconds = Mathf.Max(1f, flightSeconds);
+        snipeTimer = Mathf.Max(0f, snipeInterval - SnipeFirstDelay);
+    }
+
+    private Vector3 Muzzle
+    {
+        get { return transform.position + Vector3.up * (headHeight * 0.8f) + transform.forward * 0.45f; }
+    }
+
+    private void UpdateSnipe()
+    {
+        if (lastBullet != null && lastBullet.IsAlive)
+        {
+            ShowLaser(false);
+            return; // wait until the last bullet is stopped or has hit
+        }
+        float step = Time.deltaTime * Powers.EnemySpeedFactor; // slower while the shield is up
+        if (snipeAim < 0f)
+        {
+            snipeTimer += step;
+            if (snipeTimer < snipeInterval)
+            {
+                ShowLaser(false);
+                return;
+            }
+            snipeTimer = 0f;
+            snipeAim = 0f; // start aiming
+        }
+
+        snipeAim += step;
+        if (snipeAim < SnipeAimSeconds)
+        {
+            // Blinks faster as the shot gets closer (4 -> 16 blinks a second).
+            float rate = Mathf.Lerp(4f, 16f, snipeAim / SnipeAimSeconds);
+            ShowLaser(Mathf.Repeat(snipeAim * rate, 1f) < 0.6f);
+            return;
+        }
+
+        snipeAim = -1f;
+        ShowLaser(false);
+        string word = WordBank.PickOrbWord(spawner.UsedFirstLetters());
+        lastBullet = EnergyOrb.Launch(Muzzle, word, snipeFlightSeconds, SnipeDamage, spawner.Hud, Palette.SniperKhaki, "sniper");
+        spawner.AddStrayOrb(lastBullet);
+    }
+
+    private void ShowLaser(bool on)
+    {
+        if (!on)
+        {
+            if (laser != null)
+            {
+                laser.enabled = false;
+            }
+            return;
+        }
+        if (laser == null)
+        {
+            GameObject beam = new GameObject("Sniper Laser");
+            beam.transform.SetParent(transform, false);
+            laser = beam.AddComponent<LineRenderer>();
+            laser.useWorldSpace = true;
+            laser.positionCount = 2;
+            laser.startWidth = 0.06f;
+            laser.endWidth = 0.03f;
+            laser.sharedMaterial = Palette.Unlit(SnipeLaser);
+            laser.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            laser.receiveShadows = false;
+        }
+        laser.enabled = true;
+        laser.SetPosition(0, Muzzle);
+        laser.SetPosition(1, CameraDirector.PlayerEye + Vector3.down * 0.4f); // where its bullet flies (EnergyOrb.AimPoint)
     }
 
     // Text colour of the "WORD SHIFT!" popup (the shifter's purple, lighter).
@@ -1021,7 +1247,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         away.y = 0f;
         if (away.sqrMagnitude > 0.0001f)
         {
-            transform.position += away.normalized * BiteRecoil;
+            MoveBy(away.normalized * BiteRecoil);
         }
 
         // The bite that ended the run: this zombie logs its own "zombie" event

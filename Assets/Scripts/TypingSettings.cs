@@ -46,12 +46,17 @@ public static class TypingSettings
     private static bool loaded;
     private static TypingDifficulty difficulty;
 
+    // Set for a whole level that has no difficulty choice (ENDLESS, see
+    // GameManager.EndlessTypingDifficulty); null = the player's choice.
+    public static TypingDifficulty? Override;
+
     // The difficulty picked on the Start panel (Easy until the player picks one).
     public static TypingDifficulty Difficulty
     {
         get
         {
             if (EasyTutorial.Active != null) return TypingDifficulty.Easy;
+            if (Override.HasValue) return Override.Value;
             if (!loaded)
             {
                 loaded = true;

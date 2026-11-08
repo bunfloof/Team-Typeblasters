@@ -2,11 +2,14 @@
 // ---------------------------------------------------------------------------
 // The reward panel of ENDLESS mode. After every cleared wave the game freezes
 // and this panel asks the player to CHOOSE ONE reward:
-//   HEALTH       + GameManager.EndlessRewardHealth health
+//   HEALTH       + 10% of full health (GameManager.EndlessRewardHealthFraction)
 //   ENERGY       + GameManager.EndlessRewardEnergy skill energy
 //   FREE WEAPON  GameManager decides which one before showing the card, 
 //                and Show() prints its name on it
+//                (waves 1-5: a FREE SKILL instead, a lure bomb or a freeze)
 //   SKIP         + 100 score
+// After a BOSS wave (every 10th) everything is bigger: +20% health, +12
+// energy, BOTH weapons, +500 score (Show(..., afterBoss: true)).
 // Endless mode has no other way to get health back.
 //
 // How it is used:
@@ -93,7 +96,7 @@ public class EndlessWaveReward : MonoBehaviour
         Build();
     }
 
-    public void Show(Action<EndlessWaveRewardChoice> callback, string weaponName)
+    public void Show(Action<EndlessWaveRewardChoice> callback, string weaponName, bool afterBoss = false)
     {
         if (panel == null)
         {
@@ -107,6 +110,18 @@ public class EndlessWaveReward : MonoBehaviour
 
         // Display the exact weapon that this reward will grant.
         cardDetails[2].text = weaponName;
+        cardTitles[2].text = weaponName == "LURE BOMB" || weaponName == "FREEZE" ? "FREE SKILL" : "FREE WEAPON"; // early waves give a skill
+
+        // The amounts of this reward (bigger after a boss).
+        title.text = afterBoss ? "BOSS DEFEATED!" : "WAVE CLEARED!";
+        subtitle.text = afterBoss ? "BIG REWARD - CHOOSE ONE" : "CHOOSE ONE REWARD";
+        cardDetails[0].text = "+" + Mathf.RoundToInt((afterBoss ? GameManager.EndlessBossRewardHealthFraction : GameManager.EndlessRewardHealthFraction) * 100f) + "% HEALTH";
+        cardDetails[1].text = "+" + (afterBoss ? GameManager.EndlessBossRewardEnergy : GameManager.EndlessRewardEnergy) + " ENERGY";
+        TMP_Text skipLabel = skipButton != null ? skipButton.GetComponentInChildren<TMP_Text>() : null;
+        if (skipLabel != null)
+        {
+            skipLabel.text = "SKIP  +" + (afterBoss ? GameManager.EndlessBossRewardScore : GameManager.EndlessRewardScore) + " SCORE";
+        }
 
         LayoutPanel();
         RefreshSelection();
@@ -165,7 +180,7 @@ public class EndlessWaveReward : MonoBehaviour
         CreateRewardCard(
             "HealthCard",
             "HEALTH",
-            "+" + GameManager.EndlessRewardHealth + " HEALTH",
+            "+" + Mathf.RoundToInt(GameManager.EndlessRewardHealthFraction * 100f) + "% HEALTH",
             CardColors[0],
             EndlessWaveRewardChoice.Health);
 

@@ -82,6 +82,21 @@ public class WaveSpawner : MonoBehaviour
     [SerializeField, Min(0)] private int endlessMaxChainPairs = 3;
     [SerializeField, Min(0f)] private float endlessWaveBreakSeconds = 2f;
     [SerializeField, Min(0.1f)] private float endlessMaxZombieSpeed = 2.5f;
+
+    [Header("Endless: pace and bosses")]
+    [SerializeField, Min(1)] private int endlessSpecialGrowthWaves = 5; // each special kind: 1 in its first wave, +1 every this many waves after
+    [SerializeField, Min(0)] private int endlessBossEveryWaves = 10;    // every this many waves is a BOSS fight (0 = never)
+    [SerializeField, Min(0f)] private float endlessBossHealthGrowth = 0.4f; // each later boss has this much more health (+40%, +80%...)
+
+    [Header("Endless: snipers on the stands")]
+    [SerializeField, Min(1)] private int sniperFirstWave = 6;    // the first wave with a SNIPER (Zombie: shoots from the stands)
+    [SerializeField, Min(1)] private int sniperEveryWaves = 5;   // one more sniper every this many waves after that
+    [SerializeField, Min(0)] private int sniperMax = 3;          // never more in one wave
+
+    [Header("Endless: rush from the tunnel behind the player")]
+    [SerializeField, Min(1)] private int rearFirstWave = 5;     // the first wave with a REAR RUSH (zombies out of the tunnel behind the player)
+    [SerializeField, Min(1)] private int rearEveryWaves = 2;    // then every this many waves
+    [SerializeField, Min(0)] private int rearMax = 4;           // zombies in one rush at most
     
     [Header("Crowding")]
     [SerializeField] private int maxOnScreen = 5;          // zombies alive at once at the designed level (more for fast typists, fewer for slow ones)
@@ -215,14 +230,22 @@ public class WaveSpawner : MonoBehaviour
         }
     }
 
-    // Everything the player can type right now: alive zombies, the active
+    // Everything the player can type right now: alive zombies that have come
+    // out of their doorway (Zombie.HasEmerged: one still inside a building or
+    // tunnel cannot be seen, so its word is not shown yet), the active
     // barrels and supply crates, the boss's parts, orbs and quiz answers, the
     // SPITTERS' acid globs, and the shield word while it is up.
     // The list is reused, so read it right away.
     public List<ITypingTarget> GetTypingTargets()
     {
         typingTargets.Clear();
-        typingTargets.AddRange(aliveZombies);
+        foreach (Zombie zombie in aliveZombies)
+        {
+            if (zombie != null && zombie.HasEmerged && !hiddenZombies.Contains(zombie))
+            {
+                typingTargets.Add(zombie); // out of its doorway and not behind cover
+            }
+        }
         foreach (Barrel barrel in ActiveBarrels)
         {
             if (barrel != null && barrel.IsAlive)
@@ -263,6 +286,15 @@ public class WaveSpawner : MonoBehaviour
         foreach (ITypingTarget target in GetTypingTargets())
         {
             used.Add(char.ToUpperInvariant(target.Word[0]));
+        }
+        // Zombies still inside a doorway or behind cover keep their letter too:
+        // they will be typeable in a moment, and two words must never start alike.
+        foreach (Zombie zombie in aliveZombies)
+        {
+            if (zombie != null && (!zombie.HasEmerged || hiddenZombies.Contains(zombie)) && !string.IsNullOrEmpty(zombie.Word))
+            {
+                used.Add(char.ToUpperInvariant(zombie.Word[0]));
+            }
         }
         return used;
     }
@@ -329,8 +361,141 @@ public class WaveSpawner : MonoBehaviour
 
     private void LateUpdate()
     {
+        UpdateZombieSight();
         LayoutLabels();
         UpdateThreatArrows();
+    }
+
+    // ---- A word only while its zombie can be seen ----
+    // A zombie hidden BEHIND something solid (a wall, a building, the stands)
+    // has no word on screen and cannot be typed (GetTypingTargets leaves it
+    // out) until the camera can see it again. Only the scene counts as cover:
+    // other zombies, barrels, crates, bodies, orbs and bombs never hide a word,
+    // or a crowd would hide its own back row. Two exceptions keep it fair:
+    //   - a zombie OFF SCREEN (to the side, behind) keeps its word at the
+    //     screen edge with its red arrow, so one biting from the side can
+    //     still be shot;
+    //   - the zombie being typed keeps its word, so a half-typed word is never
+    //     lost when it steps behind a pillar.
+    // It has to stay hidden for HideAfterSeconds before its word goes (no
+    // flicker past a thin post); it comes back as soon as it is seen.
+
+    private const float HideAfterSeconds = 0.1f;
+    private const float SightEndShort = 0.05f;  // metres: a ray stops just short of the zombie (zombie bodies are skipped anyway, so a wall it hugs still counts)
+    private readonly HashSet<Zombie> hiddenZombies = new HashSet<Zombie>();
+    private readonly Dictionary<Zombie, float> coveredSince = new Dictionary<Zombie, float>();
+    private readonly RaycastHit[] sightHits = new RaycastHit[16];
+    private readonly List<Zombie> sightGone = new List<Zombie>();
+
+    private void UpdateZombieSight()
+    {
+        hiddenZombies.Clear();
+        Camera cam = Camera.main;
+        if (cam == null)
+        {
+            return;
+        }
+        float now = Time.time;
+        foreach (Zombie zombie in aliveZombies)
+        {
+            if (zombie == null || !zombie.HasEmerged || zombie.IsTargeted)
+            {
+                coveredSince.Remove(zombie);
+                continue; // not out yet (left out anyway), or being typed (always kept)
+            }
+            if (!IsBehindCover(cam, zombie))
+            {
+                coveredSince.Remove(zombie);
+                continue;
+            }
+            float since;
+            if (!coveredSince.TryGetValue(zombie, out since))
+            {
+                coveredSince[zombie] = now;
+                since = now;
+            }
+            if (now - since >= HideAfterSeconds)
+            {
+                hiddenZombies.Add(zombie);
+                if (zombie.Label != null)
+                {
+                    zombie.Label.enabled = false; // LayoutLabels only shows the typeable ones
+                }
+            }
+        }
+
+        // Forget zombies that are gone.
+        sightGone.Clear();
+        foreach (Zombie zombie in coveredSince.Keys)
+        {
+            if (zombie == null || !zombie.IsAlive)
+            {
+                sightGone.Add(zombie);
+            }
+        }
+        foreach (Zombie zombie in sightGone)
+        {
+            coveredSince.Remove(zombie);
+        }
+    }
+
+    // True if the zombie is on screen but something solid stands between the
+    // camera and both its head and its chest. Off screen: false in first
+    // person (see above); in THIRD person (CameraDirector.IsThirdPerson, the
+    // camera behind the player, who is in the picture with whatever reaches
+    // them) a zombie off to the side of the view cannot be seen either, so it
+    // is true - but not one behind the player (see below).
+    private bool IsBehindCover(Camera cam, Zombie zombie)
+    {
+        Vector3 head = zombie.HitPoint + Vector3.up * 0.6f;
+        Vector3 chest = zombie.HitPoint;
+        if (!OnScreen(cam, chest) && !OnScreen(cam, head))
+        {
+            // Third person: one off to the SIDE of the view is hidden; one BEHIND
+            // the player (the rear tunnel) is not: its red arrow shows it, and
+            // once close its word is pinned low on the screen (LayoutLabels).
+            Vector3 ahead = cam.transform.forward;
+            ahead.y = 0f;
+            Vector3 toZombie = zombie.Position - player.position;
+            toZombie.y = 0f;
+            return CameraDirector.IsThirdPerson && Vector3.Dot(ahead, toZombie) > 0f;
+        }
+        return IsCovered(cam.transform.position, head) && IsCovered(cam.transform.position, chest);
+    }
+
+    private static bool OnScreen(Camera cam, Vector3 point)
+    {
+        Vector3 viewport = cam.WorldToViewportPoint(point);
+        return viewport.z > 0f && viewport.x >= 0f && viewport.x <= 1f && viewport.y >= 0f && viewport.y <= 1f;
+    }
+
+    private bool IsCovered(Vector3 from, Vector3 to)
+    {
+        Vector3 toPoint = to - from;
+        float distance = toPoint.magnitude - SightEndShort;
+        if (distance <= 0f)
+        {
+            return false;
+        }
+        int count = Physics.RaycastNonAlloc(from, toPoint.normalized, sightHits, distance, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < count; i++)
+        {
+            Collider hit = sightHits[i].collider;
+            if (hit == null)
+            {
+                continue;
+            }
+            // Only the scene is cover: nothing that moves, dies or gets picked up.
+            if (hit.GetComponentInParent<Zombie>() != null || hit.GetComponentInParent<Barrel>() != null
+                || hit.GetComponentInParent<SupplyCrate>() != null || hit.GetComponentInParent<Corpse>() != null
+                || hit.GetComponentInParent<EnergyOrb>() != null || hit.GetComponentInParent<LureBomb>() != null
+                || hit.attachedRigidbody != null || (player != null && hit.transform.IsChildOf(player)))
+            {
+                continue;
+            }
+            return true;
+        }
+        return false;
     }
 
     // Arrows at the screen edges toward zombies that are off screen.
@@ -903,7 +1068,9 @@ public class WaveSpawner : MonoBehaviour
             CurrentWave = wave;
             hud.SetWave(wave, 0);
 
-            hud.ShowBanner("WAVE " + wave);
+            // Every endlessBossEveryWaves-th wave is a BOSS fight (stronger each time).
+            bool bossWave = endlessBossEveryWaves > 0 && wave % endlessBossEveryWaves == 0;
+            hud.ShowBanner(bossWave ? "WAVE " + wave + "  -  BOSS FIGHT" : "WAVE " + wave);
             yield return new WaitForSeconds(BannerSeconds);
             hud.HideBanner();
 
@@ -925,14 +1092,21 @@ public class WaveSpawner : MonoBehaviour
             int healthAtStart = game.Health;
 
             // Reuse the existing zombie spawning and combat implementation.
-            yield return RunZombieWave(wave, arena);
+            if (bossWave)
+            {
+                yield return RunBossFight(arena, wave / endlessBossEveryWaves);
+            }
+            else
+            {
+                yield return RunZombieWave(wave, arena);
+            }
 
             if (game.State != GameState.Playing)
                 yield break;
 
             // Record the wave's results.
             AnalyticsEvent waveEnd = Analytics.NewEvent("wave_end");
-            waveEnd.Add("boss_fight", false);
+            waveEnd.Add("boss_fight", bossWave);
             waveEnd.Add("wave_number", wave);
             waveEnd.Add("seconds", stats.Seconds - fightStart);
             waveEnd.Add("kills", stats.Kills - killsAtStart);
@@ -955,7 +1129,7 @@ public class WaveSpawner : MonoBehaviour
             DeactivateProps();
 
             // Reward intermission: the game remains frozen until the player chooses.
-            game.BeginEndlessWaveReward();
+            game.BeginEndlessWaveReward(bossWave); // bigger rewards after a boss
             
             while (game != null && game.State == GameState.Reward)
             {
@@ -1555,6 +1729,11 @@ public class WaveSpawner : MonoBehaviour
         //     zombie of the new kind on its own (with its one-line hint), and
         //     the next only once it is dead. Then the wave as planned.
         yield return IntroduceNewKinds(plan, pairStarts.Count > 0, encounter, speed);
+        int snipers = SnipersFor(wave); // Endless: SNIPERS on the stands, during the wave
+        int snipersOut = 0;
+        int rearRush = RearRushFor(wave); // Endless: a pack from the tunnel behind the player, half way through
+        bool rearDone = rearRush == 0;
+        rearPending = 0;
 
         // 2. Zombies come out in packs of GroupSize, from the spawn points in turn
         //    (a shuffled order, so it is not the same door every time).
@@ -1579,7 +1758,7 @@ public class WaveSpawner : MonoBehaviour
         #endif
 
             // Never too many at once: wait until some are shot.
-            while (aliveZombies.Count >= MaxOnScreen)
+            while (GroundZombieCount() >= MaxOnScreen)
             {
         #if UNITY_EDITOR
                 if (debugCompletingWave) break;
@@ -1589,6 +1768,12 @@ public class WaveSpawner : MonoBehaviour
 
         #if UNITY_EDITOR
             if (debugCompletingWave) break;
+        snipersOut = SpawnDueSnipers(wave, encounter, snipers, snipersOut, spawned, zombiesThisWave, false);
+        if (!rearDone && spawned * 2 >= zombiesThisWave)
+        {
+            rearDone = true;
+            StartCoroutine(RearRush(rearRush, speed));
+        }
         #endif
             SpawnPoint point = order[next % order.Count];
             next += 1;
@@ -1666,7 +1851,7 @@ public class WaveSpawner : MonoBehaviour
         #if UNITY_EDITOR
             if (debugCompletingWave) break;
         #endif
-            while (aliveZombies.Count >= MaxOnScreen)
+            while (GroundZombieCount() >= MaxOnScreen)
             {
             #if UNITY_EDITOR
                 if (debugCompletingWave) break;
@@ -1687,8 +1872,15 @@ public class WaveSpawner : MonoBehaviour
             yield return new WaitForSeconds(interval * 0.6f * DynamicDifficulty.SpawnIntervalFactor);
         }
 
+        snipersOut = SpawnDueSnipers(wave, encounter, snipers, snipersOut, spawned, zombiesThisWave, true); // any still to come
+        if (!rearDone)
+        {
+            rearDone = true;
+            StartCoroutine(RearRush(rearRush, speed));
+        }
+
         // 3. Wait until every zombie of this wave is dead or removed.
-        while (aliveZombies.Count > 0)
+        while (aliveZombies.Count > 0 || rearPending > 0)
         {
             yield return null;
         }
@@ -1697,6 +1889,200 @@ public class WaveSpawner : MonoBehaviour
         currentWaveActive = false;
         debugCompletingWave = false;
         #endif
+    }
+
+
+
+    // ---- REAR RUSH (Endless) ----
+    // The arena has a tunnel BEHIND the player (a SpawnPoint whose name starts
+    // with "Rear", NOT under the fight, so the normal packs never use it). From
+    // rearFirstWave on, every rearEveryWaves waves a small pack comes out of it
+    // once the wave is half out: "BEHIND YOU!", then 2 zombies (one more every
+    // 6 waves, at most rearMax; one fewer for a slow typist, never under 1),
+    // on top of the wave's own. They are shown by the red threat arrows and,
+    // once close, by their words pinned low on the screen (LayoutLabels).
+    private const string RearPrefix = "Rear";
+    private SpawnPoint rearPoint;
+    private bool rearSearched;
+    private int rearPending; // rush zombies still to come out (the wave is not over until they are out and dead)
+    private bool spawningRear; // true while a rush zombie is being made: it charges straight at the player (no fan, see AssignApproach)
+    private const float RearSpeedFactor = 1.25f; // rush zombies are a little faster: they have a long way to come
+
+    private int RearRushFor(int wave)
+    {
+        if (!endlessMode || wave < rearFirstWave || rearMax <= 0 || (wave - rearFirstWave) % Mathf.Max(1, rearEveryWaves) != 0)
+        {
+            return 0;
+        }
+        if (!rearSearched)
+        {
+            rearSearched = true;
+            foreach (SpawnPoint point in FindObjectsByType<SpawnPoint>(FindObjectsSortMode.None))
+            {
+                if (point.name.StartsWith(RearPrefix) && point.GetComponentInParent<Encounter>() == null)
+                {
+                    rearPoint = point;
+                    break;
+                }
+            }
+        }
+        if (rearPoint == null)
+        {
+            return 0;
+        }
+        int count = 2 + (wave - rearFirstWave) / 6;
+        if (DynamicDifficulty.DensityFactor < 0.8f)
+        {
+            count -= 1;
+        }
+        return Mathf.Clamp(count, 1, rearMax);
+    }
+
+    private IEnumerator RearRush(int count, float speed)
+    {
+    #if UNITY_EDITOR
+        if (debugCompletingWave)
+        {
+            yield break; // the debug "complete this wave" skips it
+        }
+    #endif
+        rearPending += count;
+        hud.ShowHint("BEHIND YOU!", 2.5f);
+        if (rearPoint.Door != null)
+        {
+            rearPoint.Door.BurstOpen();
+        }
+        for (int i = 0; i < count; i++)
+        {
+            GameManager game = GameManager.Instance;
+            if (game == null || game.State == GameState.Lost)
+            {
+                break;
+            }
+            float lane = (i - (count - 1) * 0.5f) * PackLaneWidth;
+            spawningRear = true;
+            SpawnZombieInLane(rearPoint, i == count - 1 && count >= 3 ? ZombieKind.Runner : ZombieKind.Normal, speed * RearSpeedFactor, lane);
+            spawningRear = false;
+            rearPending -= 1;
+            if (i < count - 1)
+            {
+                yield return new WaitForSeconds(PackStagger);
+            }
+        }
+        rearPending = 0;
+    }
+
+    // ---- SNIPERS (Endless) ----
+    // From sniperFirstWave on, an Endless wave has SNIPERS: zombies that stand
+    // on a perch in the stands (an empty object named "Sniper Perch ..." under
+    // the arena's fight, made by Tools/CreateEndlessScene.ps1) and shoot
+    // bullets with words (Zombie, SNIPER). How many:
+    //   1 in its first wave, one more every sniperEveryWaves waves, at most
+    //   sniperMax (and never more than there are perches);
+    //   ADAPTIVE DIFFICULTY: one more for a fast typist (PackBonus), one fewer
+    //   (never under 1) for a slow one (DensityFactor < 0.8).
+    // They come during the wave, spread over it (the k-th of n once k/(n+1)
+    // of the wave's zombies are out), never two on one perch. They do not
+    // take a place under MaxOnScreen, but the wave only ends when they are dead.
+    // Their pace: the time between shots shrinks from 7 s by 0.2 s a wave (to
+    // 3.5 s), a bullet's flight from 4.5 s by 0.08 s a wave (to 2.5 s); a
+    // slower typist gets more time between shots (SpawnIntervalFactor).
+    private const string SniperPerchPrefix = "Sniper Perch";
+    private readonly List<Transform> sniperPerches = new List<Transform>();
+    private Encounter perchesOf;
+
+    private int SnipersFor(int wave)
+    {
+        if (!endlessMode || wave < sniperFirstWave || sniperMax <= 0)
+        {
+            return 0;
+        }
+        int count = 1 + (wave - sniperFirstWave) / Mathf.Max(1, sniperEveryWaves);
+        count += DynamicDifficulty.PackBonus;
+        if (DynamicDifficulty.DensityFactor < 0.8f)
+        {
+            count -= 1;
+        }
+        return Mathf.Clamp(count, 1, sniperMax);
+    }
+
+    // Zombies that walk (snipers stand on the stands and leave room for them).
+    private int GroundZombieCount()
+    {
+        int count = 0;
+        foreach (Zombie zombie in aliveZombies)
+        {
+            if (zombie != null && zombie.Kind != ZombieKind.Sniper)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    // Spawns every sniper whose moment has come (see above). Returns how many are out now.
+    private int SpawnDueSnipers(int wave, Encounter encounter, int snipers, int snipersOut, int spawned, int total, bool all)
+    {
+    #if UNITY_EDITOR
+        if (debugCompletingWave)
+        {
+            return snipers; // the debug "complete this wave" skips them
+        }
+    #endif
+        while (snipersOut < snipers && (all || spawned * (snipers + 1) >= total * (snipersOut + 1)))
+        {
+            if (!SpawnSniper(wave, encounter))
+            {
+                return snipers; // no free perch: no more this wave
+            }
+            snipersOut++;
+        }
+        return snipersOut;
+    }
+
+    private bool SpawnSniper(int wave, Encounter encounter)
+    {
+        if (perchesOf != encounter)
+        {
+            perchesOf = encounter;
+            sniperPerches.Clear();
+            foreach (Transform child in encounter.GetComponentsInChildren<Transform>())
+            {
+                if (child.name.StartsWith(SniperPerchPrefix))
+                {
+                    sniperPerches.Add(child);
+                }
+            }
+        }
+        List<Transform> free = new List<Transform>();
+        foreach (Transform perch in sniperPerches)
+        {
+            bool taken = false;
+            foreach (Zombie zombie in aliveZombies)
+            {
+                if (zombie != null && zombie.Kind == ZombieKind.Sniper && Vector3.Distance(zombie.transform.position, perch.position) < 1f)
+                {
+                    taken = true;
+                    break;
+                }
+            }
+            if (!taken)
+            {
+                free.Add(perch);
+            }
+        }
+        if (free.Count == 0)
+        {
+            return false;
+        }
+        Transform spot = free[Random.Range(0, free.Count)];
+        Zombie sniper = SpawnZombieAt(spot.position, spot.position, 0f, ZombieKind.Sniper, 0f);
+        int n = Mathf.Max(0, wave - sniperFirstWave);
+        float interval = Mathf.Max(3.5f, 7f - 0.2f * n) * Mathf.Max(1f, DynamicDifficulty.SpawnIntervalFactor);
+        float flight = Mathf.Max(2.5f, 4.5f - 0.08f * n);
+        sniper.SetSniperPace(interval, flight);
+        hud.ShowFloatingText(sniper.LabelAnchor, "SNIPER!", Palette.WordSniper);
+        return true;
     }
 
     // ---- Spreading a wave out ----
@@ -1713,7 +2099,7 @@ public class WaveSpawner : MonoBehaviour
 
     private void AssignApproach(Zombie zombie, Vector3 door)
     {
-        if (!spreadApproach || CurrentEncounter == null || zombie.Kind == ZombieKind.Spitter)
+        if (!spreadApproach || CurrentEncounter == null || zombie.Kind == ZombieKind.Spitter || zombie.Kind == ZombieKind.Sniper || spawningRear)
         {
             return;
         }
@@ -1918,9 +2304,9 @@ public class WaveSpawner : MonoBehaviour
             plan[index] = kind; // first, so the wave's other special kinds never crowd them out
             index += 1;
         }
-        index = Fill(plan, index, ZombieKind.Explosive, CountForWave(wave, explosiveFirstWave, explosiveStartCount, explosivePerWave));
-        index = Fill(plan, index, ZombieKind.Runner, CountForWave(wave, runnerFirstWave, runnerStartCount, runnersPerWave));
-        Fill(plan, index, ZombieKind.Armored, CountForWave(wave, armoredFirstWave, armoredStartCount, armoredPerWave));
+        index = Fill(plan, index, ZombieKind.Explosive, SpecialCount(wave, explosiveFirstWave, explosiveStartCount, explosivePerWave));
+        index = Fill(plan, index, ZombieKind.Runner, SpecialCount(wave, runnerFirstWave, runnerStartCount, runnersPerWave));
+        Fill(plan, index, ZombieKind.Armored, SpecialCount(wave, armoredFirstWave, armoredStartCount, armoredPerWave));
         // The rest stay ZombieKind.Normal (the default value).
 
         // Fisher-Yates shuffle: the special ones come at random moments.
@@ -1964,7 +2350,9 @@ public class WaveSpawner : MonoBehaviour
             return result;
         }
 
-        int wanted = Mathf.Max(result.Count, 1 + newEnemiesPerWave * (wave - earliest));
+        int wanted = Mathf.Max(result.Count, endlessMode
+            ? 1 + (wave - earliest) / Mathf.Max(1, endlessSpecialGrowthWaves)  // Endless: slow growth
+            : 1 + newEnemiesPerWave * (wave - earliest));
         while (result.Count < wanted)
         {
             result.Add(unlocked[Random.Range(0, unlocked.Count)]);
@@ -1981,6 +2369,18 @@ public class WaveSpawner : MonoBehaviour
             index += 1;
         }
         return index;
+    }
+
+    // ENDLESS keeps waves short: a special kind (or WORD CHAIN pair) comes ONCE
+    // in its first wave and one more every endlessSpecialGrowthWaves waves,
+    // whatever the level's own start / per-wave numbers say. Other levels: CountForWave.
+    private int SpecialCount(int wave, int firstWave, int startCount, int perWave)
+    {
+        if (!endlessMode)
+        {
+            return CountForWave(wave, firstWave, startCount, perWave);
+        }
+        return wave < firstWave ? 0 : 1 + (wave - firstWave) / Mathf.Max(1, endlessSpecialGrowthWaves);
     }
 
     // How many special zombies of one kind a wave has: none before firstWave,
@@ -2004,7 +2404,7 @@ public class WaveSpawner : MonoBehaviour
     private ZombieKind[] AddChainPairs(ZombieKind[] plan, int wave, out HashSet<int> pairStarts)
     {
         pairStarts = new HashSet<int>();
-        int pairs = CountForWave(wave, chainFirstWave, chainStartCount, chainPerWave);
+        int pairs = SpecialCount(wave, chainFirstWave, chainStartCount, chainPerWave);
         if (endlessMode)
         {
             pairs = Mathf.Min(pairs, endlessMaxChainPairs);
@@ -2358,6 +2758,10 @@ public class WaveSpawner : MonoBehaviour
         {
             Tutorial.Once("spitter", "SPITTER: pop its acid by typing the glob's word.", 6f);
         }
+        else if (kind == ZombieKind.Sniper)
+        {
+            Tutorial.Once("sniper", "SNIPER on the stands: type its bullet before it hits, then its own word.", 7f);
+        }
         return zombie;
     }
 
@@ -2481,8 +2885,11 @@ public class WaveSpawner : MonoBehaviour
 
     // ---- The boss ----
 
-    private IEnumerator RunBossFight(Encounter encounter)
+    // bossNumber: 1 for the first boss; ENDLESS's later bosses (2, 3...) have
+    // more health (endlessBossHealthGrowth each) and call their zombies sooner.
+    private IEnumerator RunBossFight(Encounter encounter, int bossNumber = 1)
     {
+        int growth = Mathf.Max(0, bossNumber - 1);
         #if UNITY_EDITOR
         currentWaveActive = true;
         debugCompletingWave = false;
@@ -2490,8 +2897,8 @@ public class WaveSpawner : MonoBehaviour
         #endif
         // 1. The boss appears where it fights.
         CameraDirector.Shake(0.4f);
-        boss = Boss.Create(encounter.BossStand, player.position, this, hud);
-        hud.ShowBossBar(bossName);
+        boss = Boss.Create(encounter.BossStand, player.position, this, hud, 1f + endlessBossHealthGrowth * growth);
+        hud.ShowBossBar(growth > 0 ? bossName + "  LV " + bossNumber : bossName);
 
         AnalyticsEvent e = Analytics.NewEvent("wave_start");
         e.Add("boss_fight", true);
@@ -2517,6 +2924,7 @@ public class WaveSpawner : MonoBehaviour
                     SpawnBossExtra(encounter, extraSide++);
                 }
                 float interval = healthy >= 0.9f ? Mathf.Lerp(7f, 4f, DynamicDifficulty.Flawless / 0.9f) : 12f;
+                interval /= 1f + 0.15f * growth; // a later boss calls its zombies sooner
                 nextExtra = Time.time + interval;
             }
             yield return null;

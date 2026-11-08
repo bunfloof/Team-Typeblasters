@@ -39,8 +39,9 @@ public class Powers : MonoBehaviour
     [SerializeField] private int maxCharges = 3;
 
     // Independent skill energy costs, displayed beside each action. Energy
-    // comes only from words typed to the end (1 per kill, GameManager.AddKills),
-    // never from blast kills, and stops at GameManager.MaxSkillEnergy: a lure
+    // comes from words typed to the end (1 per kill, GameManager.AddKills),
+    // including the kills of a blast the player typed off (a barrel or a red
+    // zombie), never from a blast a power set off (lure bomb, RPG), and stops at GameManager.MaxSkillEnergy: a lure
     // bomb or RPG can never pay for the next one, and energy cannot be hoarded.
     public const int FrenzyCost = 12;
     public const int RocketCost = 18;
@@ -126,6 +127,7 @@ public class Powers : MonoBehaviour
         ShieldWord.Close();
         RocketLoaded = false;
         FrenzyKept = RocketKept = 0;
+        LureCharges = FreezeCharges = 0;
 
         RefreshWeaponSlots();
         RefillTrainingSupplies();
@@ -147,6 +149,18 @@ public class Powers : MonoBehaviour
 
     // One stored free Frenzy use can be held at a time.
     public const int MaxKept = 1;
+
+    // How many free uses of ONE skill / weapon can be kept (wave rewards):
+    // up to 3 in ENDLESS (the HUD shows "x2", "x3" beside its name), 1 elsewhere.
+    public const int EndlessMaxKept = 3;
+    public static int KeptLimit
+    {
+        get
+        {
+            GameManager game = GameManager.Instance;
+            return game != null && game.Spawner != null && game.Spawner.IsEndlessMode ? EndlessMaxKept : MaxKept;
+        }
+    }
     public int FrenzyKept { get; private set; }
     public int RocketKept { get; private set; }
 
@@ -154,6 +168,9 @@ public class Powers : MonoBehaviour
 
     private string lastWeaponStatus;     // what the HUD shows now, so it is only rebuilt when it changes
 
+    // FREE USES kept from an Endless wave reward (EndlessWaveReward, early
+    // waves): the next lure bomb / freeze costs no energy. At most KeptLimit each.
+    // The HUD lights the power's row while one is kept.
     public int LureCharges { get; private set; }
     public int FreezeCharges { get; private set; }
 
@@ -331,9 +348,9 @@ public class Powers : MonoBehaviour
         if (freeReward)
         {
             if (rocket)
-                RocketKept = 0;
+                RocketKept -= 1;
             else
-                FrenzyKept = 0;
+                FrenzyKept -= 1;
         }
 
         if (rocket)
@@ -384,18 +401,18 @@ public class Powers : MonoBehaviour
         if (giveRocket)
         {
             // Ignore duplicate RPG rewards.
-            if (RocketLoaded || RocketKept > 0)
+            if (RocketKept >= KeptLimit)
                 return null;
     
-            RocketKept = 1;
+            RocketKept += 1;
         }
         else
         {
             // Ignore duplicate FRENZY rewards.
-            if (FrenzyKept > 0)
+            if (FrenzyKept >= KeptLimit)
                 return null;
     
-            FrenzyKept = 1;
+            FrenzyKept += 1;
         }
     
         RefreshWeaponSlots();
@@ -407,6 +424,30 @@ public class Powers : MonoBehaviour
         SendPowerEvent(e);
     
         return item.ToUpperInvariant();
+    }
+
+    // Endless wave reward (early waves): one FREE lure bomb (freeze = false) or
+    // FREEZE, used instead of energy next time. Returns "LURE BOMB" / "FREEZE",
+    // or null if KeptLimit of it are already kept.
+    public string GrantFreePowerReward(bool freeze)
+    {
+        GameManager game = GameManager.Instance;
+        if (game == null || game.State != GameState.Reward)
+            return null;
+        if ((freeze ? FreezeCharges : LureCharges) >= KeptLimit)
+            return null;
+
+        if (freeze)
+            FreezeCharges += 1;
+        else
+            LureCharges += 1;
+        RefreshHud();
+        hud.PulsePower(freeze ? PowerKind.Freeze : PowerKind.Lure);
+
+        AnalyticsEvent e = PowerEvent("reward", freeze ? "freeze" : "lure");
+        e.Add("via", "wave_reward");
+        SendPowerEvent(e);
+        return freeze ? "FREEZE" : "LURE BOMB";
     }
 
     // FRENZY: every enemy word is short for frenzySeconds.
@@ -568,7 +609,7 @@ public class Powers : MonoBehaviour
         if (GameManager.Instance.State != GameState.Playing || aiming) return;
         if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower("lure")) return;
         if (!HudReveal.PowerAllowed("lure")) return; // the guided intro has not shown it yet
-        if (GameManager.Instance.SkillEnergy < LureCost)
+        if (LureCharges <= 0 && GameManager.Instance.SkillEnergy < LureCost)
         {
             hud.ShowHint(LureCost + " ENERGY NEEDED",2f);
             LogUseRefused("lure","not_enough_energy","key");
@@ -579,6 +620,7 @@ public class Powers : MonoBehaviour
         aiming = true;
         aimTurn = 0f;                 // every aim starts straight ahead...
         aimDistance = EasyTutorial.Active != null ? 12f : throwDistance;
+        AimAtGroup();                 // ...except in ENDLESS: at the biggest group of zombies in view
         if (arc == null)
         {
             arc = ThrowArc.Create();
@@ -599,7 +641,12 @@ public class Powers : MonoBehaviour
         Vector3 landing = LandingPoint(aimDistance);
         StopAiming();
         int before = GameManager.Instance.SkillEnergy;
-        if (!GameManager.Instance.TrySpendSkillEnergy(LureCost))
+        bool free = LureCharges > 0 && GameManager.Instance.State == GameState.Playing; // a kept free use (wave reward)
+        if (free)
+        {
+            LureCharges -= 1;
+        }
+        else if (!GameManager.Instance.TrySpendSkillEnergy(LureCost))
         {
             LogUseRefused("lure","not_enough_energy_or_not_playing","key");
             return;
@@ -609,11 +656,87 @@ public class Powers : MonoBehaviour
         LureBomb.Throw(Hand(), landing);
 
         AnalyticsEvent e = PowerEvent("throw", "lure");
-        e.Add("energy_before",before); e.Add("energy_spent",LureCost); e.Add("energy_after",GameManager.Instance.SkillEnergy);
+        e.Add("energy_before",before); e.Add("energy_spent",free ? 0 : LureCost); e.Add("energy_after",GameManager.Instance.SkillEnergy);
+        if (free) e.Add("free_reward", true);
         e.Add("aim_seconds", Time.time - aimStartTime); // under 0.3 = a quick tap
         e.Add("turned_degrees", aimTurn);               // steered with Left / Right
         e.Add("distance", aimDistance);                 // metres wanted (Up / Down)
         SendPowerEvent(e);
+    }
+
+    // ENDLESS (third person): zombies come from far away, so a throw straight
+    // ahead at throwDistance would land where nobody is, and the bomb would go
+    // off before they got there. Aiming starts at the middle of the BIGGEST
+    // GROUP of zombies out in front (each zombie with the others within
+    // GroupRadius of it; ties go to the nearer group), within reach and the
+    // turn limits. The arrows still move it from there; a quick tap throws it
+    // there. Snipers (up in the stands) are left out.
+    private const float GroupRadius = 5f;
+
+    private void AimAtGroup()
+    {
+        WaveSpawner spawner = GameManager.Instance.Spawner;
+        if (!CameraDirector.IsThirdPerson || EasyTutorial.Active != null || spawner == null)
+        {
+            return;
+        }
+        Vector3 ahead = Camera.main.transform.forward;
+        ahead.y = 0f;
+        if (ahead.sqrMagnitude < 0.001f)
+        {
+            return;
+        }
+        ahead.Normalize();
+
+        List<Vector3> spots = new List<Vector3>();
+        foreach (Zombie zombie in spawner.AliveZombies)
+        {
+            if (zombie == null || !zombie.IsAlive || !zombie.HasEmerged || zombie.Kind == ZombieKind.Sniper)
+            {
+                continue;
+            }
+            Vector3 offset = zombie.Position - player.position;
+            offset.y = 0f;
+            if (offset.magnitude < minThrowDistance || offset.magnitude > maxThrowDistance
+                || Mathf.Abs(Vector3.SignedAngle(ahead, offset, Vector3.up)) > maxAimTurn)
+            {
+                continue;
+            }
+            spots.Add(zombie.Position);
+        }
+        if (spots.Count == 0)
+        {
+            return;
+        }
+
+        float bestScore = -1f;
+        Vector3 best = Vector3.zero;
+        foreach (Vector3 spot in spots)
+        {
+            Vector3 sum = Vector3.zero;
+            int count = 0;
+            foreach (Vector3 other in spots)
+            {
+                Vector3 gap = other - spot;
+                gap.y = 0f;
+                if (gap.magnitude <= GroupRadius)
+                {
+                    sum += other;
+                    count++;
+                }
+            }
+            Vector3 middle = sum / count;
+            float score = count - Vector3.Distance(middle, player.position) * 0.01f; // ties: the nearer group
+            if (score > bestScore)
+            {
+                bestScore = score;
+                best = middle;
+            }
+        }
+        Vector3 toGroup = best - player.position;
+        toGroup.y = 0f;
+        aimTurn = Mathf.Clamp(Vector3.SignedAngle(ahead, toGroup, Vector3.up), -maxAimTurn, maxAimTurn);
+        aimDistance = Mathf.Clamp(toGroup.magnitude, minThrowDistance, maxThrowDistance);
     }
 
     // Stops aiming without throwing (e.g. the game was paused); no charge is used.
@@ -684,7 +807,12 @@ public class Powers : MonoBehaviour
             return;
         }
         int before = GameManager.Instance.SkillEnergy;
-        if (!GameManager.Instance.TrySpendSkillEnergy(FreezeCost))
+        bool free = FreezeCharges > 0; // a kept free use (wave reward)
+        if (free)
+        {
+            FreezeCharges -= 1;
+        }
+        else if (!GameManager.Instance.TrySpendSkillEnergy(FreezeCost))
         {
             hud.ShowHint(FreezeCost + " ENERGY NEEDED",2f);
             LogUseRefused("freeze","not_enough_energy","key");
@@ -698,7 +826,8 @@ public class Powers : MonoBehaviour
             : GuidedIntro.Running ? freezeSeconds * 2f : freezeSeconds; // first time (guided wave 1): time to shoot them
 
         AnalyticsEvent e = PowerEvent("use", "freeze");
-        e.Add("energy_before",before); e.Add("energy_spent",FreezeCost); e.Add("energy_after",GameManager.Instance.SkillEnergy);
+        e.Add("energy_before",before); e.Add("energy_spent",free ? 0 : FreezeCost); e.Add("energy_after",GameManager.Instance.SkillEnergy);
+        if (free) e.Add("free_reward", true);
         e.Add("while_frozen", alreadyFrozen); // used again before the last one ran out
         SendPowerEvent(e);
     }
@@ -795,12 +924,21 @@ public class Powers : MonoBehaviour
         ahead.Normalize();
         ahead = Quaternion.AngleAxis(aimTurn, Vector3.up) * ahead; // turned with Left / Right
 
+        // Short of the first WALL in the way (zombies, barrels, crates and the
+        // like do not stop it: the bomb flies over them).
         float distance = wanted;
         Vector3 from = player.position + Vector3.up * 1f;
-        RaycastHit hit;
-        if (Physics.Raycast(from, ahead, out hit, wanted))
+        RaycastHit[] hits = Physics.RaycastAll(from, ahead, wanted, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        foreach (RaycastHit hit in hits)
         {
-            distance = Mathf.Max(minThrowDistance, hit.distance - 0.8f);
+            Collider wall = hit.collider;
+            if (wall == null || wall.attachedRigidbody != null || wall.transform.IsChildOf(player)
+                || wall.GetComponentInParent<Zombie>() != null || wall.GetComponentInParent<Barrel>() != null
+                || wall.GetComponentInParent<SupplyCrate>() != null || wall.GetComponentInParent<Corpse>() != null)
+            {
+                continue;
+            }
+            distance = Mathf.Min(distance, Mathf.Max(minThrowDistance, hit.distance - 0.8f));
         }
 
         Vector3 landing = player.position + ahead * distance;

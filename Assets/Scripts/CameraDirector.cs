@@ -42,6 +42,22 @@ using UnityEngine;
 [RequireComponent(typeof(Camera))]
 public class CameraDirector : MonoBehaviour
 {
+    [Header("Third person (Endless; zero offset = first person)")]
+    // Where the camera sits relative to the player's eye, in the player's own
+    // space (x = right, y = up, z = forward): e.g. (0, 3.5, -6.5) is behind and
+    // above. While it is not zero the view is THIRD PERSON: the player's body
+    // shows, shots start at its chest, the camera swings round the player when
+    // it turns to a target, and words of zombies off screen are not shown
+    // (WaveSpawner). The player's eye (PlayerEye: what orbs aim at) does not move.
+    [SerializeField] private Vector3 thirdPersonOffset = Vector3.zero;
+    [SerializeField] private float thirdPersonPitchDown = 12f; // degrees the view tilts down in third person
+
+    // True while the camera is behind the player (thirdPersonOffset set).
+    public static bool IsThirdPerson
+    {
+        get { return current != null && current.thirdPersonOffset != Vector3.zero; }
+    }
+
     [Header("Focus (turn toward the word being typed)")]
     [SerializeField] private float maxFocusYaw = 16f;         // degrees left/right, at most (before focusStrength); small, so zombies on the other side stay on screen
     [SerializeField] private float maxFocusPitchDown = 12f;   // degrees down, at most
@@ -112,6 +128,27 @@ public class CameraDirector : MonoBehaviour
     // Focus: where the head points now, in degrees relative to the rig
     // (pitch > 0 = looking UP), and how fast it is turning (for SmoothDampAngle).
     private float focusYaw;
+
+    // ---- THIRD PERSON: turning to the enemies (Endless) ----
+    // The camera normally looks the way the player faces. When NOTHING is left
+    // in the picture (the last enemy on screen was shot) while enemies are
+    // still alive elsewhere - beside or behind the player, e.g. a rush out of
+    // the tunnel behind - the view swings round the player to where it sees the
+    // most of them (UpdateHeading has the details: when, and where to). It
+    // never turns while a word is typed or a lure bomb is
+    // aimed, waits HeadingEmptySeconds of empty screen first and stays at least
+    // HeadingHoldSeconds once turned (no swinging back and forth). With no
+    // enemy at all it faces front again. The player's body turns with it.
+    private const float HeadingForwardCone = 20f;   // degrees either side of straight ahead: snap to the front
+    private const float HeadingEmptySeconds = 0.3f;
+    private const float HeadingHoldSeconds = 1.0f;
+    private const float HeadingSmoothTime = 0.3f;   // seconds for the swing
+    private const float OnScreenMargin = 0.04f;     // a zombie this close to the edge does not count as in the picture
+    private float headingYaw;         // where the view points now (degrees from the player's facing)
+    private float wantedHeading;
+    private float headingVelocity;
+    private float emptyTimer;
+    private float holdTimer;
     private float focusPitch;
     private float focusYawVelocity;
     private float focusPitchVelocity;
@@ -166,6 +203,10 @@ public class CameraDirector : MonoBehaviour
         if (current == null)
         {
             return Camera.main.transform.TransformPoint(cameraLocalOffset);
+        }
+        if (IsThirdPerson)
+        {
+            return current.ChestPosition(); // the camera is behind the player: shots start at the body
         }
         Vector3 fromCamera = current.transform.TransformPoint(cameraLocalOffset);
         if (current.viewBlend <= 0f)
@@ -235,6 +276,7 @@ public class CameraDirector : MonoBehaviour
         float wantedPitch;
         if (playing)
         {
+            UpdateHeading(deltaTime);
             ChooseFocus(deltaTime, out wantedYaw, out wantedPitch);
         }
         else
@@ -290,13 +332,33 @@ public class CameraDirector : MonoBehaviour
         float breathPitch = Mathf.Sin(breathTime * breathingFrequency * TwoPi) * breathingDegrees;
         float breathYaw = Mathf.Sin(breathTime * breathingFrequency * Mathf.PI + 1f) * breathingDegrees * 0.6f;
 
+        // The third-person heading (see UpdateHeading) glides to where it is wanted.
+        if (deltaTime > 0f)
+        {
+            headingYaw = Mathf.SmoothDampAngle(headingYaw, wantedHeading, ref headingVelocity, HeadingSmoothTime, Mathf.Infinity, deltaTime);
+        }
+        if (avatar != null && IsThirdPerson)
+        {
+            avatar.transform.localRotation = Quaternion.Euler(0f, headingYaw, 0f); // the body faces where the view looks
+        }
+
         // ---- 4. Put it all together ----
         // Unity's X rotation looks DOWN when positive, so the "up" angles are negated.
         float yaw = focusYaw + breathYaw + shakeYaw;
         float pitchUp = focusPitch + recoil + breathPitch + shakePitch;
         float roll = bobRoll + shakeRoll;
-        transform.localRotation = Quaternion.Euler(-pitchUp, yaw, roll);
-        transform.localPosition = basePosition + Vector3.up * bobHeightNow + transform.localRotation * shakeOffset;
+        if (thirdPersonOffset != Vector3.zero)
+        {
+            // Behind and above the player, swung round it by the focus yaw, tilted down.
+            transform.localRotation = Quaternion.Euler(thirdPersonPitchDown - pitchUp, yaw, roll);
+            transform.localPosition = basePosition + Quaternion.Euler(0f, yaw, 0f) * thirdPersonOffset
+                + Vector3.up * bobHeightNow + transform.localRotation * shakeOffset;
+        }
+        else
+        {
+            transform.localRotation = Quaternion.Euler(-pitchUp, yaw, roll);
+            transform.localPosition = basePosition + Vector3.up * bobHeightNow + transform.localRotation * shakeOffset;
+        }
         // (on a phone the view above the on-screen keyboard is very wide: see TouchControls)
         cam.fieldOfView = TouchControls.FitFieldOfView(UpdateFieldOfView(deltaTime, playing), cam.aspect);
 
@@ -319,7 +381,7 @@ public class CameraDirector : MonoBehaviour
         // The body only shows once the camera has left the head (it would block the first-person view).
         if (avatar != null)
         {
-            avatar.SetActive(viewBlend > 0.15f);
+            avatar.SetActive(viewBlend > 0.15f || IsThirdPerson);
         }
 
         if (viewBlend <= 0f)
@@ -573,7 +635,7 @@ public class CameraDirector : MonoBehaviour
     // While playing: the angles (degrees, pitch > 0 = up) the head should turn to.
     private void ChooseFocus(float deltaTime, out float wantedYaw, out float wantedPitch)
     {
-        wantedYaw = 0f;   // nothing to look at: straight ahead
+        wantedYaw = wantedHeading;   // nothing to look at: straight ahead (third person: the way the view is turned)
         wantedPitch = 0f;
 
         // A word is being typed: look toward its enemy.
@@ -607,6 +669,190 @@ public class CameraDirector : MonoBehaviour
         }
     }
 
+    // THIRD PERSON: decides wantedHeading (see the fields above).
+    //
+    // WHEN it turns:
+    //   - the picture holds no enemy that matters any more: snipers up in the
+    //     stands do not keep the view while walking zombies are elsewhere;
+    //   - but NOT while a zombie is still coming out of a doorway / tunnel that
+    //     is in the picture (it is about to appear), nor while a word is typed
+    //     or a lure bomb aimed;
+    //   - at once (after the hold) if a zombie out of the picture is biting
+    //     the player (closer than UrgentDistance).
+    // WHERE it turns: the direction that gets the most enemies into the picture
+    // at once (each enemy weighs more the closer it is, a sniper less), aimed
+    // at the middle of that group and rounded to HeadingStep degrees; within
+    // HeadingForwardCone of straight ahead it is straight ahead.
+    private void UpdateHeading(float deltaTime)
+    {
+        if (!IsThirdPerson || spawner == null)
+        {
+            wantedHeading = 0f;
+            return;
+        }
+        holdTimer = Mathf.Max(0f, holdTimer - deltaTime);
+        bool busy = (typing != null && typing.CurrentTarget != null) || lingerTimer > 0f
+            || (GameManager.Instance.Powers != null && GameManager.Instance.Powers.IsAiming);
+
+        // The view's half width as seen from the player (a little narrower than
+        // the camera's, which stands behind the player).
+        float halfView = 0.8f * 0.5f * Camera.VerticalToHorizontalFieldOfView(cam.fieldOfView, cam.aspect);
+
+        headingTargets.Clear();
+        bool groundInPicture = false;   // a walking zombie in the picture
+        bool sniperInPicture = false;
+        bool groundElsewhere = false;   // a walking zombie out of the picture
+        bool comingIntoPicture = false; // one still in its doorway, about to step out in the picture
+        bool urgent = false;            // one out of the picture is biting the player
+        Vector3 here = EyePosition();
+        foreach (Zombie zombie in spawner.AliveZombies)
+        {
+            if (zombie == null || !zombie.IsAlive)
+            {
+                continue;
+            }
+            bool sniper = zombie.Kind == ZombieKind.Sniper;
+            if (!zombie.HasEmerged)
+            {
+                if (InPicture(zombie.ExitPoint + Vector3.up))
+                {
+                    comingIntoPicture = true;
+                }
+                headingTargets.Add(new HeadingTarget(Angle(zombie.ExitPoint, here), 0.5f)); // it will be there soon
+                continue;
+            }
+            bool inPicture = InPicture(zombie.HitPoint);
+            Vector3 offset = zombie.Position - here;
+            offset.y = 0f;
+            float distance = offset.magnitude;
+            if (sniper)
+            {
+                sniperInPicture |= inPicture;
+            }
+            else if (inPicture)
+            {
+                groundInPicture = true;
+            }
+            else
+            {
+                groundElsewhere = true;
+                urgent |= distance < UrgentDistance;
+            }
+            float weight = (sniper ? 0.5f : 1f) * Mathf.Lerp(2f, 0.6f, Mathf.InverseLerp(4f, 30f, distance));
+            headingTargets.Add(new HeadingTarget(Angle(zombie.Position, here), weight));
+        }
+
+        if (headingTargets.Count == 0)
+        {
+            // Nobody out there: face the front again (the gates).
+            emptyTimer = 0f;
+            if (!busy && holdTimer <= 0f)
+            {
+                wantedHeading = 0f;
+            }
+            return;
+        }
+
+        // Nothing left to deal with in the picture (snipers only count while
+        // there is no walking zombie elsewhere).
+        bool pictureDone = !groundInPicture && !comingIntoPicture && (!sniperInPicture || groundElsewhere);
+        if (busy || holdTimer > 0f)
+        {
+            if (!pictureDone)
+            {
+                emptyTimer = 0f;
+            }
+            return;
+        }
+        if (!(urgent && !groundInPicture)) // a biting zombie out of the picture turns the view at once
+        {
+            if (!pictureDone)
+            {
+                emptyTimer = 0f;
+                return;
+            }
+            emptyTimer += deltaTime;
+            if (emptyTimer < HeadingEmptySeconds)
+            {
+                return;
+            }
+        }
+
+        float heading = BestHeading(halfView);
+        emptyTimer = 0f;
+        if (Mathf.Abs(Mathf.DeltaAngle(heading, wantedHeading)) < HeadingStep * 0.5f)
+        {
+            return; // already looking that way
+        }
+        wantedHeading = heading;
+        holdTimer = HeadingHoldSeconds;
+    }
+
+    private const float HeadingStep = 15f;      // headings are rounded to this many degrees
+    private const float UrgentDistance = 3.5f;  // metres: a zombie this close out of the picture is biting
+
+    private struct HeadingTarget
+    {
+        public float Angle;  // degrees from the player's facing
+        public float Weight;
+        public HeadingTarget(float angle, float weight) { Angle = angle; Weight = weight; }
+    }
+    private readonly System.Collections.Generic.List<HeadingTarget> headingTargets = new System.Collections.Generic.List<HeadingTarget>();
+
+    // Degrees from the way the player faces to a point (+ = right).
+    private float Angle(Vector3 point, Vector3 from)
+    {
+        Vector3 direction = Quaternion.Inverse(ParentRotation()) * (point - from);
+        return Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
+    }
+
+    private bool InPicture(Vector3 point)
+    {
+        Vector3 viewport = cam.WorldToViewportPoint(point);
+        return viewport.z > 0f && viewport.x > OnScreenMargin && viewport.x < 1f - OnScreenMargin
+            && viewport.y > OnScreenMargin && viewport.y < 1f - OnScreenMargin;
+    }
+
+    // The heading that gets the most (weighted) enemies within halfView of it,
+    // aimed at the weighted middle of those, rounded to HeadingStep.
+    private float BestHeading(float halfView)
+    {
+        float bestScore = -1f;
+        float best = 0f;
+        foreach (HeadingTarget candidate in headingTargets)
+        {
+            // Try a window starting at each enemy (so the group fits from its edge) and one centred on it.
+            for (int k = -1; k <= 1; k++)
+            {
+                float centre = candidate.Angle + k * (halfView - 2f);
+                float score = 0f;
+                float sumSin = 0f;
+                float sumCos = 0f;
+                foreach (HeadingTarget other in headingTargets)
+                {
+                    if (Mathf.Abs(Mathf.DeltaAngle(centre, other.Angle)) <= halfView)
+                    {
+                        score += other.Weight;
+                        sumSin += Mathf.Sin(other.Angle * Mathf.Deg2Rad) * other.Weight;
+                        sumCos += Mathf.Cos(other.Angle * Mathf.Deg2Rad) * other.Weight;
+                    }
+                }
+                // Ties go to the smaller turn from where the view is now.
+                score -= Mathf.Abs(Mathf.DeltaAngle(wantedHeading, centre)) * 0.001f;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = Mathf.Atan2(sumSin, sumCos) * Mathf.Rad2Deg; // the middle of the group in the window
+                }
+            }
+        }
+        if (Mathf.Abs(best) <= HeadingForwardCone)
+        {
+            return 0f;
+        }
+        return Mathf.Round(best / HeadingStep) * HeadingStep;
+    }
+
     // The yaw and pitch (degrees, pitch > 0 = up) that turn the head toward
     // worldPoint, measured from the way the Player rig faces, clamped to the
     // limits and scaled by strength (0..1).
@@ -620,7 +866,8 @@ public class CameraDirector : MonoBehaviour
         yaw = Mathf.Atan2(direction.x, direction.z) * Mathf.Rad2Deg;
         pitch = Mathf.Atan2(direction.y, flatDistance) * Mathf.Rad2Deg;
 
-        yaw = Mathf.Clamp(yaw, -maxFocusYaw, maxFocusYaw) * strength;
+        // Measured from where the view is turned (third person; 0 otherwise).
+        yaw = wantedHeading + Mathf.Clamp(Mathf.DeltaAngle(wantedHeading, yaw), -maxFocusYaw, maxFocusYaw) * strength;
         pitch = Mathf.Clamp(pitch, -maxFocusPitchDown, maxFocusPitchUp) * strength;
     }
 

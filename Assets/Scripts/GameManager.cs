@@ -103,6 +103,8 @@ public class GameManager : MonoBehaviour
     private void Awake()
     {
         Instance = this;
+        // ENDLESS has no typing difficulty choice: one fixed style for everybody.
+        TypingSettings.Override = spawner != null && spawner.IsEndlessMode ? EndlessTypingDifficulty : (TypingDifficulty?)null;
         State = GameState.Start;
         Time.timeScale = 1f; // never start frozen (timeScale survives a scene reload)
         Stats = new RunStats();
@@ -216,11 +218,14 @@ public class GameManager : MonoBehaviour
 
     // ---- Typing difficulty (picked on the Start panel, see TypingSettings) ----
 
+    // ENDLESS: no choice, every run is typed in this style (TypingSettings.Override).
+    public const TypingDifficulty EndlessTypingDifficulty = TypingDifficulty.Easy;
+
     // Called by the difficulty buttons on the Start panel (HUD). Only before
     // the run starts: every word is styled when its enemy appears.
     public void SetTypingDifficulty(TypingDifficulty level)
     {
-        if (State != GameState.Start || EasyTutorial.Active != null)
+        if (State != GameState.Start || EasyTutorial.Active != null || TypingSettings.Override.HasValue)
         {
             return;
         }
@@ -499,28 +504,53 @@ public class GameManager : MonoBehaviour
 
     // ---- Endless wave rewards ----
 
-    public const int EndlessRewardHealth = 2;
+    // After a normal wave / after a BOSS wave (every 10th): the boss's rewards are bigger.
+    public const float EndlessRewardHealthFraction = 0.1f;      // HEALTH: 10% of full health
+    public const float EndlessBossRewardHealthFraction = 0.2f;  // ...20% after a boss
     public const int EndlessRewardEnergy = 5;
-    private const int EndlessRewardScore = 100;
+    public const int EndlessBossRewardEnergy = 12;
+    public const int EndlessRewardScore = 100;
+    public const int EndlessBossRewardScore = 500;
+    // FREE card: in the first EndlessEasyRewardWaves waves a free LURE BOMB or
+    // FREEZE (one of the two, at random); later a free RPG or FRENZY; after a
+    // boss BOTH weapons.
+    public const int EndlessEasyRewardWaves = 5;
+
+    private bool rewardAfterBoss; // the reward being chosen now follows a boss wave
+
+    // Health points the HEALTH reward gives (a share of MaxHealth, at least 1).
+    public int EndlessRewardHealth
+    {
+        get { return Mathf.Max(1, Mathf.RoundToInt(MaxHealth * (rewardAfterBoss ? EndlessBossRewardHealthFraction : EndlessRewardHealthFraction))); }
+    }
 
     // Called by WaveSpawner after an Endless wave has been cleared.
-    public void BeginEndlessWaveReward()
+    // afterBoss: the wave was a BOSS fight (bigger rewards, see above).
+    public void BeginEndlessWaveReward(bool afterBoss = false)
     {
         if (State != GameState.Playing || spawner == null || !spawner.IsEndlessMode)
             return;
 
         State = GameState.Reward;
         Time.timeScale = 0f;
+        rewardAfterBoss = afterBoss;
 
-        // Decide the weapon once, before displaying the reward card.
-        bool rewardRocket = Random.value < 0.5f;
+        // Decide the free item once, before displaying the reward card:
+        // early waves a skill (lure bomb / freeze), later a weapon (RPG / frenzy).
+        bool rewardSecond = Random.value < 0.5f; // RPG (not frenzy) / FREEZE (not lure)
+        bool rewardSkill = !afterBoss && spawner.CurrentWave <= EndlessEasyRewardWaves;
+        string freeName = afterBoss ? "RPG + FRENZY"
+            : rewardSkill ? (rewardSecond ? "FREEZE" : "LURE BOMB")
+            : rewardSecond ? "RPG" : "FRENZY";
 
         hud.ShowEndlessWaveReward(
-            rewardRocket ? "RPG" : "FRENZY",
-            choice => CompleteEndlessWaveReward(choice, rewardRocket));
+            freeName,
+            choice => CompleteEndlessWaveReward(choice, rewardSecond, rewardSkill),
+            afterBoss);
     }
 
-    private void CompleteEndlessWaveReward(EndlessWaveRewardChoice choice, bool rewardRocket)
+    // rewardSecond: the FREE card's second item (RPG / FREEZE); rewardSkill: it is a skill, not a weapon.
+    private void CompleteEndlessWaveReward(EndlessWaveRewardChoice choice, bool rewardSecond, bool rewardSkill)
     {
         if (State != GameState.Reward)
             return;
@@ -540,17 +570,31 @@ public class GameManager : MonoBehaviour
             case EndlessWaveRewardChoice.Energy:
                 SkillEnergy = Mathf.Min(
                     MaxSkillEnergy,
-                    SkillEnergy + EndlessRewardEnergy);
+                    SkillEnergy + (rewardAfterBoss ? EndlessBossRewardEnergy : EndlessRewardEnergy));
 
                 powers.OnComboChanged(Combo);
                 break;
 
             case EndlessWaveRewardChoice.FreeWeapon:
-                weapon = powers.GrantFreeWeaponReward(rewardRocket);
+                if (rewardAfterBoss)
+                {
+                    // Both weapons (each is skipped if one is already kept).
+                    string rocket = powers.GrantFreeWeaponReward(true);
+                    string frenzy = powers.GrantFreeWeaponReward(false);
+                    weapon = rocket != null && frenzy != null ? rocket + "+" + frenzy : rocket ?? frenzy;
+                }
+                else if (rewardSkill)
+                {
+                    weapon = powers.GrantFreePowerReward(rewardSecond); // a free freeze / lure bomb
+                }
+                else
+                {
+                    weapon = powers.GrantFreeWeaponReward(rewardSecond);
+                }
                 break;
 
             case EndlessWaveRewardChoice.Skip:
-                Score += EndlessRewardScore;
+                Score += rewardAfterBoss ? EndlessBossRewardScore : EndlessRewardScore;
                 hud.SetScore(Score);
                 break;
 
@@ -569,6 +613,7 @@ public class GameManager : MonoBehaviour
 
         AnalyticsEvent e = Analytics.NewEvent("wave_reward");
         e.Add("wave_number", spawner.CurrentWave);
+        e.Add("after_boss", rewardAfterBoss);
         e.Add("choice", choiceName);
         e.Add("health_gained", healthGained);
         e.Add("energy_gained", energyGained);
@@ -597,7 +642,7 @@ public class GameManager : MonoBehaviour
                 break;
 
             case EndlessWaveRewardChoice.Skip:
-                hud.ShowHint("+100 SCORE", 2f);
+                hud.ShowHint("+" + scoreGained + " SCORE", 2f);
                 break;
         }
 
@@ -665,9 +710,9 @@ public class GameManager : MonoBehaviour
     // kills 2 or more, every one of those kills is also multiplied by that number
     // (3 kills at once = x3 points each), and the HUD shows "TRIPLE KILL!".
     // Returns the points gained.
-    // earnsEnergy: false for blast kills (barrels, red zombies, lure bombs, the
-    // RPG). Only a word typed to the end earns energy, so a power never pays
-    // for the next one.
+    // earnsEnergy: false for the kills of a blast a POWER set off (a lure bomb,
+    // the RPG), so a power never pays for the next one. Typed kills and the
+    // kills of a blast the player typed off (a barrel, a red zombie) earn 1 each.
     public int AddKills(int count, bool earnsEnergy = true)
     {
         if (EasyTutorial.Active != null && EasyTutorial.Active.IsDemonstrating) return 0;

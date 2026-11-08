@@ -36,6 +36,13 @@ public class ExplosionChain
     // null = not logged.
     public AnalyticsEvent Report;
     public float BossDamage;                 // damage dealt to the boss by the whole chain
+
+    // ENERGY: true when the chain was set off by a word typed to the end (a
+    // barrel or a red zombie): its kills then earn energy like typed kills
+    // (1 each). False when a power set it off (a lure bomb, an RPG rocket),
+    // so a power never pays for the next one. A barrel or red zombie caught in
+    // a chain joins that chain and keeps its setting.
+    public bool EarnsEnergy;
     private int explosions;
     private int barrels;
     private readonly int[] killsByKind = new int[System.Enum.GetValues(typeof(ZombieKind)).Length];
@@ -102,7 +109,7 @@ public class ExplosionChain
         int points = 0;
         if (scored)
         {
-            points = gameManager.AddKills(Kills, false); // blast kills score, but earn no energy
+            points = gameManager.AddKills(Kills, EarnsEnergy); // energy only for a chain the player typed off (see EarnsEnergy)
             if (points > 0 && hasOrigin)
             {
                 ShowPoints(points);

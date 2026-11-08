@@ -36,6 +36,7 @@ public static class Palette
     public static readonly Color GhostPale = new Color(0.90f, 0.86f, 1.00f);    // pale lavender
     public static readonly Color BruteDark = new Color(0.45f, 0.25f, 0.20f);    // dark red-brown
     public static readonly Color SpitterAcid = new Color(0.75f, 0.95f, 0.10f);  // acid yellow-green (its globs too)
+    public static readonly Color SniperKhaki = new Color(0.82f, 0.72f, 0.48f);  // khaki: the SNIPER on the stands (its bullets too), with a red laser
 
     // ---- Props ----
     public static readonly Color LureCrate = new Color(1.00f, 0.32f, 0.30f);   // the LURE BOMB power (red, like the bomb's blink)
@@ -70,6 +71,7 @@ public static class Palette
     public static readonly Color WordGhost = new Color(0.86f, 0.80f, 1.00f);     // pale lavender
     public static readonly Color WordBrute = new Color(0.92f, 0.62f, 0.52f);     // red-brown (lighter than the dark body)
     public static readonly Color WordSpitter = new Color(0.80f, 1.00f, 0.15f);   // acid yellow-green
+    public static readonly Color WordSniper = new Color(1.00f, 0.88f, 0.62f);    // light khaki
 
     // The word colour of a zombie of this kind (an armored one with its armour on: WordArmor).
     public static Color WordFor(ZombieKind kind)
@@ -85,6 +87,7 @@ public static class Palette
             case ZombieKind.Ghost: return WordGhost;
             case ZombieKind.Brute: return WordBrute;
             case ZombieKind.Spitter: return WordSpitter;
+            case ZombieKind.Sniper: return WordSniper;
             default: return Color.white; // normal zombies are grey
         }
     }

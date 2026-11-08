@@ -122,7 +122,8 @@ public class Boss : MonoBehaviour
     private QuizAnswer chosenAnswer;
 
     // Builds the boss standing at stand (on the ground), facing the player at playerPosition.
-    public static Boss Create(Vector3 stand, Vector3 playerPosition, WaveSpawner owner, HUD hud)
+    // healthScale: ENDLESS's later bosses are tougher (1 = the normal boss).
+    public static Boss Create(Vector3 stand, Vector3 playerPosition, WaveSpawner owner, HUD hud, float healthScale = 1f)
     {
         GameObject root = new GameObject("Boss");
         root.transform.position = stand;
@@ -138,6 +139,7 @@ public class Boss : MonoBehaviour
 
         Boss boss = root.AddComponent<Boss>();
         boss.spawner = owner;
+        boss.maxHealth *= Mathf.Max(0.1f, healthScale);
         boss.Build(hud);
         return boss;
     }

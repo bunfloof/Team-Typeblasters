@@ -191,6 +191,7 @@ public class HUD : MonoBehaviour
         UpdatePowerPulses();
         UpdateShieldLook();
         UpdateComboRewardBar();
+        UpdateFullGlow();
         UpdateComboLook();
         UpdateHint();
         UpdateQuizPop();
@@ -932,11 +933,19 @@ public class HUD : MonoBehaviour
     // (see TypingDifficultySelector). The Easy scene has none.
 
     // Shows the difficulty picked now (TypingSettings.Difficulty).
+    // ENDLESS has no difficulty choice (one fixed typing style, see
+    // GameManager.EndlessTypingDifficulty): the row is hidden there.
     public void RefreshDifficulty()
     {
         if (difficultySelector != null)
         {
-            difficultySelector.Refresh();
+            GameManager game = GameManager.Instance;
+            bool endless = game != null && game.Spawner != null && game.Spawner.IsEndlessMode;
+            difficultySelector.gameObject.SetActive(!endless);
+            if (!endless)
+            {
+                difficultySelector.Refresh();
+            }
         }
     }
 
@@ -1500,10 +1509,11 @@ public class HUD : MonoBehaviour
         image.raycastTarget = false;
     }
 
-    public void ShowEndlessWaveReward(string weaponName, System.Action<EndlessWaveRewardChoice> onChoice)
+    // afterBoss: the bigger rewards after a BOSS wave (see GameManager).
+    public void ShowEndlessWaveReward(string weaponName, System.Action<EndlessWaveRewardChoice> onChoice, bool afterBoss = false)
     {
         if (endlessWaveReward != null)
-            endlessWaveReward.Show(onChoice, weaponName);
+            endlessWaveReward.Show(onChoice, weaponName, afterBoss);
     }
 
     public void HideEndlessWaveReward()
@@ -1778,6 +1788,7 @@ public class HUD : MonoBehaviour
     private readonly CanvasGroup[] powerRowGroups = new CanvasGroup[PowerCount]; // dims a whole row at once
     private readonly Image[] powerKeyCaps = new Image[PowerCount];
     private readonly TMP_Text[] powerNames = new TMP_Text[PowerCount];
+    private readonly string[] powerNameBase = new string[PowerCount]; // "LURE BOMB  6 E": the count ("x2") is added after it
     private readonly RectTransform[] powerPipStrips = new RectTransform[PowerCount]; // dark strip behind the pips
     private readonly List<Image> lurePips = new List<Image>();
     private readonly List<Image> freezePips = new List<Image>();
@@ -1794,6 +1805,7 @@ public class HUD : MonoBehaviour
 
         powerCharges[(int)PowerKind.Lure] = lureCharges;
         powerCharges[(int)PowerKind.Freeze] = freezeCharges;
+        RefreshPowerCounts();
         for (int row = 0; row < FrenzyRow; row++)
         {
             powerPipStrips[row].gameObject.SetActive(false);
@@ -1814,6 +1826,7 @@ public class HUD : MonoBehaviour
 
         powerCharges[FrenzyRow] = frenzyKept;
         powerCharges[RocketRow] = rocketKept;
+        RefreshPowerCounts();
         for (int row = FrenzyRow; row <= RocketRow; row++)
         {
             for (int slot = 0; slot < Powers.MaxKept; slot++)
@@ -1824,6 +1837,23 @@ public class HUD : MonoBehaviour
             {
                 ApplyPowerRowLook(row, 0f, 0f);
             }
+        }
+    }
+
+    // Free uses kept (wave rewards): "x2" in gold after the row's name and cost;
+    // nothing when none is kept.
+    private void RefreshPowerCounts()
+    {
+        for (int row = 0; row < PowerCount; row++)
+        {
+            if (powerNames[row] == null || powerNameBase[row] == null)
+            {
+                continue;
+            }
+            int count = powerCharges[row];
+            powerNames[row].text = count > 0
+                ? powerNameBase[row] + "  <color=#FFD54A>" + (PowerRowFull(count) ? "MAX" : "x" + count) + "</color>"
+                : powerNameBase[row];
         }
     }
 
@@ -2004,6 +2034,7 @@ public class HUD : MonoBehaviour
             TMP_Text nameText = CreateText(rowRect, "Name", powerName, 30f, Vector2.zero);
             int cost = row == 0 ? Powers.LureCost : row == 1 ? Powers.FreezeCost : row == FrenzyRow ? Powers.FrenzyCost : Powers.RocketCost;
             nameText.text += "  " + cost + " E";
+            powerNameBase[row] = nameText.text;
             PlaceRect(nameText.rectTransform, LeftMiddle, LeftMiddle, new Vector2(PowerNameX, 0f),
                 new Vector2(PowerNameWidth, PowerRowHeight));
             nameText.alignment = TextAlignmentOptions.Left;
@@ -2748,6 +2779,95 @@ public class HUD : MonoBehaviour
     }
 
     private TMP_Text energyNumber; // the energy, inside the ENERGY bar
+
+    // ---- FULL glow ----
+    // ENERGY at its maximum (GameManager.MaxSkillEnergy: more is lost), or a
+    // skill / weapon kept as often as it can be (Powers.KeptLimit, ENDLESS: 3),
+    // gets a soft pulsing halo behind it, so the player sees "use it, it is
+    // full". The energy number reads "FULL", a full row "MAX" (in place of "x3").
+    private static readonly Color EnergyGlowColor = new Color(0.35f, 1f, 0.9f);  // teal, like energy
+    private static readonly Color PowerGlowColor = new Color(1f, 0.84f, 0.3f);   // gold, like the "x3"
+    private const float GlowPulsesPerSecond = 1.4f;
+    private const float GlowSpread = 7f;     // units the halo reaches past what it surrounds
+    private Image energyGlow;
+    private readonly Image[] powerGlows = new Image[PowerCount];
+
+    private static bool PowerRowFull(int count)
+    {
+        return Powers.KeptLimit > 1 && count >= Powers.KeptLimit; // only where more than one can be kept
+    }
+
+    private void UpdateFullGlow()
+    {
+        GameManager game = GameManager.Instance;
+        bool playing = game != null && (game.State == GameState.Playing || game.State == GameState.Paused || game.State == GameState.Reward);
+        float pulse = 0.5f + 0.5f * Mathf.Sin(Time.unscaledTime * GlowPulsesPerSecond * Mathf.PI * 2f);
+        float alpha = Mathf.Lerp(0.25f, 0.8f, pulse);
+
+        // Energy.
+        if (comboRewardBar != null)
+        {
+            bool full = playing && game.SkillEnergy >= GameManager.MaxSkillEnergy;
+            if (full && energyGlow == null)
+            {
+                energyGlow = CreateImage("Energy Full Glow", comboRewardBar, EnergyGlowColor);
+                RectTransform glow = energyGlow.rectTransform;
+                glow.anchorMin = Vector2.zero;
+                glow.anchorMax = Vector2.one;
+                glow.offsetMin = new Vector2(-GlowSpread, -GlowSpread);
+                glow.offsetMax = new Vector2(GlowSpread, GlowSpread);
+                glow.SetAsFirstSibling(); // behind the fill and the number
+                energyGlow.raycastTarget = false;
+            }
+            if (energyGlow != null)
+            {
+                energyGlow.gameObject.SetActive(full);
+                Color c = EnergyGlowColor;
+                c.a = alpha;
+                energyGlow.color = c;
+            }
+            if (energyNumber != null && full)
+            {
+                energyNumber.text = "FULL";
+            }
+        }
+
+        // Skills and weapons kept to the limit.
+        for (int row = 0; row < PowerCount; row++)
+        {
+            if (powerRows[row] == null || powerNames[row] == null)
+            {
+                continue;
+            }
+            bool full = playing && PowerRowFull(powerCharges[row]);
+            if (full && powerGlows[row] == null)
+            {
+                powerGlows[row] = CreateImage("Full Glow", powerRows[row], PowerGlowColor);
+                RectTransform glow = powerGlows[row].rectTransform;
+                glow.anchorMin = new Vector2(0f, 0f);
+                glow.anchorMax = new Vector2(0f, 1f);
+                glow.pivot = new Vector2(0f, 0.5f);
+                glow.SetAsFirstSibling(); // behind the key cap and the name
+                powerGlows[row].raycastTarget = false;
+            }
+            if (powerGlows[row] != null)
+            {
+                powerGlows[row].gameObject.SetActive(full);
+                if (full)
+                {
+                    // From just left of the key cap to just past the end of the name.
+                    RectTransform glow = powerGlows[row].rectTransform;
+                    RectTransform name = powerNames[row].rectTransform;
+                    float right = name.anchoredPosition.x + powerNames[row].preferredWidth;
+                    glow.offsetMin = new Vector2(-GlowSpread, -GlowSpread * 0.5f);
+                    glow.offsetMax = new Vector2(right + GlowSpread, GlowSpread * 0.5f);
+                    Color c = PowerGlowColor;
+                    c.a = alpha * 0.7f;
+                    powerGlows[row].color = c;
+                }
+            }
+        }
+    }
 
     // ---- Hint box (bottom-centre, just above the target word box) ----
 

@@ -48,9 +48,10 @@ public class Explosion : MonoBehaviour
     // Blows up at center (a point on the ground) with the given radius. See the
     // comment at the top of the file. chain: the chain reaction this explosion
     // belongs to, or null to start a new one. report: the "blast" analytics
-    // event of a NEW chain, filled in by whatever set it off (see ExplosionChain).
+    // event of a NEW chain, filled in by whatever set it off (see ExplosionChain). earnsEnergy:
+    // for a NEW chain, whether its kills earn energy (ExplosionChain.EarnsEnergy).
     public static void Detonate(Vector3 center, float radius, ExplosionChain chain, float bossDamage,
-        AnalyticsEvent report)
+        AnalyticsEvent report, bool earnsEnergy = false)
     {
         // Every Detonate ends with exactly one chain.End(), so a new chain
         // needs its matching Begin() here.
@@ -59,6 +60,7 @@ public class Explosion : MonoBehaviour
             chain = new ExplosionChain();
             chain.Begin();
             chain.Report = report;
+            chain.EarnsEnergy = earnsEnergy;
         }
         chain.NoteExplosion(center); // the chain's points pop up where it started
 

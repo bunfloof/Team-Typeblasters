@@ -114,6 +114,7 @@ public class Barrel : MonoBehaviour, ITypingTarget
             chain = new ExplosionChain();
             chain.Report = Analytics.NewEvent("blast");
             chain.Report.Add("source", "barrel");
+            chain.EarnsEnergy = true; // its word was typed: the chain's kills earn energy
         }
         chain.NoteBarrel();
         chain.Begin(); // Explosion.Detonate calls the matching End()

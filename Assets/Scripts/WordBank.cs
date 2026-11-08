@@ -255,7 +255,7 @@ public static class WordBank
         {
             rolledBucket = ShortWords;
         }
-        else if (kind == ZombieKind.Armored || kind == ZombieKind.Splitter || kind == ZombieKind.Spitter)
+        else if (kind == ZombieKind.Armored || kind == ZombieKind.Splitter || kind == ZombieKind.Spitter || kind == ZombieKind.Sniper)
         {
             rolledBucket = MediumWords;
         }
