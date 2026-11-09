@@ -827,10 +827,13 @@ public static class GuidedIntro
         return v;
     }
 
-    private static void Log(string phase)
+    // step: start, skipped, guided_wave, lesson_skipped:<lesson> or complete.
+    // (Not named "phase": Analytics.Send adds the game's phase - ride / fight -
+    // under that name too, and the log server keeps only the last one.)
+    private static void Log(string step)
     {
         AnalyticsEvent e = Analytics.NewEvent("guided_intro");
-        e.Add("phase", phase);
+        e.Add("step", step);
         Analytics.Send(e);
     }
 }

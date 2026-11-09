@@ -62,6 +62,13 @@ public class ScreenFade : MonoBehaviour
         yield return Fade(0f, 1f, FadeOutSeconds);
 
         SceneManager.LoadScene(sceneName);
+        // The load is under way, so the next scene may already ask for its own
+        // fade (Esc on its Start panel, a quick Enter in the menu) while this
+        // overlay is still black or fading away. Clearing the flag later would
+        // drop that request, and the scene's own guard (GameManager.loadingLevel,
+        // MainMenu.loading) would then block every later Restart or Menu.
+        // The old scene cannot load twice: those same guards are already set.
+        running = false;
         while (SceneManager.GetActiveScene().name != sceneName)
         {
             yield return null;
@@ -72,8 +79,7 @@ public class ScreenFade : MonoBehaviour
         black.raycastTarget = false; // the player may already press Enter while it fades in
         yield return Fade(1f, 0f, FadeInSeconds);
 
-        running = false;
-        Destroy(gameObject);
+        Destroy(gameObject); // (a newer fade may have started meanwhile: it has its own overlay)
     }
 
     private IEnumerator Fade(float from, float to, float seconds)

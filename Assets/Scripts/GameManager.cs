@@ -357,10 +357,11 @@ public class GameManager : MonoBehaviour
             MainMenu.RequestLevelSelection();
         }
         loadingLevel = true;
-        // Restarted in the middle of a run (from the pause panel): it ends here.
+        // Restarted, or left for the main menu, in the middle of a run (from the
+        // pause panel): it ends here.
         if (State == GameState.Playing || State == GameState.Paused || State == GameState.Tip || State == GameState.Reward)
         {
-            LogRunEnd("restart");
+            LogRunEnd("restart", sceneName);
         }
 
         Time.timeScale = 1f; // in case we restart from the pause panel
@@ -903,7 +904,7 @@ public class GameManager : MonoBehaviour
         }
 
         // Logged while the state still says Playing (and before the waves stop).
-        LogRunEnd(won ? "won" : "lost");
+        LogRunEnd(won ? "won" : "lost", null);
 
         State = won ? GameState.Won : GameState.Lost;
         if (won)
@@ -928,14 +929,20 @@ public class GameManager : MonoBehaviour
     }
 
     // The "run_end" analytics event: how the run ended and its statistics.
-    // outcome: "won", "lost" or "restart" (Restart pressed in the middle of a run).
+    // outcome: "won", "lost" or "restart" (the run was left in the middle).
+    // nextScene (for "restart" only, else null): where the player went - the
+    // level's own name = Restart, "Menu" = back to the main menu.
     // Then what was still going on is logged too: the word being typed
     // ("word", outcome "run_ended") and every zombie still alive ("zombie",
     // outcome "run_over"), which would otherwise never be logged.
-    private void LogRunEnd(string outcome)
+    private void LogRunEnd(string outcome, string nextScene)
     {
         AnalyticsEvent e = Analytics.NewEvent("run_end");
         e.Add("outcome", outcome);
+        if (nextScene != null)
+        {
+            e.Add("next_scene", nextScene);
+        }
         e.Add("run_number", Analytics.RunNumber);
         e.Add("kills", Stats.Kills);
         e.Add("best_combo", Stats.BestCombo);

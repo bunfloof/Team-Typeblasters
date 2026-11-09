@@ -213,7 +213,8 @@ public class WaveSpawner : MonoBehaviour
 
     // What the player is doing now, for analytics: "ride" (on the rails),
     // "fight" (a zombie wave, its banner and gate included), "boss", or
-    // "none" (before the first ride).
+    // "none" (before the first ride). ENDLESS fights its bosses in the arena,
+    // which is not a boss encounter, so a boss on the field also counts.
     public string PhaseName
     {
         get
@@ -226,7 +227,7 @@ public class WaveSpawner : MonoBehaviour
             {
                 return "ride";
             }
-            return CurrentEncounter.IsBossFight ? "boss" : "fight";
+            return (CurrentEncounter.IsBossFight || boss != null) ? "boss" : "fight";
         }
     }
 
@@ -1074,6 +1075,7 @@ public class WaveSpawner : MonoBehaviour
             yield return new WaitForSeconds(BannerSeconds);
             hud.HideBanner();
 
+            yield return UntilNotPaused();
             if (game.State != GameState.Playing)
                 yield break;
 
@@ -1101,6 +1103,7 @@ public class WaveSpawner : MonoBehaviour
                 yield return RunZombieWave(wave, arena);
             }
 
+            yield return UntilNotPaused();
             if (game.State != GameState.Playing)
                 yield break;
 
@@ -1113,7 +1116,7 @@ public class WaveSpawner : MonoBehaviour
             waveEnd.Add("correct_keys", stats.CorrectKeys - correctKeysAtStart);
             waveEnd.Add("wrong_keys", stats.WrongKeys - wrongKeysAtStart);
             waveEnd.Add("health_at_start", healthAtStart);
-            waveEnd.Add("dda_extra_zombies", extraZombiesThisWave);
+            waveEnd.Add("dda_extra_zombies", bossWave ? 0 : extraZombiesThisWave); // a boss fight has no DDA extras (as in RunLevel)
             Analytics.AddPlayerState(waveEnd);
             Analytics.Send(waveEnd);
             Analytics.FlushSoon();
@@ -1135,7 +1138,8 @@ public class WaveSpawner : MonoBehaviour
             {
                 yield return null;
             }
-            
+
+            yield return UntilNotPaused();
             if (game == null || game.State != GameState.Playing)
             {
                 yield break;
@@ -1146,6 +1150,20 @@ public class WaveSpawner : MonoBehaviour
             {
                 yield return new WaitForSeconds(endlessWaveBreakSeconds);
             }
+            yield return UntilNotPaused(); // (the loop condition above must not see a pause)
+        }
+    }
+
+    // Waits while the game is paused (Esc, the pause button, the 3-2-1
+    // countdown). A wait in RunEndless can end in the very frame the player
+    // pauses: without this, its "not Playing" checks would take that pause
+    // for the end of the run, and no wave would ever come again.
+    private IEnumerator UntilNotPaused()
+    {
+        GameManager game = GameManager.Instance;
+        while (game != null && game.State == GameState.Paused)
+        {
+            yield return null;
         }
     }
 
@@ -1288,6 +1306,21 @@ public class WaveSpawner : MonoBehaviour
     public void AddStrayOrb(EnergyOrb orb)
     {
         strayOrbs.Add(orb);
+    }
+
+    // True while an acid glob or a SNIPER's bullet is still in the air. The
+    // wave waits for it (it is typed, hits, or is blocked by the shield), so it
+    // cannot hit the player after WAVE CLEARED, on the ride or after a reward.
+    private bool StrayOrbsInFlight()
+    {
+        foreach (EnergyOrb orb in strayOrbs)
+        {
+            if (orb != null && orb.IsAlive)
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     // Called by a SPLITTER shot dead at 'at': its word (splitterWord) broke
@@ -1769,13 +1802,16 @@ public class WaveSpawner : MonoBehaviour
 
         #if UNITY_EDITOR
             if (debugCompletingWave) break;
-        snipersOut = SpawnDueSnipers(wave, encounter, snipers, snipersOut, spawned, zombiesThisWave, false);
-        if (!rearDone && spawned * 2 >= zombiesThisWave)
-        {
-            rearDone = true;
-            StartCoroutine(RearRush(rearRush, speed));
-        }
         #endif
+            // (These two must stay OUTSIDE the #if above: inside it they only ran
+            // in the Editor, and the WebGL build sent every sniper and the rear
+            // rush at once after the last front zombie.)
+            snipersOut = SpawnDueSnipers(wave, encounter, snipers, snipersOut, spawned, zombiesThisWave, false);
+            if (!rearDone && spawned * 2 >= zombiesThisWave)
+            {
+                rearDone = true;
+                StartCoroutine(RearRush(rearRush, speed));
+            }
             SpawnPoint point = order[next % order.Count];
             next += 1;
 
@@ -1880,8 +1916,9 @@ public class WaveSpawner : MonoBehaviour
             StartCoroutine(RearRush(rearRush, speed));
         }
 
-        // 3. Wait until every zombie of this wave is dead or removed.
-        while (aliveZombies.Count > 0 || rearPending > 0)
+        // 3. Wait until every zombie of this wave is dead or removed, and its
+        //    globs and bullets are gone too.
+        while (aliveZombies.Count > 0 || rearPending > 0 || StrayOrbsInFlight())
         {
             yield return null;
         }

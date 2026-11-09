@@ -173,11 +173,13 @@ public class EnergyOrb : MonoBehaviour, ITypingTarget
 
     private float launchTime; // game time it was fired
 
-    // outcome: "shot" (its word was typed), "hit_player" or "boss_died".
+    // outcome: "shot" (its word was typed), "hit_player", "shield_blocked" or
+    // "boss_died". projectile_kind: who fired it - boss, spitter or sniper.
     private void LogEnd(string outcome)
     {
         AnalyticsEvent e = Analytics.NewEvent("orb");
         e.Add("outcome", outcome);
+        e.Add("projectile_kind", damageSource); // as in the "damage" event
         e.Add("word", Word);
         e.Add("word_length", Word.Length);
         e.Add("letters_typed", TypedCount);
