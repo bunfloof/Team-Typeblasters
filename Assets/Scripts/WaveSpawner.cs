@@ -1323,6 +1323,16 @@ public class WaveSpawner : MonoBehaviour
         return false;
     }
 
+    // True while an explosion is still going off. A red zombie caught in a
+    // blast explodes 0.15 s later, and the whole chain scores its kills (and
+    // energy) only when its last blast is done. Without this wait the wave's
+    // "wave_end" kills and the checkpoint would miss a chain that clears the
+    // wave. An Explosion removes itself about half a second after its blast.
+    private static bool ExplosionsGoingOff()
+    {
+        return Object.FindFirstObjectByType<Explosion>() != null;
+    }
+
     // Called by a SPLITTER shot dead at 'at': its word (splitterWord) broke
     // into two halves. Two SPLITLINGS appear on its left and right (as seen by
     // the player), each carrying a new word that HIDES one half ("SUN" ->
@@ -1916,9 +1926,9 @@ public class WaveSpawner : MonoBehaviour
             StartCoroutine(RearRush(rearRush, speed));
         }
 
-        // 3. Wait until every zombie of this wave is dead or removed, and its
-        //    globs and bullets are gone too.
-        while (aliveZombies.Count > 0 || rearPending > 0 || StrayOrbsInFlight())
+        // 3. Wait until every zombie of this wave is dead or removed, its globs
+        //    and bullets are gone too, and a last chain reaction has scored.
+        while (aliveZombies.Count > 0 || rearPending > 0 || StrayOrbsInFlight() || ExplosionsGoingOff())
         {
             yield return null;
         }

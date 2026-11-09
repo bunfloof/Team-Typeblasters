@@ -804,6 +804,7 @@ public class Powers : MonoBehaviour
         if (IsFrozen)
         {
             hud.ShowHint("FREEZE ACTIVE",1.5f);
+            LogUseRefused("freeze","already_active","key"); // like the shield, FRENZY and RPG: the press is counted (key repeats never get here, see TypingController)
             return;
         }
         int before = GameManager.Instance.SkillEnergy;
@@ -819,7 +820,6 @@ public class Powers : MonoBehaviour
             return;
         }
 
-        bool alreadyFrozen = IsFrozen;
         RefreshHud();
         hud.PulsePower(PowerKind.Freeze);
         freezeTimeLeft = EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave && !EasyTutorial.Active.IsDemonstrating ? 15f
@@ -828,7 +828,8 @@ public class Powers : MonoBehaviour
         AnalyticsEvent e = PowerEvent("use", "freeze");
         e.Add("energy_before",before); e.Add("energy_spent",free ? 0 : FreezeCost); e.Add("energy_after",GameManager.Instance.SkillEnergy);
         if (free) e.Add("free_reward", true);
-        e.Add("while_frozen", alreadyFrozen); // used again before the last one ran out
+        // (No "while_frozen" any more: a press during a freeze is refused above,
+        // logged as use_refused "already_active".)
         SendPowerEvent(e);
     }
 

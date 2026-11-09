@@ -75,6 +75,11 @@ public class TypingController : MonoBehaviour
     private const char FrenzyKey = '3';  // combo weapons (see Powers)
     private const char RocketKey = '4';
 
+    // A typed "2" while the 2 key has been held longer than this is the key
+    // repeating, not a new press (key repeat starts after 0.25 s or more).
+    private const float FreezeRepeatSeconds = 0.2f;
+    private float freezeKeyDownTime = -1f; // unscaled time the 2 key last went down
+
     // CANDIDATES: every target whose word matches everything typed so far.
     // Usually one (first letters on screen are kept different), but word
     // families share a start on purpose: with "hunt" and "hunter" on screen,
@@ -148,9 +153,11 @@ public class TypingController : MonoBehaviour
     private readonly System.Text.StringBuilder attemptKeyMs = new System.Text.StringBuilder(); // "0,180,320,..." ms of each correct key after the first
 
     // Letters typed into the current word so far (0 when nothing is being typed).
+    // runLetters, not attemptCorrectKeys: a waiting word that is picked up again
+    // keeps the letters typed before it waited (the attempt counts from 0).
     public int LettersTypedInWord
     {
-        get { return attemptActive ? attemptCorrectKeys : 0; }
+        get { return attemptActive ? runLetters : 0; }
     }
 
 #if ENABLE_INPUT_SYSTEM
@@ -189,6 +196,7 @@ public class TypingController : MonoBehaviour
         bool rocketDown, rocketUp; // 4, the same for the RPG
         bool textModifier;
         Vector2 arrows;    // arrow keys held: x = Right - Left, y = Up - Down (steer the lure bomb)
+        bool freezeRepeat; // a typed "2" this frame is only the held 2 key repeating (see below)
 
 #if ENABLE_INPUT_SYSTEM
         // Keyboard.current can be missing on the very first frames, or change if a
@@ -228,6 +236,17 @@ public class TypingController : MonoBehaviour
             arrows.x = (keyboard.rightArrowKey.isPressed ? 1f : 0f) - (keyboard.leftArrowKey.isPressed ? 1f : 0f);
             arrows.y = (keyboard.upArrowKey.isPressed ? 1f : 0f) - (keyboard.downArrowKey.isPressed ? 1f : 0f);
         }
+        // The freeze (2) is read from the typed text, and a held key repeats its
+        // character (after about half a second, then ~30 times a second). Only a
+        // new press may use the freeze or log a refusal, like 1, 3 and 4: a "2"
+        // while the key has been down longer than FreezeRepeatSeconds is a repeat.
+        // (A phone's FREEZE button types "2" with no key down: always a new press.)
+        if (keyboard != null && (keyboard.digit2Key.wasPressedThisFrame || keyboard.numpad2Key.wasPressedThisFrame))
+        {
+            freezeKeyDownTime = Time.unscaledTime;
+        }
+        freezeRepeat = keyboard != null && (keyboard.digit2Key.isPressed || keyboard.numpad2Key.isPressed)
+            && Time.unscaledTime - freezeKeyDownTime > FreezeRepeatSeconds;
 #else
         typedText = Input.inputString;
         textModifier = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)
@@ -246,6 +265,12 @@ public class TypingController : MonoBehaviour
         arrows = new Vector2(
             (Input.GetKey(KeyCode.RightArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.LeftArrow) ? 1f : 0f),
             (Input.GetKey(KeyCode.UpArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.DownArrow) ? 1f : 0f));
+        if (Input.GetKeyDown(KeyCode.Alpha2) || Input.GetKeyDown(KeyCode.Keypad2))
+        {
+            freezeKeyDownTime = Time.unscaledTime;
+        }
+        freezeRepeat = (Input.GetKey(KeyCode.Alpha2) || Input.GetKey(KeyCode.Keypad2))
+            && Time.unscaledTime - freezeKeyDownTime > FreezeRepeatSeconds;
 #endif
 
         // ---- 1b. The SETTINGS panel is open (Start or pause panel): Esc / Enter close it, nothing else happens ----
@@ -401,7 +426,7 @@ public class TypingController : MonoBehaviour
             }
             if (character == FreezeKey)
             {
-                if (coach == null || coach.AllowsPower("freeze")) GameManager.Instance.Powers.TryUseFreeze();
+                if (!freezeRepeat && (coach == null || coach.AllowsPower("freeze"))) GameManager.Instance.Powers.TryUseFreeze();
                 continue;
             }
             // No word ever contains a digit (the number keys are the powers),
@@ -821,16 +846,21 @@ public class TypingController : MonoBehaviour
             e.Add("case_only", char.ToUpperInvariant(typed) == char.ToUpperInvariant(expected));
             e.Add("target", Analytics.TargetType(nearest));
             e.Add("target_id", Analytics.TargetId(nearest));
-            e.Add("letter_index", attemptCorrectKeys); // 0 = the first letter
+            e.Add("letter_index", runLetters); // 0 = the first letter (a resumed waiting word counts its earlier letters)
             e.Add("word_length", nearest.Word.Length);
         }
         else
         {
             // Did it start a word if the case is ignored? (e.g. "h" for "Hunter" on Hard)
+            // A word already started (a waiting word) is skipped, as when a word is
+            // started: its first letter typed again is a wrong key, not a case slip.
+            // So is a word that ignores case: with the right letter it would have
+            // started, so missing it here was never about the case.
             ITypingTarget sameLetter = null;
             foreach (ITypingTarget target in spawner.GetTypingTargets())
             {
-                if (!target.IsWordComplete && char.ToUpperInvariant(target.Word[0]) == char.ToUpperInvariant(typed))
+                if (!target.IsWordComplete && !target.IsTargeted && target.IsCaseSensitive
+                    && char.ToUpperInvariant(target.Word[0]) == char.ToUpperInvariant(typed))
                 {
                     sameLetter = target;
                     break;
@@ -850,12 +880,17 @@ public class TypingController : MonoBehaviour
 
     // How a word is written: "plain" (not case-sensitive), or for a
     // case-sensitive word "lower", "title" (first letter capital), "mixed"
-    // (capitals elsewhere) or "symbols" (anything but letters, e.g. "Sp@rk" or "Hunter!").
+    // (capitals elsewhere), "symbols" (anything but letters, e.g. "Sp@rk" or
+    // "Hunter!") or "phrase" (a BRUTE's words with spaces, each written its own way).
     private static string WordStyle(string word, bool caseSensitive)
     {
         if (!caseSensitive || word.Length == 0)
         {
             return "plain";
+        }
+        if (word.IndexOf(' ') >= 0)
+        {
+            return "phrase"; // its spaces are not symbols, and each part has its own capitals
         }
         bool capitalLater = false;
         foreach (char character in word)
