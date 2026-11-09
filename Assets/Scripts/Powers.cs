@@ -272,11 +272,19 @@ public class Powers : MonoBehaviour
     }
 
     // Availability uses independent energy and refuses to charge an active skill.
+    // CanUseNow: usable this very moment (only while Playing; the analytics
+    // "can_use_*" fields). HasWeaponReady: what the HUD rows and the phone
+    // buttons show, whatever the state, so they do not look empty during the
+    // 3-2-1 countdown after a pause.
     public bool CanUseNow(bool rocket)
     {
         GameManager game = GameManager.Instance;
-        return game.State == GameState.Playing
-            && !(rocket ? RocketLoaded : IsFrenzy)
+        return game.State == GameState.Playing && HasWeaponReady(rocket);
+    }
+
+    public bool HasWeaponReady(bool rocket)
+    {
+        return !(rocket ? RocketLoaded : IsFrenzy)
             && (rocket
                 ? RocketKept > 0 || GameManager.Instance.SkillEnergy >= RocketCost
                 : FrenzyKept > 0 || GameManager.Instance.SkillEnergy >= FrenzyCost);

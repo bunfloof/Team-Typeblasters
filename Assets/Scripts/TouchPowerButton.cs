@@ -194,17 +194,20 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
             return;
         }
 
+        // A free use kept from an ENDLESS wave reward needs no energy, so the
+        // button shows "FREE x1" instead of the cost and is not dimmed (on phones
+        // these buttons are the only place that shows it: the HUD's powers list is hidden).
         bool usable;
         switch (power)
         {
             case Power.Lure:
-                countText.text = Powers.LureCost + " E";
-                usable = GameManager.Instance.SkillEnergy >= Powers.LureCost || powers.IsAiming;
+                countText.text = powers.LureCharges > 0 ? "FREE x" + powers.LureCharges : Powers.LureCost + " E";
+                usable = powers.LureCharges > 0 || GameManager.Instance.SkillEnergy >= Powers.LureCost || powers.IsAiming;
                 statusText.text = powers.IsAiming ? "DRAG TO AIM" : usable ? "TAP / DRAG" : "LOW ENERGY";
                 break;
             case Power.Freeze:
-                countText.text = Powers.FreezeCost + " E";
-                usable = GameManager.Instance.SkillEnergy >= Powers.FreezeCost || Powers.IsFrozen;
+                countText.text = powers.FreezeCharges > 0 ? "FREE x" + powers.FreezeCharges : Powers.FreezeCost + " E";
+                usable = powers.FreezeCharges > 0 || GameManager.Instance.SkillEnergy >= Powers.FreezeCost || Powers.IsFrozen;
                 statusText.text = Powers.IsFrozen ? "ACTIVE" : usable ? "TAP" : "LOW ENERGY";
                 break;
             case Power.Shield:
@@ -214,10 +217,11 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
                 break;
             default:
                 bool rocket = power == Power.Rocket;
-                bool ready = powers.CanUseNow(rocket);
+                bool ready = powers.HasWeaponReady(rocket); // (not CanUseNow: that is false during the 3-2-1 countdown)
                 int cost = rocket ? Powers.RocketCost : Powers.FrenzyCost;
                 bool running = rocket ? powers.RocketLoaded : Powers.IsFrenzy;
-                countText.text = cost + " E";
+                int kept = rocket ? powers.RocketKept : powers.FrenzyKept;
+                countText.text = kept > 0 ? "FREE x" + kept : cost + " E";
                 statusText.text = running ? (rocket ? "LOADED" : "ACTIVE") : ready ? "TAP" : "LOW ENERGY";
                 usable = ready || running;                break;
         }

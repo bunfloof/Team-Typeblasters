@@ -267,7 +267,7 @@ public class HUD : MonoBehaviour
             }
             SetShown(powersPanel.gameObject, anyPower && !TouchControls.Active);
         }
-        if (shieldRow != null) SetShown(shieldRow.gameObject, HudReveal.IsShown(HudFeature.Shield));
+        if (shieldRow != null) SetShown(shieldRow.gameObject, HudReveal.IsShown(HudFeature.Shield) && !TouchControls.Active); // phones: the SHIELD button replaces it
         SetShown(targetWordText.transform.parent.gameObject, !string.IsNullOrEmpty(targetWordText.text)); // no empty box
     }
 
@@ -287,7 +287,7 @@ public class HUD : MonoBehaviour
             for (int row = 0; row < PowerCount; row++) SetShown(powerRows[row].gameObject, true);
             SetShown(powersPanel.gameObject, !TouchControls.Active);
         }
-        if (shieldRow != null) SetShown(shieldRow.gameObject, true);
+        if (shieldRow != null) SetShown(shieldRow.gameObject, !TouchControls.Active); // phones: the SHIELD button replaces it
         SetShown(targetWordText.transform.parent.gameObject, true); // the word box (hidden while empty during the intro)
     }
 
@@ -465,7 +465,7 @@ public class HUD : MonoBehaviour
         if (label != null) label.gameObject.SetActive(true);
         if (comboPlate != null) comboPlate.gameObject.SetActive(true);
         if (powersPanel != null) powersPanel.gameObject.SetActive(!TouchControls.Active);
-        if (shieldRow != null) shieldRow.gameObject.SetActive(true);
+        if (shieldRow != null) shieldRow.gameObject.SetActive(!TouchControls.Active); // phones: the SHIELD button replaces it
         targetWordText.transform.parent.gameObject.SetActive(true);
     }
 
@@ -1918,7 +1918,7 @@ public class HUD : MonoBehaviour
 
         Color color = PowerColor(row);
         bool active = IsPowerRowActive(row);
-        bool ready = row >= FrenzyRow && GameManager.Instance.Powers.CanUseNow(row == RocketRow);
+        bool ready = row >= FrenzyRow && GameManager.Instance.Powers.HasWeaponReady(row == RocketRow); // (not dimmed during the 3-2-1 countdown)
         flash = Mathf.Max(flash, active ? 0.7f : 0f);
         powerKeyCaps[row].color = Color.Lerp(Color.white, color, flash);
         powerNames[row].color = Color.Lerp(Color.white, color, flash);
@@ -2286,6 +2286,14 @@ public class HUD : MonoBehaviour
         shieldBar = bar.rectTransform;
         shieldBarFill = fill.rectTransform;
         bar.gameObject.SetActive(false);
+
+        // On phones the touch row's SHIELD button shows all of this (like the
+        // powers list, which is hidden there too): this row would only float
+        // alone over the view as a copy of that button.
+        if (TouchControls.Active)
+        {
+            shieldRow.gameObject.SetActive(false);
+        }
 
         // The glow: under every readout, over the enemy words only at the very edges.
         RectTransform glow = CreateRect("ShieldGlow", readoutLayer);

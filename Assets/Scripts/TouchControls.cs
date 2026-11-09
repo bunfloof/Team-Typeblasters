@@ -155,6 +155,8 @@ public class TouchControls : MonoBehaviour
         " (or click it)", "",
         "kept bottom-left", "kept on its button",
         "(a bar fills under its slots)", "(its button fills up)",
+        "<b>ENTER</b>  continue from", "<b>Continue</b> from", // the death screen after a checkpoint (its button says Continue)
+        "(pause with Esc)", "(pause with II)",                 // the adaptive-difficulty hint (II = the pause button)
     };
 
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -201,7 +203,6 @@ public class TouchControls : MonoBehaviour
     // hints), and the menu panels (Start, end screens, pause, the tip box).
     private readonly List<RectTransform> uprightLayers = new List<RectTransform>();
     private readonly List<RectTransform> menuPanels = new List<RectTransform>();
-    private bool tipPanelFound;
     private RectTransform wordLayer;     // the enemy words' layer (one of uprightLayers)
     private RectTransform hintLayer;     // the hints' layer (one of uprightLayers)
     private GameState lastState;         // (a new state or new panel: look at the texts at once)
@@ -537,8 +538,8 @@ public class TouchControls : MonoBehaviour
         }
     }
 
-    // The menu panels (they fill the screen, after the play area). The tip box
-    // panel is added when HUD makes it (FindTipPanel).
+    // The menu panels (they fill the screen, after the play area). Panels built
+    // later, or with their buttons inside a box, are added by FindLatePanels.
     private void FindMenuPanels()
     {
         menuPanels.Clear();
@@ -547,7 +548,6 @@ public class TouchControls : MonoBehaviour
         menuTextSizes.Clear();
         menuTextMargins.Clear();
         menuTextsFitTo = -1f;
-        tipPanelFound = false;
         foreach (Transform child in canvasRect)
         {
             RectTransform rect = child as RectTransform;
@@ -574,20 +574,22 @@ public class TouchControls : MonoBehaviour
         }
     }
 
-    private void FindTipPanel()
+    // Full-screen panels that FindMenuPanels cannot see, so held upright they
+    // were drawn at a third less than the menus around them: built after the
+    // scene was set up (the tip box, the Restart / Menu confirmation, SETTINGS)
+    // or with their buttons inside a box (the ENDLESS wave reward). Found by name.
+    private static readonly string[] LatePanelNames = { "TipPanel", "ConfirmationPanel", "EndlessWaveReward", "Settings Panel" };
+
+    private void FindLatePanels()
     {
-        if (tipPanelFound)
+        foreach (string panelName in LatePanelNames)
         {
-            return;
-        }
-        RectTransform tipPanel = canvasRect.Find("TipPanel") as RectTransform;
-        if (tipPanel != null)
-        {
-            tipPanelFound = true;
-            if (FillsParent(tipPanel))
+            RectTransform panel = canvasRect.Find(panelName) as RectTransform;
+            // (Once scaled it no longer "fills its parent": Contains keeps it from being added twice.)
+            if (panel != null && !menuPanels.Contains(panel) && FillsParent(panel))
             {
-                tipPanel.pivot = new Vector2(0.5f, 0.5f);
-                menuPanels.Add(tipPanel);
+                panel.pivot = new Vector2(0.5f, 0.5f);
+                menuPanels.Add(panel);
             }
         }
     }
@@ -951,7 +953,7 @@ public class TouchControls : MonoBehaviour
 
         // Held upright, the menus and the FULL SCREEN button finger-sized again.
         float menuScale = upright ? UprightUiScale : 1f;
-        FindTipPanel();
+        FindLatePanels();
         foreach (RectTransform panel in menuPanels)
         {
             if (panel != null)

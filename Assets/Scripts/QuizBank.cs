@@ -179,7 +179,7 @@ public static class QuizBank
         List<int> candidates = new List<int>();
         for (int i = 0; i < Questions.Length; i++)
         {
-            if (i != lastPickedIndex && !UsesAnyLetter(Questions[i], usedFirstLetters))
+            if (i != lastPickedIndex && !UsesAnyLetter(Questions[i], usedFirstLetters) && !AsksAboutMissingKey(i))
             {
                 candidates.Add(i);
             }
@@ -191,7 +191,7 @@ public static class QuizBank
         {
             for (int i = 0; i < Questions.Length; i++)
             {
-                if (i != lastPickedIndex)
+                if (i != lastPickedIndex && !AsksAboutMissingKey(i))
                 {
                     candidates.Add(i);
                 }
@@ -207,6 +207,20 @@ public static class QuizBank
         int index = candidates[Random.Range(0, candidates.Count)];
         lastPickedIndex = index;
         return ShuffledCopy(Questions[index]);
+    }
+
+    // True for a question about a keyboard key that a phone does not have: a
+    // phone player pauses with the II button and drops a target with Delete,
+    // so "ESCAPE" and "BACKSPACE" would be guesses (and a wrong answer heals
+    // the boss). Those two questions are only asked with a keyboard.
+    private static bool AsksAboutMissingKey(int index)
+    {
+        if (!TouchControls.Active)
+        {
+            return false;
+        }
+        string question = Questions[index].Question;
+        return question == "WHAT KEY PAUSES THE GAME?" || question == "WHAT KEY DROPS YOUR TARGET?";
     }
 
     // Builds one question: the first answer is the right one.
