@@ -1408,6 +1408,7 @@ public class WaveSpawner : MonoBehaviour
             }
             else if (wave == 1 && GuidedIntro.Running)
             {
+                LogGuidedWaveStart();
                 yield return GuidedIntro.RunGuidedWave(); // Normal: wave 1 teaches the game, one thing at a time
             }
             else
@@ -2289,6 +2290,22 @@ public class WaveSpawner : MonoBehaviour
         e.Add("dda_pace_factor", DynamicDifficulty.PaceFactor);
         e.Add("dda_spawn_factor", DynamicDifficulty.SpawnIntervalFactor); // zombie_speed and spawn_interval above are the level's own; these scale them
         e.Add("dda_pack_bonus", DynamicDifficulty.PackBonus);              // added to group_size
+        Analytics.AddPlayerState(e);
+        Analytics.Send(e);
+    }
+
+    // The "wave_start" event of Normal's guided first wave (GuidedIntro sends
+    // its own zombies one lesson at a time, so there is no plan to log). The
+    // dashboard needs it to count the players who reached wave 1's fight.
+    private void LogGuidedWaveStart()
+    {
+        AnalyticsEvent e = Analytics.NewEvent("wave_start");
+        e.Add("boss_fight", false);
+        e.Add("guided", true);
+        e.Add("map_view", IsMapViewWave);
+        e.Add("barrels", ActiveBarrels.Count);
+        e.Add("crates", activeCrates.Count);
+        DynamicDifficulty.AddTo(e);
         Analytics.AddPlayerState(e);
         Analytics.Send(e);
     }
