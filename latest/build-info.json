@@ -1,15 +1,15 @@
 {
-  "version": "latest-2026-11-08-82c36be",
-  "source_commit": "82c36bef7cae60b922d8437ffa4ea10b7003df4c",
-  "commit_message": "fix fade softlock, endless, analytic fields",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/42550381228",
+  "version": "latest-2026-11-08-59ef75f",
+  "source_commit": "59ef75fb6b41dc6afb1a23a7d664d93098066e63",
+  "commit_message": "fix analytics logging of resuming word letters, case sensitive, chain kills in wave_end",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/42552204867",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-09T02:30:06.061427Z",
+  "published_utc": "2026-11-09T02:49:48.185332Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14427591,
-      "sha256": "d42b80ca1c025446512580b5f26a2c6da356660179f2947580b55b99b8ca7b17"
+      "bytes": 14427722,
+      "sha256": "4c5b4f023d2d390fed2f2fc12c2ffb9b4c7adabedeea0b7d0a2b5e50cf53e8ea"
     },
     {
       "path": "Build/WebGL.framework.js",
@@ -19,12 +19,12 @@
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "e52539be0698ef341e4beb413c0c3c1a110f154d36367c373743bff381570cb7"
+      "sha256": "0b83d0fd37519f5bd75f80329ed5ca95300d0c298ab5f1f75b4db484f56eea47"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48254951,
-      "sha256": "7d664378d80f03c1f1d3e97cd2ee158dd7b0bd203197a46baed0bded5358b28a"
+      "bytes": 48255679,
+      "sha256": "b3c2dddf68aac45ab8819a10b06b47c9904046573ec7dbe6c310dbc2a81ada3f"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7415,
-      "sha256": "614680125729312292ff0bc061ad9dd45f24a7374a863773991750d057c15391"
+      "sha256": "0c5c3915e58725fb2542892e9cf2010c872492e0e0e8db4932850c540a1b134a"
     }
   ]
 }
