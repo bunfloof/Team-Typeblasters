@@ -77,6 +77,7 @@ public class GuidedIntroView : MonoBehaviour
         view.tint.raycastTarget = false;
 
         view.hud = hud;
+        view.rootGroup = go.AddComponent<CanvasGroup>();
         view.Build();
         return view;
     }
@@ -216,8 +217,16 @@ public class GuidedIntroView : MonoBehaviour
 
     // ---- Every frame ----
 
+    private CanvasGroup rootGroup; // hides the whole intro (card, arrow, skip chip) while the game is not being played
+
     private void LateUpdate()
     {
+        // Paused, a menu or the results: the intro steps aside (it is drawn over
+        // the HUD, so it would cover the pause panel and its controls list).
+        bool playing = GameManager.Instance == null || GameManager.Instance.State == GameState.Playing;
+        rootGroup.alpha = playing ? 1f : 0f;
+        rootGroup.blocksRaycasts = playing;
+
         // The tint fades in while the world is held.
         float tintAlpha = Mathf.MoveTowards(tint.color.a, GuidedIntro.Holding ? HoldTint : 0f, Time.unscaledDeltaTime * 1.2f);
         tint.color = new Color(0f, 0f, 0f, tintAlpha);

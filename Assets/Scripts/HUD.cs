@@ -1298,6 +1298,36 @@ public class HUD : MonoBehaviour
         pauseKeyboardSelectionStarted = false;
         pausePanel.SetActive(true);
         BuildPauseMenuSelection();
+        ShowControlsReference();
+        bannerText.enabled = false; // a "Wave N" banner would show through "PAUSED"
+    }
+
+    // ---- Controls reference (bottom of the pause panel) ----
+    // Every key in one place: Esc always brings it up. Built in code the
+    // first time the game is paused.
+
+    private TMP_Text controlsReference;
+
+    private void ShowControlsReference()
+    {
+        if (controlsReference == null)
+        {
+            controlsReference = CreateText(pausePanel.transform, "Controls Reference", "", 26f, Vector2.zero);
+            PlaceRect(controlsReference.rectTransform, BottomCentre, BottomCentre, new Vector2(0f, 36f), new Vector2(1500f, 120f));
+            controlsReference.alignment = TextAlignmentOptions.Bottom;
+            controlsReference.textWrappingMode = TextWrappingModes.Normal;
+            controlsReference.color = SmallTextColor;
+            controlsReference.raycastTarget = false;
+        }
+        const string Key = "<color=#FFCC61><b>";
+        const string End = "</b></color>";
+        controlsReference.text = TouchControls.Active
+            ? "<b>CONTROLS</b>\n" + Key + "Type" + End + " a word to shoot   " + Key + "DEL" + End + " drop word   "
+                + Key + "LURE" + End + " tap or drag to aim   " + Key + "FREEZE  FRENZY  RPG" + End + " tap   "
+                + Key + "SHIELD" + End + " block hits   " + Key + "II" + End + " pause"
+            : "<b>CONTROLS</b>\n" + Key + "Type" + End + " a word to shoot   " + Key + "Backspace" + End + " drop word   "
+                + Key + "1" + End + " lure bomb (hold, " + Key + "arrows" + End + " to aim)   " + Key + "2" + End + " freeze   "
+                + Key + "3" + End + " frenzy   " + Key + "4" + End + " RPG   " + Key + "Tab" + End + " shield   " + Key + "Esc" + End + " pause";
     }
 
     public void HidePausePanel()
@@ -1306,6 +1336,7 @@ public class HUD : MonoBehaviour
         ClearPauseMenuSelection();
         pauseKeyboardSelectionStarted = false;
         pausePanel.SetActive(false);
+        bannerText.enabled = true;
     }
 
     // Finds the buttons under the visible pause panel.
