@@ -163,12 +163,33 @@ foreach($plan in $plans) {
 # Trail paving follows the new path; flat patches overlap at turns.
 $walking=[Collections.Generic.List[object]]::new(); $from=@(-75,-75)
 foreach($plan in $plans) { foreach($p in (@($plan.route)+@(,$plan.stop))) { $walking.Add(@($from,$p)); $from=$p } }
+function WalkingClearance($x,$z) {
+    $distance=[double]::PositiveInfinity
+    foreach($segment in $walking) {
+        $a=$segment[0]; $b=$segment[1]; $dx=$b[0]-$a[0]; $dz=$b[1]-$a[1]
+        $t=[Math]::Clamp((($x-$a[0])*$dx+($z-$a[1])*$dz)/($dx*$dx+$dz*$dz),0,1)
+        $distance=[Math]::Min($distance,[Math]::Sqrt([Math]::Pow($x-$a[0]-$dx*$t,2)+[Math]::Pow($z-$a[1]-$dz*$t,2)))
+    }
+    return $distance
+}
 foreach($segment in $walking) {
     $a=$segment[0]; $b=$segment[1]; $dx=$b[0]-$a[0]; $dz=$b[1]-$a[1]; $length=[Math]::Sqrt($dx*$dx+$dz*$dz)
     $yaw=[Math]::Atan2($dx,$dz)*180/[Math]::PI
     [void](Shape 'Forest Dirt Trail' "x: $(($a[0]+$b[0])/2), y: 0.015, z: $(($a[1]+$b[1])/2)" "x: 6, y: 0.025, z: $($length+3)" 'ForestTrail' $land.transform -yaw $yaw)
-    [void](Shape 'Trail Lantern Post' "x: $($b[0]+4), y: 1.1, z: $($b[1])" 'x: 0.15, y: 2.2, z: 0.15' 'ForestBark' $props.transform)
-    [void](Shape 'Trail Lantern Glow' "x: $($b[0]+4), y: 2.1, z: $($b[1])" 'x: 0.4, y: 0.5, z: 0.4' 'ForestLantern' $props.transform)
+    $lx=$b[0]+4; $lz=$b[1]
+    # A fixed +X offset can put a lantern directly on the next leg of the route.
+    if((WalkingClearance $lx $lz) -lt 2) {
+        $best=-1
+        foreach($step in 0..23) {
+            $angle=$step*[Math]::PI/12
+            $cx=$b[0]+4.5*[Math]::Cos($angle); $cz=$b[1]+4.5*[Math]::Sin($angle)
+            $clearance=WalkingClearance $cx $cz
+            if($clearance -gt $best) { $best=$clearance; $lx=$cx; $lz=$cz }
+        }
+        if($best -lt 2) { throw 'No clear lantern position beside the forest route' }
+    }
+    [void](Shape 'Trail Lantern Post' "x: $lx, y: 1.1, z: $lz" 'x: 0.15, y: 2.2, z: 0.15' 'ForestBark' $props.transform)
+    [void](Shape 'Trail Lantern Glow' "x: $lx, y: 2.1, z: $lz" 'x: 0.4, y: 0.5, z: 0.4' 'ForestLantern' $props.transform)
 }
 function Clearance($x,$z) {
     $distance=[double]::PositiveInfinity

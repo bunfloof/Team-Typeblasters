@@ -364,6 +364,8 @@ public class CameraDirector : MonoBehaviour
 
         // ---- 5. Map view (waves 2 and 4): blend the first-person view above with it ----
         UpdateMapView(deltaTime, shakeYaw, shakePitch, shakeRoll);
+        if (HardLevel.Active != null && transform.parent != null)
+            HardLevel.Active.UpdateSceneryVisibility(cam, transform.parent.position);
     }
 
     // ---- Map view ----
