@@ -1,0 +1,95 @@
+{
+  "version": "latest-2026-11-09-65bf7e2",
+  "source_commit": "65bf7e21fa359a8dbfd7ba56aa0ad455ccdd9b34",
+  "commit_message": "Fix forest route clipping and camera obstruction",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/42745025044",
+  "unity_version": "6000.3.22f1",
+  "published_utc": "2026-11-10T02:57:15.762385Z",
+  "files": [
+    {
+      "path": "Build/WebGL.data",
+      "bytes": 14429100,
+      "sha256": "c373e30969d137344acef931cd4e6138e9a8da60fbad6a1d2f7d79492ee0bad0"
+    },
+    {
+      "path": "Build/WebGL.framework.js",
+      "bytes": 479400,
+      "sha256": "f70c25ce7bcf4d4f58d0c4b9e31a3dba38f53cf938db9e1ead137a9b84230854"
+    },
+    {
+      "path": "Build/WebGL.loader.js",
+      "bytes": 25779,
+      "sha256": "8c1ff35d8c73abf9cc36d9a427dd1ffe9d56b7d8562ca02479cb843eb3b155e4"
+    },
+    {
+      "path": "Build/WebGL.wasm",
+      "bytes": 48262740,
+      "sha256": "c58b6fbb09f26773e214ad39ca605c1ce07d90f58996ce7ea31ca12a48978c07"
+    },
+    {
+      "path": "TemplateData/MemoryProfiler.png",
+      "bytes": 665,
+      "sha256": "0ce87be20d0c24ab6cb73b57de2004da261cc2a641e69319c6ae3fe11fc85483"
+    },
+    {
+      "path": "TemplateData/favicon.ico",
+      "bytes": 2305,
+      "sha256": "9c13beb90ee8f70580d52a21d5233970d1c89e71e4a34a462c22610941c3c77f"
+    },
+    {
+      "path": "TemplateData/fullscreen-button.png",
+      "bytes": 175,
+      "sha256": "21221581673a54b8139d408d4a3f8d2b879e86827d4b6fc53b995ff7a99ee3e9"
+    },
+    {
+      "path": "TemplateData/progress-bar-empty-dark.png",
+      "bytes": 96,
+      "sha256": "bbee7131afe8a3365906240d89184dc86234c119467f390bc4bc6802328fdb4d"
+    },
+    {
+      "path": "TemplateData/progress-bar-empty-light.png",
+      "bytes": 109,
+      "sha256": "143696c060ad43d6c30f19ff5f49000927a139a2a1e4c9f45fafaa2b90d7d2be"
+    },
+    {
+      "path": "TemplateData/progress-bar-full-dark.png",
+      "bytes": 74,
+      "sha256": "3306a6244dcb3926fca38a28e3ced589df8ff1beed955eb17c0bbf01c918bc62"
+    },
+    {
+      "path": "TemplateData/progress-bar-full-light.png",
+      "bytes": 84,
+      "sha256": "12395ea785480c5cdf12fade6e6cbf49666d5bb1cef7240c113dbcba6bdc5c87"
+    },
+    {
+      "path": "TemplateData/style.css",
+      "bytes": 2781,
+      "sha256": "f823b08622b58c5ca609f357f88bdb3162555a5bf8a3665c59a5e519907f06fe"
+    },
+    {
+      "path": "TemplateData/unity-logo-dark.png",
+      "bytes": 3042,
+      "sha256": "c1b72d26c096487dabc948b54bc203f8dac7ed4e3f5733918798e858acb4b159"
+    },
+    {
+      "path": "TemplateData/unity-logo-light.png",
+      "bytes": 3077,
+      "sha256": "002990aea0d946833cadc1519d5b7e50a4570bd537a0517dd79a59d3eec84da7"
+    },
+    {
+      "path": "TemplateData/unity-logo-title-footer.png",
+      "bytes": 1151,
+      "sha256": "9e8b3bdb67c2446d16362fe59449d892100931dbbadfe6a9d923a4142b57a79f"
+    },
+    {
+      "path": "TemplateData/webmemd-icon.png",
+      "bytes": 1670,
+      "sha256": "c56f5494640cedda273aad38d58e6ab9da625d5b3f4d875c0ff92c6192a569c2"
+    },
+    {
+      "path": "index.html",
+      "bytes": 7415,
+      "sha256": "1071de18989892019c1bae84a65e5dd7b31aaf1c696521c405472a6f124bc22d"
+    }
+  ]
+}
