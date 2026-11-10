@@ -45,6 +45,11 @@ public static class GuidedIntro
     // True while the world is held for a card (Zombie.Update waits).
     public static bool Holding { get; private set; }
 
+    // While a lesson teaches one thing to type (the energy box, the barrel,
+    // the red zombie), only its word can be started: it cannot be passed by
+    // shooting something else. null = anything (TypingController).
+    public static ITypingTarget OnlyTarget { get; private set; }
+
     // True while a card waits for a power key: words wait too (TypingController).
     public static bool BlocksLetters { get; private set; }
 
@@ -59,15 +64,6 @@ public static class GuidedIntro
     private static float skipArmedAt;
     private static bool wordDropped;
 
-    // SAFETY: a lesson that waits for the player (a power key, Backspace, a
-    // word) can never hold them forever: after SkipAfterSeconds its card
-    // offers "ENTER to skip" (a tap on the card works too).
-    private const float SkipAfterSeconds = 12f;
-    private static float lessonStarted;
-    private static bool lessonSkippable;
-    private static bool lessonSkipped;
-    private static string lessonTitle, lessonBody;
-    private static GuideStep[] lessonSteps;
     private static WaveSpawner spawner;
     private static HUD hud;
     private static GuidedIntroView view;
@@ -90,6 +86,7 @@ public static class GuidedIntro
         Running = true;
         Holding = false;
         BlocksLetters = false;
+        OnlyTarget = null;
         skipOffered = true;
         skipArmedAt = Time.unscaledTime + SkipArmSeconds;
         powerActions.Clear();
@@ -119,10 +116,7 @@ public static class GuidedIntro
             Log("skipped");
             End();
         }
-        else if (lessonSkippable)
-        {
-            lessonSkipped = true;
-        }
+
     }
 
     // TypingController: Backspace dropped a half-typed word.
@@ -143,6 +137,7 @@ public static class GuidedIntro
     // The scene is going away in the middle of the intro (restart, menu): forget it.
     public static void Abandon()
     {
+        OnlyTarget = null;
         Running = false;
         Holding = false;
         BlocksLetters = false;
@@ -163,6 +158,7 @@ public static class GuidedIntro
     // The intro is over (or skipped): the whole HUD, every power, normal play.
     private static void End()
     {
+        OnlyTarget = null;
         Running = false;
         Holding = false;
         BlocksLetters = false;
@@ -229,7 +225,7 @@ public static class GuidedIntro
             wordDropped = false;
             BeginLesson("CHANGE TARGET", "Drop your current word.",
                 new[] { GuideStep.Key(touch ? "DEL" : "BACKSPACE", touch ? "TAP" : "PRESS") });
-            while (!wordDropped && typing != null && typing.IsTypingWord && !LessonSkipped())
+            while (!wordDropped && typing != null && typing.IsTypingWord)
             {
                 yield return null;
             }
@@ -252,11 +248,12 @@ public static class GuidedIntro
             Holding = true;
             BeginLesson("ENERGY", "Type the teal crate's word for +" + SupplyCrate.EnergyAmount + " energy.", null);
             view.PointAt(box);
-            float giveUp = Time.time + 25f;
-            while (!box.IsOpened && Time.time < giveUp && !LessonSkipped())
+            OnlyTarget = box;
+            while (!box.IsOpened && box.gameObject.activeInHierarchy) // only typing its word passes
             {
                 yield return null;
             }
+            OnlyTarget = null;
             view.PointAt(null);
             view.HideCard();
             Holding = false;
@@ -287,10 +284,12 @@ public static class GuidedIntro
                 Holding = true;
                 BeginLesson("BARREL", "Type the barrel's word to blow it up.", null);
                 view.PointAt(barrel);
-                while (barrel.IsAlive && AnyAlive(group) && !LessonSkipped())
+                OnlyTarget = barrel; // the zombies wait in its ring; only the barrel's word passes
+                while (barrel.IsAlive && AnyAlive(group))
                 {
                     yield return null;
                 }
+                OnlyTarget = null;
                 view.PointAt(null);
                 view.HideCard();
                 Holding = false;
@@ -351,7 +350,7 @@ public static class GuidedIntro
         // waits, and if every target is somehow gone, new ones walk out.
         Holding = true;
         bool fireShown = false;
-        while (!powerActions.Contains("rpg:fire") && GameManager.Instance.Powers.RocketLoaded && !LessonSkipped())
+        while (!powerActions.Contains("rpg:fire") && GameManager.Instance.Powers.RocketLoaded)
         {
             if (!AnyAlive(group))
             {
@@ -389,10 +388,12 @@ public static class GuidedIntro
             Holding = true; // the others stay in its ring until it goes off
             BeginLesson("RED ZOMBIE", "Type the red zombie's word to set off its blast.", null);
             view.PointAt(red);
-            while (red != null && red.IsAlive && !LessonSkipped())
+            OnlyTarget = red; // only its word passes: the others wait in its ring
+            while (red != null && red.IsAlive)
             {
                 yield return null;
             }
+            OnlyTarget = null;
             view.PointAt(null);
             view.HideCard();
             Holding = false;
@@ -418,7 +419,7 @@ public static class GuidedIntro
         BlocksLetters = true;
         HudReveal.Reveal(HudFeature.Shield);
         BeginLesson("SHIELD", touch ? "Tap Shield to block hits." : "Press Tab to block hits.", null);
-        while (!Powers.IsShielded && !LessonSkipped())
+        while (!Powers.IsShielded)
         {
             if (powers.ShieldCharges == 0)
             {
@@ -463,7 +464,7 @@ public static class GuidedIntro
         GameManager.Instance.GrantTrainingEnergy(cost);
         HudReveal.Reveal(feature);
         BeginLesson(title, body, steps);
-        while (!powerActions.Contains(item + ":" + done) && !LessonSkipped())
+        while (!powerActions.Contains(item + ":" + done))
         {
             GameManager.Instance.GrantTrainingEnergy(cost); // never stuck for lack of energy
             yield return null;
@@ -473,35 +474,14 @@ public static class GuidedIntro
         Holding = false;
     }
 
-    // A lesson card that waits for the player. It can be skipped after a while (LessonSkipped).
+    // A lesson card that waits for the player. It has no skip: it passes
+    // only when the player does what it asks (the rubric's "cannot be passed
+    // until the player shows they understand"). Nobody gets stuck because a
+    // word already started can always be finished during a lesson, and a
+    // lesson waits for the word being typed before it starts.
     private static void BeginLesson(string title, string body, GuideStep[] steps)
     {
-        lessonStarted = Time.time;
-        lessonSkippable = false;
-        lessonSkipped = false;
-        lessonTitle = title;
-        lessonBody = body;
-        lessonSteps = steps;
         view.ShowCard(title, body, steps, false);
-    }
-
-    // Every frame of a lesson's wait: after SkipAfterSeconds the card offers
-    // "ENTER to skip"; true once the player has skipped it.
-    private static bool LessonSkipped()
-    {
-        if (!lessonSkippable && Time.time - lessonStarted >= SkipAfterSeconds)
-        {
-            lessonSkippable = true;
-            view.ShowCard(lessonTitle, lessonBody, lessonSteps, true);
-        }
-        if (lessonSkipped)
-        {
-            lessonSkippable = false;
-            lessonSkipped = false;
-            Log("lesson_skipped:" + lessonTitle);
-            return true;
-        }
-        return false;
     }
 
     // Until the player is not in the middle of a word (at most a few

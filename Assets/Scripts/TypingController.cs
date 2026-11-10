@@ -979,6 +979,11 @@ public class TypingController : MonoBehaviour
             {
                 continue;
             }
+            // A guided lesson that teaches one word: only that one can be started.
+            if (GuidedIntro.OnlyTarget != null && GuidedIntro.OnlyTarget.IsAlive && candidate != GuidedIntro.OnlyTarget)
+            {
+                continue;
+            }
             found.Add(candidate);
         }
     }
