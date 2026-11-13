@@ -547,7 +547,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
                 wordChangeTimer = 0f;
                 wordShifts += 1;
                 RefreshLabel();
-                spawner.Hud.ShowFloatingText(LabelAnchor, "WORD SHIFT!", ShifterColor);
+                spawner.Hud.ShowFloatingText(LabelAnchor, "WORD SHIFT!", ShifterColor, true);
             }
         }
 
@@ -859,7 +859,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
             string second = splitRaw.Substring(splitAt);
             spawner.SpawnSplitlings(transform.position, baseSpeed, splitRaw, first, second);
             spawner.Hud.ShowFloatingText(LabelAnchor + Vector3.up * 0.5f,
-                "SPLIT!  " + first.ToLowerInvariant() + " + " + second.ToLowerInvariant(), Palette.WordSplitter);
+                "SPLIT!  " + first.ToLowerInvariant() + " + " + second.ToLowerInvariant(), Palette.WordSplitter, true);
         }
 
         Vector3 away = transform.position - player.position;
@@ -901,7 +901,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         HasArmor = false;
         bodyRenderer.sharedMaterial = Palette.Lit(Palette.ZombieGrey);
         normalMaterial = bodyRenderer.sharedMaterial;
-        spawner.Hud.ShowFloatingText(LabelAnchor, "ARMOR BROKEN", Palette.WordArmor);
+        spawner.Hud.ShowFloatingText(LabelAnchor, "ARMOR BROKEN", Palette.WordArmor, true);
         flinchTimer = flinchSeconds * 3f;
 
         // A new word whose first letter is not in use (ignoring our own old word).
@@ -935,7 +935,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         }
         MoveBy(away.normalized * ShieldBounceDistance);
         flinchTimer = ShieldStaggerSeconds;
-        spawner.Hud.ShowFloatingText(LabelAnchor, "BLOCKED", Palette.Shield);
+        spawner.Hud.ShowFloatingText(LabelAnchor, "BLOCKED", Palette.Shield, true);
         GameManager.Instance.TakeDamage(BiteDamage, IsAmbusher, BiteEvent(), this);
     }
 
@@ -1150,7 +1150,9 @@ public class Zombie : MonoBehaviour, ITypingTarget
     {
         get
         {
-            if (CameraDirector.MapBlend > 0.5f)
+            // Map view and third person (Endless): the player's body is in the
+            // picture, so a zombie must walk right up before it attacks.
+            if (CameraDirector.MapBlend > 0.5f || CameraDirector.IsThirdPerson)
             {
                 return attackDistance;
             }
@@ -1213,7 +1215,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
 
     private float BiteRange
     {
-        get { return CameraDirector.MapBlend > 0.5f ? attackDistance : StandOffDistance + BiteReach; }
+        get { return CameraDirector.MapBlend > 0.5f ? attackDistance : (CameraDirector.IsThirdPerson ? attackDistance + BiteReach : StandOffDistance + BiteReach); }
     }
 
     // At the player: it STAYS and keeps biting until it is killed or lured away,

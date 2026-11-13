@@ -105,7 +105,7 @@ public class EndlessWaveReward : MonoBehaviour
         }
 
         onChoice = callback;
-        selected = 0;
+        selected = Mathf.Max(0, buttons.IndexOf(skipButton)); // Enter / Space with no key moved first = SKIP (+score), never an accidental pick
         keyboardSelectionStarted = false;
 
         // Display the exact weapon that this reward will grant.

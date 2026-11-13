@@ -92,6 +92,8 @@ public class WaveSpawner : MonoBehaviour
     [SerializeField, Min(1)] private int sniperFirstWave = 6;    // the first wave with a SNIPER (Zombie: shoots from the stands)
     [SerializeField, Min(1)] private int sniperEveryWaves = 5;   // one more sniper every this many waves after that
     [SerializeField, Min(0)] private int sniperMax = 3;          // never more in one wave
+    [SerializeField, Min(1f)] private float sniperBulletSeconds = 7f;    // a sniper bullet's flight time in its first wave (longer = slower bullet)...
+    [SerializeField, Min(1f)] private float sniperBulletMinSeconds = 5f; // ...it shortens by 0.08 s a wave, never below this. (The adaptive difficulty still scales the bullet's speed: EnergyOrb uses Powers.EnemySpeedFactor.)
 
     [Header("Endless: rush from the tunnel behind the player")]
     [SerializeField, Min(1)] private int rearFirstWave = 5;     // the first wave with a REAR RUSH (zombies out of the tunnel behind the player)
@@ -2127,9 +2129,9 @@ public class WaveSpawner : MonoBehaviour
         Zombie sniper = SpawnZombieAt(spot.position, spot.position, 0f, ZombieKind.Sniper, 0f);
         int n = Mathf.Max(0, wave - sniperFirstWave);
         float interval = Mathf.Max(3.5f, 7f - 0.2f * n) * Mathf.Max(1f, DynamicDifficulty.SpawnIntervalFactor);
-        float flight = Mathf.Max(2.5f, 4.5f - 0.08f * n);
+        float flight = Mathf.Max(sniperBulletMinSeconds, sniperBulletSeconds - 0.08f * n);
         sniper.SetSniperPace(interval, flight);
-        hud.ShowFloatingText(sniper.LabelAnchor, "SNIPER!", Palette.WordSniper);
+        hud.ShowFloatingText(sniper.LabelAnchor, "SNIPER!", Palette.WordSniper, true);
         return true;
     }
 

@@ -80,6 +80,13 @@ public class TypingController : MonoBehaviour
     private const float FreezeRepeatSeconds = 0.2f;
     private float freezeKeyDownTime = -1f; // unscaled time the 2 key last went down
 
+    // The end screens (won / lost) take Esc / Backspace (back to the menu) only
+    // after this many seconds, so a key still being hit at the moment of death
+    // does not skip the results.
+    private const float EndScreenKeyDelay = 1f;
+    private GameState lastSeenState = GameState.Start;
+    private float stateChangedAt;
+
     // CANDIDATES: every target whose word matches everything typed so far.
     // Usually one (first letters on screen are kept different), but word
     // families share a start on purpose: with "hunt" and "hunter" on screen,
@@ -285,10 +292,23 @@ public class TypingController : MonoBehaviour
             GameManager.Instance.OnPauseKey();
         }
 
+        // When the state last changed (the end screens ignore Esc / Backspace for a moment, see below).
+        if (GameManager.Instance.State != lastSeenState)
+        {
+            lastSeenState = GameManager.Instance.State;
+            stateChangedAt = Time.unscaledTime;
+        }
+
         // ---- 3. Outside of play, only Enter does something (and LEFT / RIGHT on the Start panel) ----
         if (GameManager.Instance.State != GameState.Playing)
         {
-            if (GameManager.Instance.State == GameState.Start && (pausePressed || dropPressed))
+            GameState endState = GameManager.Instance.State;
+            // Start panel: Esc / Backspace go back to the menu. The end screens
+            // (won / lost, every mode) do the same, after EndScreenKeyDelay, so a
+            // key the player was still hitting when they died cannot skip the results.
+            bool leaveToMenu = endState == GameState.Start
+                || ((endState == GameState.Won || endState == GameState.Lost) && Time.unscaledTime - stateChangedAt >= EndScreenKeyDelay);
+            if (leaveToMenu && (pausePressed || dropPressed))
             {
                 GameManager.Instance.LoadMenu();
                 return;

@@ -3135,10 +3135,13 @@ public class HUD : MonoBehaviour
     private readonly Vector3[] floatingPoints = new Vector3[FloatingTextCount];   // the world point each follows
     private readonly float[] floatingAges = new float[FloatingTextCount];
     private readonly float[] floatingLifts = new float[FloatingTextCount];        // extra height when stacked
+    private readonly bool[] floatingSubtle = new bool[FloatingTextCount];         // enemy notices: drawn a little see-through so they never hide a word
+    private const float FloatingSubtleAlpha = 0.6f;
 
     // Text that appears at a world position (e.g. "+30" or "+1 LURE BOMB"),
-    // rises and fades out.
-    public void ShowFloatingText(Vector3 worldPosition, string text, Color color)
+    // rises and fades out. subtle: an enemy notice ("ARMOR BROKEN"...), drawn
+    // a little transparent so it does not hide the words behind it.
+    public void ShowFloatingText(Vector3 worldPosition, string text, Color color, bool subtle = false)
     {
         if (EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave && text != null && text.StartsWith("+")) return;
         if (floatingTexts[0] == null)
@@ -3173,6 +3176,7 @@ public class HUD : MonoBehaviour
         floatingPoints[slot] = worldPosition;
         floatingAges[slot] = 0f;
         floatingLifts[slot] = lift;
+        floatingSubtle[slot] = subtle;
         label.transform.SetAsLastSibling(); // the newest text is drawn on top
         label.gameObject.SetActive(true);
         PlaceFloatingText(slot, Camera.main);
@@ -3259,6 +3263,10 @@ public class HUD : MonoBehaviour
         // Fully visible, then fades out over the rest of its life.
         float life = Mathf.Clamp01(age / Mathf.Max(0.01f, floatingTextSeconds));
         label.alpha = life < FloatingTextFadeFrom ? 1f : 1f - (life - FloatingTextFadeFrom) / (1f - FloatingTextFadeFrom);
+        if (floatingSubtle[slot])
+        {
+            label.alpha *= FloatingSubtleAlpha;
+        }
         label.enabled = true;
     }
 
