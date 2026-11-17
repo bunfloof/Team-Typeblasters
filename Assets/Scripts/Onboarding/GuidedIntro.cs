@@ -193,7 +193,7 @@ public static class GuidedIntro
         Zombie first = spawner.SpawnGuided(FrontPoint(), ZombieKind.Normal);
         yield return new WaitForSeconds(WalkOutSeconds);
         Holding = true;
-        view.ShowCard("TYPE TO SHOOT", "Type the word above the zombie.", null, false);
+        BeginLesson("TYPE TO SHOOT", "Type the word above the zombie.", null);
         view.PointAt(first);
         yield return UntilDead(first);
         view.PointAt(null);
@@ -479,9 +479,12 @@ public static class GuidedIntro
     // until the player shows they understand"). Nobody gets stuck because a
     // word already started can always be finished during a lesson, and a
     // lesson waits for the word being typed before it starts.
+    // Analytics: "lesson_start:<title>" (e.g. "lesson_start:LURE BOMB"), so the
+    // lesson a player was on when they left the intro can be told from the data.
     private static void BeginLesson(string title, string body, GuideStep[] steps)
     {
         view.ShowCard(title, body, steps, false);
+        Log("lesson_start:" + title);
     }
 
     // Until the player is not in the middle of a word (at most a few
@@ -807,7 +810,9 @@ public static class GuidedIntro
         return v;
     }
 
-    // step: start, skipped, guided_wave, lesson_skipped:<lesson> or complete.
+    // step: start (the ride, with ENTER to skip offered), skipped, guided_wave,
+    // lesson_start:<lesson title> or complete. (lesson_skipped:<lesson> is gone:
+    // a lesson can no longer be skipped, see BeginLesson.)
     // (Not named "phase": Analytics.Send adds the game's phase - ride / fight -
     // under that name too, and the log server keeps only the last one.)
     private static void Log(string step)

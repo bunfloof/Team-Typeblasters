@@ -322,15 +322,17 @@ public class MainMenu : MonoBehaviour
         button.localScale = rest;
     }
 
-    // The buttons the keyboard can select on the page that is showing, in order.
+    // The buttons the keyboard can select on the page that is showing, in order
+    // from top to bottom (the same order as on screen, see UpdateResponsiveLayout:
+    // FULL SCREEN, where it exists, sits between START and ALMANAC).
     private List<RectTransform> CurrentItems()
     {
         menuItems.Clear();
         if (mainPage.activeSelf)
         {
             menuItems.Add(startButton);
-            menuItems.Add(almanacButton);
             if (fullscreenButton != null) menuItems.Add(fullscreenButton);
+            menuItems.Add(almanacButton);
         }
         else
         {

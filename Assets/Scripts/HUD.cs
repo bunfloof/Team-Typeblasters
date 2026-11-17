@@ -3541,7 +3541,7 @@ public class HUD : MonoBehaviour
     //   Score 12750
     //   Accuracy 97.5%    Speed 62 WPM
     //   Kills 50    Best combo x51    Biggest blast x7
-    //   Time 4:12    Typing HARD    Adaptive ON (58 WPM)
+    //   Time 4:12    Typing HARD    Adaptive ON
     private static string StatsText(RunStats stats)
     {
         int seconds = Mathf.FloorToInt(stats.Seconds);
@@ -3551,7 +3551,7 @@ public class HUD : MonoBehaviour
 
         return "<size=125%>" + StatLabel + "Score</color>  <b>" + stats.Score + "</b></size>\n"
             + StatLabel + "Accuracy</color>  <b>" + accuracy + "</b>     "
-            + StatLabel + "Speed</color>  <b>" + Mathf.RoundToInt(stats.WordsPerMinute) + " WPM</b>\n"
+            + StatLabel + "Speed</color>  <b>" + SpeedText() + "</b>\n"
             + StatLabel + "Kills</color>  <b>" + stats.Kills + "</b>     "
             + StatLabel + "Best combo</color>  <b>x" + stats.BestCombo + "</b>     "
             + StatLabel + "Biggest blast</color>  <b>x" + stats.BiggestMultiKill + "</b>\n"
@@ -3560,14 +3560,29 @@ public class HUD : MonoBehaviour
             + StatLabel + "Adaptive</color>  <b>" + AdaptiveText() + "</b>";
     }
 
-    // "ON (42 WPM)" once the adaptive difficulty has measured the player, else "ON" / "OFF".
+    // The typing speed the game measured in THIS run (DynamicDifficulty, the
+    // same number SETTINGS shows): only the keys inside words count, so the
+    // rides and the moments spent finding the next word do not pull it down.
+    // It follows the player, so the last ~150 letters count most. RunStats'
+    // WordsPerMinute averages over the whole run time instead and reads about a
+    // third of this. It is measured whether the adaptive difficulty is on or off.
+    // "--" when this run ended before it was measured (about 10 seconds of
+    // typing, or the end of wave 1): a Restart starts measuring again.
+    private static string SpeedText()
+    {
+        float wpm = DynamicDifficulty.Calibrated ? DynamicDifficulty.EstimatedWpm : -1f;
+        if (wpm <= 0f)
+        {
+            return "--";
+        }
+        // A few lightning-fast words can read absurdly high (as on the ride after wave 1).
+        return (wpm > 200f ? "200+" : Mathf.RoundToInt(wpm).ToString()) + " WPM";
+    }
+
+    // "ON" / "OFF" (the speed it measured is shown as Speed, see SpeedText).
     private static string AdaptiveText()
     {
-        if (!DynamicDifficulty.Enabled)
-        {
-            return "OFF";
-        }
-        return DynamicDifficulty.Calibrated ? "ON (" + Mathf.RoundToInt(DynamicDifficulty.EstimatedWpm) + " WPM)" : "ON";
+        return DynamicDifficulty.Enabled ? "ON" : "OFF";
     }
 
     // ---- Small UI helpers ----
