@@ -1,15 +1,15 @@
 {
-  "version": "latest-2026-11-17-7a8f361",
-  "source_commit": "7a8f361f28b1540ac18fb33129e5fb40c3dae937",
-  "commit_message": "Target lock while typing; Normal: wave 2 exit gate on the path, face ambushers on rides",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44143568696",
+  "version": "latest-2026-11-17-30dd632",
+  "source_commit": "30dd6327967cb1e70aa78ac3febc8171eed1fa3a",
+  "commit_message": "Adjust the Almanac visuals and add keyboard navigation throughout the game for full keyboard control",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44157364680",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-17T18:14:44.256324Z",
+  "published_utc": "2026-11-17T19:29:03.954858Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14438736,
-      "sha256": "589fa50e4a6b55210fc372f753670968c5613e7b28e20c04066275cba89e35bb"
+      "bytes": 14439412,
+      "sha256": "9c189df22d7799717b133eb54f9b71ac14e85e5c053dcc618cdce75229a5d503"
     },
     {
       "path": "Build/WebGL.framework.js",
@@ -19,12 +19,12 @@
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "a36ecff9c744df5c9c8c40d686e3387317268c5757de949eecafa9f8a0272878"
+      "sha256": "d67731e8abaae3f58dc02de000310df70f3e52111df8a5690074f6b1278d4e68"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48309351,
-      "sha256": "f204916be7c9176fa991de353c7f2d2a445898a3fe2a4bed373c65fc8d3e3d03"
+      "bytes": 48312599,
+      "sha256": "05ba34c05dc0605da7053c9b444ca986bdf67e4b7fc48833687c1e9be7b89d7c"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7415,
-      "sha256": "8de6864c0032ca5d3a8c2574405ffa4ec5224c819cbb0d55c0edfdae47eb4153"
+      "sha256": "afdd01e3a7e46abe3481618469a8b698b04165890ab19caa550b397ecbdd2970"
     }
   ]
 }
