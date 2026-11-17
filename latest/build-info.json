@@ -1,30 +1,30 @@
 {
-  "version": "latest-2026-11-17-d9f75e2",
-  "source_commit": "d9f75e267520f69174a25ed4e8c7bec2557643ef",
-  "commit_message": "Almanac: every enemy met so far, with its picture, powers and how to kill it",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44045967485",
+  "version": "latest-2026-11-17-7a8f361",
+  "source_commit": "7a8f361f28b1540ac18fb33129e5fb40c3dae937",
+  "commit_message": "Target lock while typing; Normal: wave 2 exit gate on the path, face ambushers on rides",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44143568696",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-17T08:30:53.726056Z",
+  "published_utc": "2026-11-17T18:14:44.256324Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14438234,
-      "sha256": "262d1ca9e10d94c576a82696662b91c0a36fedcec4dc591c4ce4afa895a4f988"
+      "bytes": 14438736,
+      "sha256": "589fa50e4a6b55210fc372f753670968c5613e7b28e20c04066275cba89e35bb"
     },
     {
       "path": "Build/WebGL.framework.js",
       "bytes": 480112,
-      "sha256": "cbb24a991971b5a0cf7e96c998aac39512a278959ffe32ad7da209e28b8323ce"
+      "sha256": "3d16bc97cb0df62637e8c9e253e6214993c2ad790c68fde9c6e7bc4960ba26b2"
     },
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "35c4ced941f997f20f7585803cd30801b7abbaccc67b21a4cd8cf5e4d1bc1204"
+      "sha256": "a36ecff9c744df5c9c8c40d686e3387317268c5757de949eecafa9f8a0272878"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48317959,
-      "sha256": "1fe0c434c1f7fafcafed2bf40ae90f7ce9f1362972be1044c03dea56da7b78b6"
+      "bytes": 48309351,
+      "sha256": "f204916be7c9176fa991de353c7f2d2a445898a3fe2a4bed373c65fc8d3e3d03"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7415,
-      "sha256": "d036d63d7e983a03f643c01b4512378c18047b39dc262a158b940eaca29eea97"
+      "sha256": "8de6864c0032ca5d3a8c2574405ffa4ec5224c819cbb0d55c0edfdae47eb4153"
     }
   ]
 }
