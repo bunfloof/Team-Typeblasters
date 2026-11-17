@@ -1915,6 +1915,9 @@ public class HUD : MonoBehaviour
     // flash: 0 = normal colours .. 1 = key cap and name in the power's colour.
     private void ApplyPowerRowLook(int row, float grow, float flash)
     {
+        float reminder = EnergyUseReminder.Pulse(row);
+        grow = Mathf.Max(grow, reminder * 0.2f);
+        flash = Mathf.Max(flash, reminder * 0.65f);
         float scale = Mathf.Lerp(1f, powerPulseScale, grow);
         powerRows[row].localScale = new Vector3(scale, scale, 1f);
 
@@ -2794,7 +2797,7 @@ public class HUD : MonoBehaviour
     // ENERGY at its maximum (GameManager.MaxSkillEnergy: more is lost), or a
     // skill / weapon kept as often as it can be (Powers.KeptLimit, ENDLESS: 3),
     // gets a soft pulsing halo behind it, so the player sees "use it, it is
-    // full". The energy number reads "FULL", a full row "MAX" (in place of "x3").
+    // full". The energy number stays visible; a full row reads "MAX" (in place of "x3").
     private static readonly Color EnergyGlowColor = new Color(0.35f, 1f, 0.9f);  // teal, like energy
     private static readonly Color PowerGlowColor = new Color(1f, 0.84f, 0.3f);   // gold, like the "x3"
     private const float GlowPulsesPerSecond = 1.4f;
@@ -2817,7 +2820,8 @@ public class HUD : MonoBehaviour
         // Energy.
         if (comboRewardBar != null)
         {
-            bool full = playing && game.SkillEnergy >= GameManager.MaxSkillEnergy;
+            bool full = game != null && game.State == GameState.Playing && game.SkillEnergy >= GameManager.MaxSkillEnergy;
+            float reminder = EnergyUseReminder.Pulse();
             if (full && energyGlow == null)
             {
                 energyGlow = CreateImage("Energy Full Glow", comboRewardBar, EnergyGlowColor);
@@ -2833,12 +2837,11 @@ public class HUD : MonoBehaviour
             {
                 energyGlow.gameObject.SetActive(full);
                 Color c = EnergyGlowColor;
-                c.a = alpha;
+                c.a = 0.22f + reminder * 0.65f;
                 energyGlow.color = c;
-            }
-            if (energyNumber != null && full)
-            {
-                energyNumber.text = "FULL";
+                float spread = GlowSpread + reminder * 7f;
+                energyGlow.rectTransform.offsetMin = new Vector2(-spread, -spread);
+                energyGlow.rectTransform.offsetMax = new Vector2(spread, spread);
             }
         }
 
@@ -2850,7 +2853,9 @@ public class HUD : MonoBehaviour
                 continue;
             }
             bool full = playing && PowerRowFull(powerCharges[row]);
-            if (full && powerGlows[row] == null)
+            float reminder = EnergyUseReminder.Pulse(row);
+            bool show = full || reminder > 0f;
+            if (show && powerGlows[row] == null)
             {
                 powerGlows[row] = CreateImage("Full Glow", powerRows[row], PowerGlowColor);
                 RectTransform glow = powerGlows[row].rectTransform;
@@ -2862,8 +2867,8 @@ public class HUD : MonoBehaviour
             }
             if (powerGlows[row] != null)
             {
-                powerGlows[row].gameObject.SetActive(full);
-                if (full)
+                powerGlows[row].gameObject.SetActive(show);
+                if (show)
                 {
                     // From just left of the key cap to just past the end of the name.
                     RectTransform glow = powerGlows[row].rectTransform;
@@ -2871,8 +2876,8 @@ public class HUD : MonoBehaviour
                     float right = name.anchoredPosition.x + powerNames[row].preferredWidth;
                     glow.offsetMin = new Vector2(-GlowSpread, -GlowSpread * 0.5f);
                     glow.offsetMax = new Vector2(right + GlowSpread, GlowSpread * 0.5f);
-                    Color c = PowerGlowColor;
-                    c.a = alpha * 0.7f;
+                    Color c = reminder > 0f ? EnergyGlowColor : PowerGlowColor;
+                    c.a = Mathf.Max(full ? alpha * 0.7f : 0f, reminder * 0.55f);
                     powerGlows[row].color = c;
                 }
             }

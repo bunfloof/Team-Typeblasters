@@ -64,6 +64,7 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
 
     private Power power;
     private Image background;
+    private Image energyReminderGlow;
     private Image fill;            // grows from the left while a weapon is being bought
     private RectTransform cap;     // the key cap: the power's key in a white square
     private TMP_Text nameText;
@@ -228,7 +229,24 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
         bool pressed = ownerFinger != NoFinger;
         bool active = power == Power.Lure ? powers.IsAiming : power == Power.Freeze ? Powers.IsFrozen
             : power == Power.Shield ? Powers.IsShielded : power == Power.Frenzy ? Powers.IsFrenzy : powers.RocketLoaded;
+        float reminder = power == Power.Shield || pressed || active ? 0f : EnergyUseReminder.Pulse((int)power);
         background.color = Color.Lerp(Color.black, color, pressed ? 0.7f : active ? 0.6f : 0.35f);
+        background.color = Color.Lerp(background.color, new Color(0.15f, 0.65f, 0.58f), reminder * 0.65f);
+        transform.localScale *= 1f + reminder * 0.035f;
+        if (reminder > 0f && energyReminderGlow == null)
+        {
+            energyReminderGlow = TouchUI.CreateImage("Energy Reminder", (RectTransform)transform, Color.clear);
+            energyReminderGlow.raycastTarget = false;
+            TouchUI.Stretch(energyReminderGlow.rectTransform);
+            energyReminderGlow.rectTransform.offsetMin = new Vector2(-4f, -4f);
+            energyReminderGlow.rectTransform.offsetMax = new Vector2(4f, 4f);
+            energyReminderGlow.rectTransform.SetAsFirstSibling();
+        }
+        if (energyReminderGlow != null)
+        {
+            energyReminderGlow.gameObject.SetActive(reminder > 0f);
+            energyReminderGlow.color = new Color(0.35f, 1f, 0.9f, reminder * 0.45f);
+        }
         group.alpha = usable || pressed ? 1f : DimmedAlpha;
 
         fill.rectTransform.anchorMax = new Vector2(active ? 1f : 0f,1f);
