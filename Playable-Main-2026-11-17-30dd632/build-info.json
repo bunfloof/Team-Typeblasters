@@ -1,0 +1,94 @@
+{
+  "files": [
+    {
+      "path": "Build/WebGL.data",
+      "sha256": "1ed8447ba2cbc99300d8791ff989baa6dd657285a4c65660b666c79a7a821730",
+      "bytes": 14439412
+    },
+    {
+      "path": "Build/WebGL.framework.js",
+      "sha256": "3d16bc97cb0df62637e8c9e253e6214993c2ad790c68fde9c6e7bc4960ba26b2",
+      "bytes": 480112
+    },
+    {
+      "path": "Build/WebGL.loader.js",
+      "sha256": "d67731e8abaae3f58dc02de000310df70f3e52111df8a5690074f6b1278d4e68",
+      "bytes": 25779
+    },
+    {
+      "path": "Build/WebGL.wasm",
+      "sha256": "05ba34c05dc0605da7053c9b444ca986bdf67e4b7fc48833687c1e9be7b89d7c",
+      "bytes": 48312599
+    },
+    {
+      "path": "index.html",
+      "sha256": "afdd01e3a7e46abe3481618469a8b698b04165890ab19caa550b397ecbdd2970",
+      "bytes": 7415
+    },
+    {
+      "path": "TemplateData/favicon.ico",
+      "sha256": "9c13beb90ee8f70580d52a21d5233970d1c89e71e4a34a462c22610941c3c77f",
+      "bytes": 2305
+    },
+    {
+      "path": "TemplateData/fullscreen-button.png",
+      "sha256": "21221581673a54b8139d408d4a3f8d2b879e86827d4b6fc53b995ff7a99ee3e9",
+      "bytes": 175
+    },
+    {
+      "path": "TemplateData/MemoryProfiler.png",
+      "sha256": "0ce87be20d0c24ab6cb73b57de2004da261cc2a641e69319c6ae3fe11fc85483",
+      "bytes": 665
+    },
+    {
+      "path": "TemplateData/progress-bar-empty-dark.png",
+      "sha256": "bbee7131afe8a3365906240d89184dc86234c119467f390bc4bc6802328fdb4d",
+      "bytes": 96
+    },
+    {
+      "path": "TemplateData/progress-bar-empty-light.png",
+      "sha256": "143696c060ad43d6c30f19ff5f49000927a139a2a1e4c9f45fafaa2b90d7d2be",
+      "bytes": 109
+    },
+    {
+      "path": "TemplateData/progress-bar-full-dark.png",
+      "sha256": "3306a6244dcb3926fca38a28e3ced589df8ff1beed955eb17c0bbf01c918bc62",
+      "bytes": 74
+    },
+    {
+      "path": "TemplateData/progress-bar-full-light.png",
+      "sha256": "12395ea785480c5cdf12fade6e6cbf49666d5bb1cef7240c113dbcba6bdc5c87",
+      "bytes": 84
+    },
+    {
+      "path": "TemplateData/style.css",
+      "sha256": "f823b08622b58c5ca609f357f88bdb3162555a5bf8a3665c59a5e519907f06fe",
+      "bytes": 2781
+    },
+    {
+      "path": "TemplateData/unity-logo-dark.png",
+      "sha256": "c1b72d26c096487dabc948b54bc203f8dac7ed4e3f5733918798e858acb4b159",
+      "bytes": 3042
+    },
+    {
+      "path": "TemplateData/unity-logo-light.png",
+      "sha256": "002990aea0d946833cadc1519d5b7e50a4570bd537a0517dd79a59d3eec84da7",
+      "bytes": 3077
+    },
+    {
+      "path": "TemplateData/unity-logo-title-footer.png",
+      "sha256": "9e8b3bdb67c2446d16362fe59449d892100931dbbadfe6a9d923a4142b57a79f",
+      "bytes": 1151
+    },
+    {
+      "path": "TemplateData/webmemd-icon.png",
+      "sha256": "c56f5494640cedda273aad38d58e6ab9da625d5b3f4d875c0ff92c6192a569c2",
+      "bytes": 1670
+    }
+  ],
+  "unity_version": "6000.3.22f1",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44173125562",
+  "source_commit": "30dd6327967cb1e70aa78ac3febc8171eed1fa3a",
+  "published_utc": "2026-11-17T20:58:13.9064071Z",
+  "version": "2026-11-17-30dd632"
+}
