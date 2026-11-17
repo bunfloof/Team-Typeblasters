@@ -1,30 +1,30 @@
 {
-  "version": "latest-2026-11-16-4224d2f",
-  "source_commit": "4224d2feb68b7d66b8603d876c327789ab9be1df",
-  "commit_message": "Add visual full-energy reminders across game modes",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44018029878",
+  "version": "latest-2026-11-17-d9f75e2",
+  "source_commit": "d9f75e267520f69174a25ed4e8c7bec2557643ef",
+  "commit_message": "Almanac: every enemy met so far, with its picture, powers and how to kill it",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44045967485",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-17T04:44:03.782822Z",
+  "published_utc": "2026-11-17T08:30:53.726056Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14429579,
-      "sha256": "7100b657c4f4f03cb98292ac6f668d4f5fb7a071b38fde2f8785584072927f1c"
+      "bytes": 14438234,
+      "sha256": "262d1ca9e10d94c576a82696662b91c0a36fedcec4dc591c4ce4afa895a4f988"
     },
     {
       "path": "Build/WebGL.framework.js",
-      "bytes": 479400,
-      "sha256": "f70c25ce7bcf4d4f58d0c4b9e31a3dba38f53cf938db9e1ead137a9b84230854"
+      "bytes": 480112,
+      "sha256": "cbb24a991971b5a0cf7e96c998aac39512a278959ffe32ad7da209e28b8323ce"
     },
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "b48493a12af475f769de839d8adef40be338799db2233cc8ddcd528ece074bbf"
+      "sha256": "35c4ced941f997f20f7585803cd30801b7abbaccc67b21a4cd8cf5e4d1bc1204"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48266932,
-      "sha256": "2e0291219988992bf24f2a9a500c63bd04b9aef6cdf827539fd23ee6945c93a4"
+      "bytes": 48317959,
+      "sha256": "1fe0c434c1f7fafcafed2bf40ae90f7ce9f1362972be1044c03dea56da7b78b6"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7415,
-      "sha256": "bf76a3ef2d7fa88e30f031f7903a37a547f6bd5cf7f930921977db79f3f30d55"
+      "sha256": "d036d63d7e983a03f643c01b4512378c18047b39dc262a158b940eaca29eea97"
     }
   ]
 }
