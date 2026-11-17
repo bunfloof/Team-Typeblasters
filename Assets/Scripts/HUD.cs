@@ -93,6 +93,14 @@ public class HUD : MonoBehaviour
     private static readonly Color PauseFrameColor = new Color(0.95f, 0.75f, 0.1f);
     private bool pauseSettingsWasOpen;
     private bool pauseKeyboardSelectionStarted;
+
+    // Keyboard navigation for the win panel: Replay, Menu, Next Level.
+    private readonly List<Button> wonPanelButtons = new List<Button>();
+    private int selectedWonPanelButton;
+    private bool wonKeyboardSelectionStarted;
+    private Button wonReplayButton;
+    private Button wonNextButton;
+
     // Confirmation dialog
     private GameObject confirmationPanel;
     private TMP_Text confirmationMessage;
@@ -1017,6 +1025,7 @@ public class HUD : MonoBehaviour
         wonScoreText.text = "Final score: " + finalScore;
         BuildLevelCompletion();
         wonPanel.SetActive(true);
+        BuildWonPanelSelection();
     }
 
     private bool levelSelectionBuilt;
@@ -1051,6 +1060,7 @@ public class HUD : MonoBehaviour
         levelCompletionBuilt = true;
         // Reuse the scene's existing replay button and keyboard hint.
         Button replay = wonPanel.GetComponentInChildren<Button>(true);
+        wonReplayButton = replay;
         RectTransform replayRect = replay.GetComponent<RectTransform>();
         PlaceRect(replayRect, Centre, Centre, new Vector2(-200f, -230f), new Vector2(360f, 100f));
         TMP_Text replayLabel = replay.GetComponentInChildren<TMP_Text>(true);
@@ -1065,6 +1075,7 @@ public class HUD : MonoBehaviour
         RectTransform nextRect = (RectTransform)nextLabel.transform.parent;
         nextRect.sizeDelta = new Vector2(360f, 100f);
         nextLabel.rectTransform.sizeDelta = nextRect.sizeDelta;
+        wonNextButton = nextRect.GetComponent<Button>();
         foreach (TMP_Text label in wonPanel.GetComponentsInChildren<TMP_Text>(true))
         {
             if (label.text == "(or press Enter)") label.text = "Enter: replay this level";
@@ -1072,6 +1083,123 @@ public class HUD : MonoBehaviour
         if (next == null)
         {
             CreateText(wonPanel.transform, "Campaign Complete", "Final level complete!", 32f, new Vector2(0f, -390f));
+        }
+    }
+
+    private void BuildWonPanelSelection()
+    {
+        ClearWonPanelSelection();
+
+        Button menuButton = null;
+        Button[] allButtons = wonPanel.GetComponentsInChildren<Button>(false);
+        foreach (Button button in allButtons)
+        {
+            if (button == null)
+                continue;
+
+            if (IsWonPanelMenuButton(button))
+            {
+                menuButton = button;
+                break;
+            }
+        }
+
+        if (menuButton == null)
+        {
+            foreach (Button button in allButtons)
+            {
+                if (button != null && button != wonReplayButton && button != wonNextButton)
+                {
+                    menuButton = button;
+                    break;
+                }
+            }
+        }
+
+        AddWonPanelButton(wonReplayButton);
+        AddWonPanelButton(menuButton);
+        AddWonPanelButton(wonNextButton);
+
+        foreach (Button button in allButtons)
+        {
+            AddWonPanelButton(button);
+        }
+
+        selectedWonPanelButton = 0; // Enter immediately after winning still replays.
+        wonKeyboardSelectionStarted = false;
+        RefreshWonPanelSelection();
+    }
+
+    private static bool IsWonPanelMenuButton(Button button)
+    {
+        if (button.name.IndexOf("menu", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            return true;
+
+        TMP_Text[] labels = button.GetComponentsInChildren<TMP_Text>(true);
+        foreach (TMP_Text label in labels)
+        {
+            if (label != null && label.text.IndexOf("menu", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+        return false;
+    }
+
+    private void AddWonPanelButton(Button button)
+    {
+        if (button == null || !button.isActiveAndEnabled || !button.interactable || wonPanelButtons.Contains(button))
+            return;
+
+        RectTransform rect = button.transform as RectTransform;
+        if (rect == null)
+            return;
+
+        Navigation navigation = button.navigation;
+        navigation.mode = Navigation.Mode.None;
+        button.navigation = navigation;
+        AddPauseSelectionFrame(rect);
+        wonPanelButtons.Add(button);
+    }
+
+    private void ClearWonPanelSelection()
+    {
+        foreach (Button button in wonPanelButtons)
+        {
+            SetPauseButtonHighlight(button, false);
+        }
+
+        wonPanelButtons.Clear();
+        selectedWonPanelButton = 0;
+        wonKeyboardSelectionStarted = false;
+    }
+
+    public void CycleWonPanelSelection(int step)
+    {
+        if (wonPanel == null || !wonPanel.activeInHierarchy || wonPanelButtons.Count == 0 || step == 0)
+            return;
+
+        wonKeyboardSelectionStarted = true;
+        // Reverse the incoming step so the visual button order matches the
+        // direction expected by the win-panel controls.
+        selectedWonPanelButton = (selectedWonPanelButton - step % wonPanelButtons.Count + wonPanelButtons.Count)
+            % wonPanelButtons.Count;
+        RefreshWonPanelSelection();
+    }
+
+    public void ConfirmWonPanelSelection()
+    {
+        if (wonPanel == null || !wonPanel.activeInHierarchy || wonPanelButtons.Count == 0)
+            return;
+
+        Button button = wonPanelButtons[Mathf.Clamp(selectedWonPanelButton, 0, wonPanelButtons.Count - 1)];
+        if (button != null && button.isActiveAndEnabled && button.interactable)
+            button.onClick.Invoke();
+    }
+
+    private void RefreshWonPanelSelection()
+    {
+        for (int i = 0; i < wonPanelButtons.Count; i++)
+        {
+            SetPauseButtonHighlight(wonPanelButtons[i], wonKeyboardSelectionStarted && i == selectedWonPanelButton);
         }
     }
 
@@ -1085,6 +1213,7 @@ public class HUD : MonoBehaviour
 
     public void HideAllPanels()
     {
+        ClearWonPanelSelection();
         startPanel.SetActive(false);
         wonPanel.SetActive(false);
         lostPanel.SetActive(false);

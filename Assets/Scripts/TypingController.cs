@@ -50,7 +50,7 @@
 //     GameManager.OnPauseKey). Keys typed while paused are ignored.
 //   - Enter closes a first-time tip box, starts the game from the Start
 //     panel, and restarts it from the "You survived" / "You died" panels.
-//     On the Start panel, LEFT / RIGHT change the typing difficulty.
+//     On the Start panel, A / D or LEFT / RIGHT change the typing difficulty.
 //     A tip box never opens in the middle of a word (see GameManager.LateUpdate).
 //   - Every key is also reported to DynamicDifficulty (the ADAPTIVE
 //     DIFFICULTY measures the player's typing speed from them).
@@ -203,6 +203,7 @@ public class TypingController : MonoBehaviour
         bool pausePressed; // Escape
         bool shieldPressed; // Tab
         int difficultyStep; // LEFT (-1) / RIGHT (+1) went down this frame (Start panel)
+        int endPanelStep;   // LEFT/A/W (-1) / RIGHT/D/S (+1) on the win panel
         bool lureDown;     // 1 went down this frame (start aiming)...
         bool lureUp;       // ...and came up (throw)
         bool frenzyDown, frenzyUp; // 3 went down / came up: TAP = use a FRENZY, HOLD = buy one (see Powers)
@@ -236,7 +237,11 @@ public class TypingController : MonoBehaviour
         pausePressed = keyboard != null && keyboard.escapeKey.wasPressedThisFrame;
         shieldPressed = keyboard != null && keyboard.tabKey.wasPressedThisFrame;
         difficultyStep = keyboard == null ? 0
-            : (keyboard.rightArrowKey.wasPressedThisFrame ? 1 : 0) - (keyboard.leftArrowKey.wasPressedThisFrame ? 1 : 0);
+            : ((keyboard.rightArrowKey.wasPressedThisFrame || keyboard.dKey.wasPressedThisFrame) ? 1 : 0)
+            - ((keyboard.leftArrowKey.wasPressedThisFrame || keyboard.aKey.wasPressedThisFrame) ? 1 : 0);
+        endPanelStep = keyboard == null ? 0
+            : ((keyboard.rightArrowKey.wasPressedThisFrame || keyboard.dKey.wasPressedThisFrame || keyboard.sKey.wasPressedThisFrame) ? 1 : 0)
+            - ((keyboard.leftArrowKey.wasPressedThisFrame || keyboard.aKey.wasPressedThisFrame || keyboard.wKey.wasPressedThisFrame) ? 1 : 0);
         lureDown = keyboard != null && (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame);
         lureUp = keyboard != null && (keyboard.digit1Key.wasReleasedThisFrame || keyboard.numpad1Key.wasReleasedThisFrame);
         frenzyDown = keyboard != null && (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame);
@@ -268,7 +273,10 @@ public class TypingController : MonoBehaviour
         dropPressed = Input.GetKeyDown(KeyCode.Backspace);
         pausePressed = Input.GetKeyDown(KeyCode.Escape);
         shieldPressed = Input.GetKeyDown(KeyCode.Tab);
-        difficultyStep = (Input.GetKeyDown(KeyCode.RightArrow) ? 1 : 0) - (Input.GetKeyDown(KeyCode.LeftArrow) ? 1 : 0);
+        difficultyStep = ((Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D)) ? 1 : 0)
+            - ((Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A)) ? 1 : 0);
+        endPanelStep = ((Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.S)) ? 1 : 0)
+            - ((Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.W)) ? 1 : 0);
         lureDown = Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1);
         lureUp = Input.GetKeyUp(KeyCode.Alpha1) || Input.GetKeyUp(KeyCode.Keypad1);
         frenzyDown = Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3);
@@ -305,7 +313,7 @@ public class TypingController : MonoBehaviour
             stateChangedAt = Time.unscaledTime;
         }
 
-        // ---- 3. Outside of play, only Enter does something (and LEFT / RIGHT on the Start panel) ----
+        // ---- 3. Outside of play: Start / results navigation and Enter confirmation ----
         if (GameManager.Instance.State != GameState.Playing)
         {
             GameState endState = GameManager.Instance.State;
@@ -319,7 +327,20 @@ public class TypingController : MonoBehaviour
                 GameManager.Instance.LoadMenu();
                 return;
             }
-            if (difficultyStep != 0 && GameManager.Instance.State == GameState.Start)
+            if (endState == GameState.Won)
+            {
+                if (endPanelStep != 0)
+                {
+                    hud.CycleWonPanelSelection(endPanelStep);
+                }
+                if (enterPressed)
+                {
+                    hud.ConfirmWonPanelSelection();
+                }
+                return;
+            }
+
+            if (difficultyStep != 0 && endState == GameState.Start)
             {
                 GameManager.Instance.CycleTypingDifficulty(difficultyStep);
             }

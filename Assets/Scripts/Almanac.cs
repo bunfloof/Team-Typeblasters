@@ -213,7 +213,7 @@ public static class Almanac
         return sprite;
     }
 
-    private static readonly Color Silhouette = new Color(0.10f, 0.12f, 0.17f);
+    private static readonly Color Silhouette = new Color32(77, 95, 112, 255);
 
     private static void DrawZombie(Color32[] pixels, AlmanacEntry entry, bool locked)
     {

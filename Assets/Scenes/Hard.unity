@@ -3071,6 +3071,7 @@ MonoBehaviour:
   stop: {fileID: 1067157058}
   groupSize: 2
   exitGate: {fileID: 1089511189}
+  openGateFromStart: 0
   isBossFight: 0
   bossStand: {fileID: 0}
 --- !u!1001 &183758994
@@ -3514,6 +3515,7 @@ MonoBehaviour:
   stop: {fileID: 1888953426}
   groupSize: 1
   exitGate: {fileID: 250358110}
+  openGateFromStart: 0
   isBossFight: 0
   bossStand: {fileID: 0}
 --- !u!1 &207646946
@@ -6593,6 +6595,7 @@ MonoBehaviour:
   stop: {fileID: 626998143}
   groupSize: 1
   exitGate: {fileID: 0}
+  openGateFromStart: 0
   isBossFight: 1
   bossStand: {fileID: 158066234}
 --- !u!4 &375525103
@@ -11424,6 +11427,7 @@ MonoBehaviour:
   turnSpeed: 160
   cornerLookAhead: 5
   cornerRadius: 6
+  faceAmbushers: 0
 --- !u!1 &605080115
 GameObject:
   m_ObjectHideFlags: 0
@@ -14473,6 +14477,7 @@ MonoBehaviour:
   stop: {fileID: 925696988}
   groupSize: 3
   exitGate: {fileID: 2007599093}
+  openGateFromStart: 0
   isBossFight: 0
   bossStand: {fileID: 0}
 --- !u!1 &806333889
@@ -20396,6 +20401,25 @@ MonoBehaviour:
   chainFirstWave: 2
   chainStartCount: 1
   chainPerWave: 1
+  guidedFirstWave: 0
+  endlessMode: 0
+  endlessDifficultyCapWave: 10
+  endlessMaxBaseZombiesPerWave: 24
+  endlessMaxChainPairs: 3
+  endlessWaveBreakSeconds: 2
+  endlessMaxZombieSpeed: 2.5
+  endlessSpecialGrowthWaves: 5
+  endlessBossEveryWaves: 10
+  endlessBossHealthGrowth: 0.4
+  sniperFirstWave: 6
+  sniperEveryWaves: 5
+  sniperMax: 3
+  sniperBulletSeconds: 7
+  sniperBulletMinSeconds: 5
+  rearFirstWave: 5
+  rearEveryWaves: 2
+  rearMax: 4
+  maxOnScreen: 5
   bossName: THE HOLLOW WARDEN
   zombiePrefab: {fileID: 6168303598776599510, guid: 4d040f4271f60994fb6456cf14b3d68f, type: 3}
   player: {fileID: 602902100}
@@ -23427,6 +23451,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4eea2cf469e94b143b7514bcd8700de2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CameraDirector
+  thirdPersonOffset: {x: 0, y: 0, z: 0}
+  thirdPersonPitchDown: 12
   maxFocusYaw: 16
   maxFocusPitchDown: 12
   maxFocusPitchUp: 22
@@ -24637,6 +24663,7 @@ MonoBehaviour:
   stop: {fileID: 883518517}
   groupSize: 3
   exitGate: {fileID: 479229088}
+  openGateFromStart: 0
   isBossFight: 0
   bossStand: {fileID: 0}
 --- !u!1 &1473829499
@@ -34987,7 +35014,6 @@ MonoBehaviour:
   shieldChargesPerLevel: 1
   shieldSeconds: 8
   shieldEnemySpeed: 0.35
-  shieldWordSeconds: 6
   hud: {fileID: 995497774}
   player: {fileID: 602902100}
 --- !u!1001 &2035720948
@@ -35249,7 +35275,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
-  m_Color: {r: 0.3, g: 0.85, b: 0.4, a: 1}
+  m_Color: {r: 0.15686275, g: 1, b: 0.3137255, a: 1}
   m_RaycastTarget: 0
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
@@ -38484,6 +38510,7 @@ MonoBehaviour:
   stop: {fileID: 3100000121}
   groupSize: 3
   exitGate: {fileID: 0}
+  openGateFromStart: 0
   isBossFight: 0
   bossStand: {fileID: 3100000131}
 --- !u!1 &3100000080
@@ -39446,6 +39473,7 @@ MonoBehaviour:
   stop: {fileID: 3100000321}
   groupSize: 3
   exitGate: {fileID: 0}
+  openGateFromStart: 0
   isBossFight: 0
   bossStand: {fileID: 3100000331}
 --- !u!1 &3100000270
@@ -40440,6 +40468,7 @@ MonoBehaviour:
   stop: {fileID: 3100000521}
   groupSize: 3
   exitGate: {fileID: 0}
+  openGateFromStart: 0
   isBossFight: 0
   bossStand: {fileID: 3100000531}
 --- !u!1 &3100000470
@@ -41434,6 +41463,7 @@ MonoBehaviour:
   stop: {fileID: 3100000721}
   groupSize: 3
   exitGate: {fileID: 0}
+  openGateFromStart: 0
   isBossFight: 1
   bossStand: {fileID: 3100000731}
 --- !u!1 &3100000670
@@ -43295,7 +43325,7 @@ Transform:
   m_GameObject: {fileID: 3100000960}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -61.164686, y: 1.1, z: -35.653334}
+  m_LocalPosition: {x: -61.164684, y: 1.1, z: -35.653336}
   m_LocalScale: {x: 0.15, y: 2.2, z: 0.15}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -43385,7 +43415,7 @@ Transform:
   m_GameObject: {fileID: 3100000970}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -61.164686, y: 2.1, z: -35.653334}
+  m_LocalPosition: {x: -61.164684, y: 2.1, z: -35.653336}
   m_LocalScale: {x: 0.4, y: 0.5, z: 0.4}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -44645,7 +44675,7 @@ Transform:
   m_GameObject: {fileID: 3100001110}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -18.181981, y: 1.1, z: 13.181981}
+  m_LocalPosition: {x: -18.18198, y: 1.1, z: 13.181981}
   m_LocalScale: {x: 0.15, y: 2.2, z: 0.15}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -44735,7 +44765,7 @@ Transform:
   m_GameObject: {fileID: 3100001120}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -18.181981, y: 2.1, z: 13.181981}
+  m_LocalPosition: {x: -18.18198, y: 2.1, z: 13.181981}
   m_LocalScale: {x: 0.4, y: 0.5, z: 0.4}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -44915,7 +44945,7 @@ Transform:
   m_GameObject: {fileID: 3100001140}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -5.000000, y: 1.1, z: 14.500000}
+  m_LocalPosition: {x: -5, y: 1.1, z: 14.5}
   m_LocalScale: {x: 0.15, y: 2.2, z: 0.15}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -45005,7 +45035,7 @@ Transform:
   m_GameObject: {fileID: 3100001150}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -5.000000, y: 2.1, z: 14.500000}
+  m_LocalPosition: {x: -5, y: 2.1, z: 14.5}
   m_LocalScale: {x: 0.4, y: 0.5, z: 0.4}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -45725,7 +45755,7 @@ Transform:
   m_GameObject: {fileID: 3100001230}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 36.818019, y: 1.1, z: -18.181981}
+  m_LocalPosition: {x: 36.81802, y: 1.1, z: -18.18198}
   m_LocalScale: {x: 0.15, y: 2.2, z: 0.15}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -45815,7 +45845,7 @@ Transform:
   m_GameObject: {fileID: 3100001240}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 36.818019, y: 2.1, z: -18.181981}
+  m_LocalPosition: {x: 36.81802, y: 2.1, z: -18.18198}
   m_LocalScale: {x: 0.4, y: 0.5, z: 0.4}
   m_ConstrainProportionsScale: 0
   m_Children: []

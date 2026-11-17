@@ -24,6 +24,10 @@ using UnityEngine.InputSystem;
 
 public class AlmanacPanel : MonoBehaviour
 {
+    private static readonly Color PageBackground = new Color(Ui.Ink.r, Ui.Ink.g, Ui.Ink.b, 1f);
+    private static readonly Color CardSurface = new Color32(28, 42, 56, 255);
+    private static readonly Color SelectedCardSurface = new Color32(37, 54, 70, 255);
+
     private RectTransform root, header, grid, detail, footer;
     private TMP_Text countText, nameText, taglineText, threatLabel, bodyText, lockedText;
     private RectTransform progressFill;
@@ -91,7 +95,7 @@ public class AlmanacPanel : MonoBehaviour
 
     private void Build()
     {
-        Image backdrop = Ui.Panel(root, "Backdrop", new Color(Ui.Ink.r, Ui.Ink.g, Ui.Ink.b, 1f), true);
+        Image backdrop = Ui.Panel(root, "Backdrop", PageBackground, true);
         Ui.Stretch(backdrop.rectTransform);
 
         header = Ui.Rect(root, "Header");
@@ -130,13 +134,14 @@ public class AlmanacPanel : MonoBehaviour
 
     private void BuildCard(int index)
     {
-        Image card = Ui.Panel(grid, "Card " + Almanac.Entries[index].Id, Ui.PanelColor, true);
+        Image card = Ui.Panel(grid, "Card " + Almanac.Entries[index].Id, CardSurface, true);
         Button button = card.gameObject.AddComponent<Button>();
         button.transition = Selectable.Transition.None;
         button.navigation = new Navigation { mode = Navigation.Mode.None };
         int captured = index;
         button.onClick.AddListener(() => Select(captured));
 
+        // The portrait's transparent pixels reveal the card surface beneath it.
         Image picture = Ui.Panel(card.transform, "Picture", Color.white);
         picture.preserveAspect = true;
         TMP_Text label = Ui.Caps(Ui.Label(card.transform, "Name", "", 20f, FontStyles.Bold), 3f);
@@ -156,7 +161,7 @@ public class AlmanacPanel : MonoBehaviour
 
     private void BuildDetail()
     {
-        Image panel = Ui.Panel(root, "Detail", Ui.PanelColor);
+        Image panel = Ui.Panel(root, "Detail", CardSurface);
         detail = panel.rectTransform;
         Ui.Frame(detail, Ui.Line);
 
@@ -257,7 +262,7 @@ public class AlmanacPanel : MonoBehaviour
         {
             bool on = i == selected;
             Ui.SetFrameColor(cardFrames[i], on ? Ui.Gold : Ui.Line);
-            cards[i].GetComponent<Image>().color = on ? Ui.PanelLight : Ui.PanelColor;
+            cards[i].GetComponent<Image>().color = on ? SelectedCardSurface : CardSurface;
             cards[i].localScale = on ? new Vector3(1.04f, 1.04f, 1f) : Vector3.one;
         }
         cards[selected].SetAsLastSibling(); // the grown card is drawn over its neighbours
@@ -345,17 +350,22 @@ public class AlmanacPanel : MonoBehaviour
         Ui.Place(grid, Ui.TopLeft, Ui.TopLeft, gridAt, new Vector2(gridWidth, gridHeight));
         Ui.Place(detail, Ui.TopLeft, Ui.TopLeft, detailAt, new Vector2(detailWidth, detailHeight));
 
-        // The cards.
+        // The cards. Reserve room around the grid for the selected card's 1.04x
+        // scale and frame, so the yellow outline is not clipped at the outer edges.
         int rows = Mathf.CeilToInt(cards.Count / (float)columns);
         const float Gap = 16f;
-        float cardWidth = (gridWidth - Gap * (columns - 1)) / columns;
-        float cardHeight = Mathf.Min((gridHeight - Gap * (rows - 1)) / rows, cardWidth * 1.25f);
+        const float SelectionPadding = 12f;
+        float usableGridWidth = Mathf.Max(0f, gridWidth - SelectionPadding * 2f);
+        float usableGridHeight = Mathf.Max(0f, gridHeight - SelectionPadding * 2f);
+        float cardWidth = (usableGridWidth - Gap * (columns - 1)) / columns;
+        float cardHeight = Mathf.Min((usableGridHeight - Gap * (rows - 1)) / rows, cardWidth * 1.25f);
         for (int i = 0; i < cards.Count; i++)
         {
             int col = i % columns, row = i / columns;
             RectTransform card = cards[i];
             Ui.Place(card, Ui.TopLeft, Ui.Centre,
-                new Vector2(col * (cardWidth + Gap) + cardWidth * 0.5f, -(row * (cardHeight + Gap) + cardHeight * 0.5f)),
+                new Vector2(SelectionPadding + col * (cardWidth + Gap) + cardWidth * 0.5f,
+                    -(SelectionPadding + row * (cardHeight + Gap) + cardHeight * 0.5f)),
                 new Vector2(cardWidth, cardHeight));
             float labelHeight = Mathf.Clamp(cardHeight * 0.2f, 24f, 40f);
             RectTransform picture = (RectTransform)card.Find("Picture");
