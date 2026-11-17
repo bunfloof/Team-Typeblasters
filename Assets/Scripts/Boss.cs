@@ -190,6 +190,7 @@ public class Boss : MonoBehaviour
             GiveNewWord(word);
         }
         hud.SetBossHealth(Health, maxHealth);
+        Almanac.Discover("boss");
         Tutorial.Once("boss", "BOSS! Every word hurts it. Lure bombs, barrels and RED zombies blown up next to it hurt it too!", 7f);
     }
 

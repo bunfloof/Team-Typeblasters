@@ -2783,6 +2783,7 @@ public class WaveSpawner : MonoBehaviour
         zombie.Setup(word, speed, player, this, kind, exit);
         aliveZombies.Add(zombie);
         seenKinds.Add(kind);
+        Almanac.Discover(kind);
         AssignApproach(zombie, exit);
 
         // Born during a FRENZY: a short word right away (its real word comes back with the others).

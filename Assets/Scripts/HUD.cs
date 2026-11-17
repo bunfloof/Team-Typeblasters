@@ -177,11 +177,65 @@ public class HUD : MonoBehaviour
         endlessWaveReward.Initialize(transform);
 
         HudReveal.Revealed += RevealFeature;
+        Almanac.Discovered += ShowAlmanacNotice;
+    }
+
+    // ---- "New Almanac entry" notice (right edge, under the score) ----
+    // A small card slides in from the right when an enemy is met for the very
+    // first time, stays a moment and slides out. Real time, so it also plays
+    // while a lesson holds the world.
+
+    private readonly Queue<AlmanacEntry> almanacQueue = new Queue<AlmanacEntry>();
+    private bool almanacNoticeBusy;
+
+    private void ShowAlmanacNotice(AlmanacEntry entry)
+    {
+        almanacQueue.Enqueue(entry);
+        if (!almanacNoticeBusy && isActiveAndEnabled)
+        {
+            StartCoroutine(AlmanacNotices());
+        }
+    }
+
+    private System.Collections.IEnumerator AlmanacNotices()
+    {
+        almanacNoticeBusy = true;
+        while (almanacQueue.Count > 0)
+        {
+            AlmanacEntry entry = almanacQueue.Dequeue();
+            Image card = Ui.Panel(readoutLayer, "Almanac Notice", Ui.PanelColor);
+            RectTransform rect = card.rectTransform;
+            Vector2 size = new Vector2(420f, 96f);
+            Image stripe = Ui.Panel(rect, "Stripe", entry.Color);
+            Ui.Place(stripe.rectTransform, Ui.LeftMiddle, Ui.LeftMiddle, Vector2.zero, new Vector2(6f, size.y));
+            Image picture = Ui.Panel(rect, "Picture", Color.white);
+            picture.sprite = Almanac.Portrait(entry, false);
+            picture.preserveAspect = true;
+            Ui.Place(picture.rectTransform, Ui.LeftMiddle, Ui.LeftMiddle, new Vector2(16f, 0f), new Vector2(84f, 84f));
+            TMP_Text top = Ui.Caps(Ui.Label(rect, "Top", "NEW ALMANAC ENTRY", 18f, FontStyles.Bold, TextAlignmentOptions.Left), 6f);
+            top.color = Ui.Teal;
+            Ui.Place(top.rectTransform, Ui.TopLeft, Ui.TopLeft, new Vector2(112f, -16f), new Vector2(300f, 24f));
+            TMP_Text name = Ui.Caps(Ui.Label(rect, "Name", entry.Name, 32f, FontStyles.Bold, TextAlignmentOptions.Left), 4f);
+            name.color = entry.WordColor;
+            Ui.Place(name.rectTransform, Ui.TopLeft, Ui.TopLeft, new Vector2(112f, -42f), new Vector2(300f, 40f));
+
+            const float SlideSeconds = 0.3f, HoldSeconds = 2.6f;
+            float total = SlideSeconds * 2f + HoldSeconds;
+            for (float time = 0f; time < total; time += Time.unscaledDeltaTime)
+            {
+                float shown = Mathf.Min(Ui.EaseOut(time / SlideSeconds), Ui.EaseOut((total - time) / SlideSeconds));
+                Ui.Place(rect, Ui.TopRight, Ui.TopRight, new Vector2(Mathf.Lerp(size.x + 20f, -30f, shown), -190f), size);
+                yield return null;
+            }
+            Destroy(card.gameObject);
+        }
+        almanacNoticeBusy = false;
     }
 
     private void OnDestroy()
     {
         HudReveal.Revealed -= RevealFeature;
+        Almanac.Discovered -= ShowAlmanacNotice;
     }
 
     private void Update()

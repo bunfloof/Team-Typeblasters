@@ -42,6 +42,8 @@ public class MainMenu : MonoBehaviour
     private TMP_Text mainTitle, levelTitle;
     private RectTransform startButton, backButton;
     private RectTransform endlessButton;
+    private RectTransform almanacButton;
+    private AlmanacPanel almanac;   // the ALMANAC screen, opened over the menu
     private RectTransform fullscreenButton;
     private TMP_Text fullscreenHint, fullscreenLabel;
     private readonly List<RectTransform> levelButtons = new List<RectTransform>();
@@ -50,6 +52,7 @@ public class MainMenu : MonoBehaviour
     private readonly List<RectTransform> menuItems = new List<RectTransform>(); // buttons the keys can select on the current page
     private int selected;           // index in menuItems
     private bool keyboardSelectionStarted;
+    private bool almanacWasOpen;    // the same for the Almanac
     private bool settingsWasOpen;   // SettingsPanel was open last frame (it closes itself on Esc / Enter)
     private static bool openLevelSelectionOnStart;
 
@@ -127,6 +130,10 @@ public class MainMenu : MonoBehaviour
         LayoutTitle(mainTitle, width, portrait ? 210f : 120f, portrait ? 330f : 300f, 84f, portrait);
         LayoutTitle(levelTitle, width, 110f, portrait ? 450f : 300f, 72f, false);
         LayoutButton(startButton, new Vector2(0f, portrait ? -40f : 0f), portrait ? new Vector2(760f, 140f) : new Vector2(360f, 100f), portrait);
+        // ALMANAC: under START, or under FULL SCREEN and its hint where that button exists.
+        bool hasFullscreen = fullscreenButton != null;
+        LayoutButton(almanacButton, new Vector2(0f, portrait ? (hasFullscreen ? -450f : -200f) : (hasFullscreen ? -300f : -120f)),
+            portrait ? new Vector2(620f, 100f) : new Vector2(360f, 76f), portrait);
         if (fullscreenButton != null)
         {
             LayoutButton(fullscreenButton, new Vector2(0f, portrait ? -315f : -200f),
@@ -198,11 +205,23 @@ public class MainMenu : MonoBehaviour
         RefreshHighlight();
     }
 
+    // The Almanac: every enemy met so far (see Almanac, AlmanacPanel). It takes
+    // the keys while it is open (HandleKeys), and closes itself on Esc.
+    private void OpenAlmanac()
+    {
+        if (almanac == null)
+        {
+            almanac = AlmanacPanel.Create(canvasRect);
+        }
+        almanac.Open(null);
+    }
+
     private GameObject BuildMainPage(Transform canvas)
     {
         GameObject page = CreatePage("Main Page", canvas);
         mainTitle = CreateText(page.transform, "Title", gameTitle, 84f, new Vector2(0f, 300f), new Vector2(1700f, 120f));
         startButton = (RectTransform)CreateButton(page.transform, "Start Button", "START", new Vector2(0f, 0f), new Vector2(360f, 100f), ShowLevels).transform;
+        almanacButton = (RectTransform)CreateButton(page.transform, "Almanac Button", "ALMANAC", new Vector2(0f, -120f), new Vector2(360f, 76f), OpenAlmanac).transform;
         BuildFullscreenControl(page.transform);
         SettingsPanel.AddButton((RectTransform)page.transform, new Vector2(-64f, -48f));
         return page;
@@ -310,6 +329,7 @@ public class MainMenu : MonoBehaviour
         if (mainPage.activeSelf)
         {
             menuItems.Add(startButton);
+            menuItems.Add(almanacButton);
             if (fullscreenButton != null) menuItems.Add(fullscreenButton);
         }
         else
@@ -330,6 +350,12 @@ public class MainMenu : MonoBehaviour
         settingsWasOpen = SettingsPanel.IsOpen;
 
         Keyboard keyboard = Keyboard.current;
+        bool almanacBusy = (almanac != null && almanac.IsOpen) || almanacWasOpen;
+        almanacWasOpen = almanac != null && almanac.IsOpen;
+        if (almanacBusy)
+        {
+            return;
+        }
         if (keyboard == null || loading || settingsBusy)
         {
             return;
@@ -374,6 +400,7 @@ public class MainMenu : MonoBehaviour
         selected = Mathf.Clamp(selected, 0, items.Count - 1);
 
         SetHighlight(startButton, false);
+        SetHighlight(almanacButton, false);
         if (fullscreenButton != null) SetHighlight(fullscreenButton, false);
         foreach (RectTransform level in levelButtons)
         {
