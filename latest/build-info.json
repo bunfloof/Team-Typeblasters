@@ -2,14 +2,14 @@
   "version": "latest-2026-11-17-30dd632",
   "source_commit": "30dd6327967cb1e70aa78ac3febc8171eed1fa3a",
   "commit_message": "Adjust the Almanac visuals and add keyboard navigation throughout the game for full keyboard control",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44157364680",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44173125562",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-17T19:29:03.954858Z",
+  "published_utc": "2026-11-17T20:58:00.600806Z",
   "files": [
     {
       "path": "Build/WebGL.data",
       "bytes": 14439412,
-      "sha256": "9c189df22d7799717b133eb54f9b71ac14e85e5c053dcc618cdce75229a5d503"
+      "sha256": "1ed8447ba2cbc99300d8791ff989baa6dd657285a4c65660b666c79a7a821730"
     },
     {
       "path": "Build/WebGL.framework.js",
