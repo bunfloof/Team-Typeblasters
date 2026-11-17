@@ -3173,6 +3173,7 @@ MonoBehaviour:
   stop: {fileID: 1067157058}
   groupSize: 2
   exitGate: {fileID: 1089511189}
+  openGateFromStart: 0
   isBossFight: 0
   bossStand: {fileID: 0}
 --- !u!1001 &183758994
@@ -3616,6 +3617,7 @@ MonoBehaviour:
   stop: {fileID: 1888953426}
   groupSize: 1
   exitGate: {fileID: 250358110}
+  openGateFromStart: 0
   isBossFight: 0
   bossStand: {fileID: 0}
 --- !u!1 &207646946
@@ -6593,6 +6595,7 @@ MonoBehaviour:
   stop: {fileID: 626998143}
   groupSize: 1
   exitGate: {fileID: 0}
+  openGateFromStart: 0
   isBossFight: 1
   bossStand: {fileID: 158066234}
 --- !u!4 &375525103
@@ -7761,6 +7764,10 @@ PrefabInstance:
     - target: {fileID: 5234770964089663454, guid: 158a08ba07c379e4298fd67245215ac2, type: 3}
       propertyPath: m_Name
       value: Menu Button
+      objectReference: {fileID: 0}
+    - target: {fileID: 7458235807459724501, guid: 158a08ba07c379e4298fd67245215ac2, type: 3}
+      propertyPath: m_TextStyleHashCode
+      value: -1183493901
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -11526,6 +11533,7 @@ MonoBehaviour:
   turnSpeed: 160
   cornerLookAhead: 5
   cornerRadius: 6
+  faceAmbushers: 1
 --- !u!1 &605080115
 GameObject:
   m_ObjectHideFlags: 0
@@ -18265,7 +18273,7 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: 1747516057696957227, guid: a9c56e1f653ff6846b71216b45bacc88, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 59.75
+      value: 65
       objectReference: {fileID: 0}
     - target: {fileID: 1747516057696957227, guid: a9c56e1f653ff6846b71216b45bacc88, type: 3}
       propertyPath: m_LocalPosition.y
@@ -18273,11 +18281,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1747516057696957227, guid: a9c56e1f653ff6846b71216b45bacc88, type: 3}
       propertyPath: m_LocalPosition.z
-      value: 8.7
+      value: 52.35
       objectReference: {fileID: 0}
     - target: {fileID: 1747516057696957227, guid: a9c56e1f653ff6846b71216b45bacc88, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0
+      value: 0.7071068
       objectReference: {fileID: 0}
     - target: {fileID: 1747516057696957227, guid: a9c56e1f653ff6846b71216b45bacc88, type: 3}
       propertyPath: m_LocalRotation.x
@@ -18285,7 +18293,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1747516057696957227, guid: a9c56e1f653ff6846b71216b45bacc88, type: 3}
       propertyPath: m_LocalRotation.y
-      value: 1
+      value: 0.7071068
       objectReference: {fileID: 0}
     - target: {fileID: 1747516057696957227, guid: a9c56e1f653ff6846b71216b45bacc88, type: 3}
       propertyPath: m_LocalRotation.z
@@ -18309,7 +18317,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2672219121058639414, guid: a9c56e1f653ff6846b71216b45bacc88, type: 3}
       propertyPath: m_LocalScale.x
-      value: 7.3
+      value: 6
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -20443,8 +20451,26 @@ MonoBehaviour:
   chainFirstWave: 2
   chainStartCount: 1
   chainPerWave: 1
-  bossName: SUBJECT ZERO
   guidedFirstWave: 1
+  endlessMode: 0
+  endlessDifficultyCapWave: 10
+  endlessMaxBaseZombiesPerWave: 24
+  endlessMaxChainPairs: 3
+  endlessWaveBreakSeconds: 2
+  endlessMaxZombieSpeed: 2.5
+  endlessSpecialGrowthWaves: 5
+  endlessBossEveryWaves: 10
+  endlessBossHealthGrowth: 0.4
+  sniperFirstWave: 6
+  sniperEveryWaves: 5
+  sniperMax: 3
+  sniperBulletSeconds: 7
+  sniperBulletMinSeconds: 5
+  rearFirstWave: 5
+  rearEveryWaves: 2
+  rearMax: 4
+  maxOnScreen: 5
+  bossName: SUBJECT ZERO
   zombiePrefab: {fileID: 6168303598776599510, guid: 4d040f4271f60994fb6456cf14b3d68f, type: 3}
   player: {fileID: 602902100}
   hud: {fileID: 995497774}
@@ -22956,9 +22982,49 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 1601386912}
     m_Modifications:
+    - target: {fileID: 2372127252022950036, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
+      propertyPath: m_fontColor32.rgba
+      value: 4278190080
+      objectReference: {fileID: 0}
+    - target: {fileID: 2372127252022950036, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
+      propertyPath: m_TextStyleHashCode
+      value: -1183493901
+      objectReference: {fileID: 0}
+    - target: {fileID: 3184352058614009747, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
+      propertyPath: m_TextStyleHashCode
+      value: -1183493901
+      objectReference: {fileID: 0}
+    - target: {fileID: 4481492704467583578, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
+      propertyPath: m_TextStyleHashCode
+      value: -1183493901
+      objectReference: {fileID: 0}
+    - target: {fileID: 5458830401394149019, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
+      propertyPath: m_fontColor32.rgba
+      value: 4279943154
+      objectReference: {fileID: 0}
+    - target: {fileID: 5458830401394149019, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
+      propertyPath: m_TextStyleHashCode
+      value: -1183493901
+      objectReference: {fileID: 0}
+    - target: {fileID: 5869048014877161905, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
+      propertyPath: m_fontColor32.rgba
+      value: 4282397670
+      objectReference: {fileID: 0}
+    - target: {fileID: 5869048014877161905, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
+      propertyPath: m_TextStyleHashCode
+      value: -1183493901
+      objectReference: {fileID: 0}
     - target: {fileID: 6060794291855761974, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
       propertyPath: m_Name
       value: Typing Difficulty
+      objectReference: {fileID: 0}
+    - target: {fileID: 7653367932550456587, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
+      propertyPath: m_fontColor32.rgba
+      value: 4280710143
+      objectReference: {fileID: 0}
+    - target: {fileID: 7653367932550456587, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
+      propertyPath: m_TextStyleHashCode
+      value: -1183493901
       objectReference: {fileID: 0}
     - target: {fileID: 8222391355396408209, guid: 1f9d5025b145f114d9db31db8eccf3e9, type: 3}
       propertyPath: m_Pivot.x
@@ -23690,6 +23756,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4eea2cf469e94b143b7514bcd8700de2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CameraDirector
+  thirdPersonOffset: {x: 0, y: 0, z: 0}
+  thirdPersonPitchDown: 12
   maxFocusYaw: 16
   maxFocusPitchDown: 12
   maxFocusPitchUp: 22
@@ -24900,6 +24968,7 @@ MonoBehaviour:
   stop: {fileID: 883518517}
   groupSize: 3
   exitGate: {fileID: 479229088}
+  openGateFromStart: 0
   isBossFight: 0
   bossStand: {fileID: 0}
 --- !u!1 &1473829499
@@ -26032,6 +26101,14 @@ PrefabInstance:
     - target: {fileID: 1505747181233885402, guid: dd8cf47cf4d0d804fa0b9d27000dbaec, type: 3}
       propertyPath: m_Name
       value: Settings Button
+      objectReference: {fileID: 0}
+    - target: {fileID: 5411066113695535719, guid: dd8cf47cf4d0d804fa0b9d27000dbaec, type: 3}
+      propertyPath: m_fontColor32.rgba
+      value: 4292596172
+      objectReference: {fileID: 0}
+    - target: {fileID: 5411066113695535719, guid: dd8cf47cf4d0d804fa0b9d27000dbaec, type: 3}
+      propertyPath: m_TextStyleHashCode
+      value: -1183493901
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -35046,7 +35123,6 @@ MonoBehaviour:
   shieldChargesPerLevel: 1
   shieldSeconds: 8
   shieldEnemySpeed: 0.35
-  shieldWordSeconds: 6
   hud: {fileID: 995497774}
   player: {fileID: 602902100}
 --- !u!1001 &2035720948

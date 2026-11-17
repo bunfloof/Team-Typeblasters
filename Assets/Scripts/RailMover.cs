@@ -34,6 +34,12 @@ public class RailMover : MonoBehaviour
     // whatever is behind it comes into view gradually. A short leg gets a
     // tighter arc (each arc uses at most 45% of the legs next to it).
     [SerializeField] private float cornerRadius = 6f;
+    // FACE THE AMBUSH: while riding, the body turns toward a woken ambush
+    // zombie (WaveSpawner sets RideFocus) instead of looking down the road,
+    // so the player shoots it face on. Off = always look along the road.
+    [SerializeField] private bool faceAmbushers = false;
+    private const float FocusWeight = 0.85f;    // 1 = straight at the zombie, 0 = along the road
+    private const float FocusMinDistance = 1.5f; // closer than this: keep the last direction (no spinning)
 
     private readonly List<Vector3> route = new List<Vector3>();
     private int nextPoint;          // index in route of the point we are heading to
@@ -52,6 +58,10 @@ public class RailMover : MonoBehaviour
     // this many metres per second so there is time to type its word.
     // float.MaxValue = no limit.
     public float SpeedCap { get; set; } = float.MaxValue;
+
+    // The woken ambush zombie to face while riding (null = none). Set every
+    // frame of a run by WaveSpawner; cleared when the run ends.
+    public Vector3? RideFocus { get; set; }
 
     // Metres still to ride along the route.
     public float RemainingDistance
@@ -158,7 +168,7 @@ public class RailMover : MonoBehaviour
         }
 
         // Turn the body: toward the road ahead while riding, toward the fight when stopped.
-        Vector3 wanted = riding ? RideDirection() : finalFacing;
+        Vector3 wanted = riding ? FacingWhileRiding() : finalFacing;
         if (wanted.sqrMagnitude > 0.001f)
         {
             // Ease toward the wanted direction (no hard starts or stops), but
@@ -206,6 +216,7 @@ public class RailMover : MonoBehaviour
         {
             riding = false;
             currentSpeed = 0f;
+            RideFocus = null;
         }
     }
 
@@ -224,6 +235,23 @@ public class RailMover : MonoBehaviour
 
     private const float LookAheadDistance = 4f; // metres: while riding, look at the point this far ahead on the route
     private const float TurnSmoothing = 8f;     // how quickly the body eases toward where it should look (higher = snappier)
+
+    // Where the body faces while riding: along the road, or mostly at a woken
+    // ambush zombie (faceAmbushers). Heading stays the road direction.
+    private Vector3 FacingWhileRiding()
+    {
+        Vector3 road = RideDirection();
+        if (!faceAmbushers || !RideFocus.HasValue)
+        {
+            return road;
+        }
+        Vector3 toFocus = Flat0(RideFocus.Value) - Flat0(transform.position);
+        if (toFocus.magnitude < FocusMinDistance)
+        {
+            return Flat(transform.forward);
+        }
+        return Vector3.Slerp(road, toFocus.normalized, FocusWeight);
+    }
 
     // Where to look while riding: at the point LookAheadDistance ahead on the
     // route. That point slides smoothly along the arcs, so the direction

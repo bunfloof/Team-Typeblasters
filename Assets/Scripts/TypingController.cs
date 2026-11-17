@@ -42,7 +42,10 @@
 //     wave, see Powers). Words drawn on the HUD rather than in the world
 //     (IScreenWord: the health word under the health bar) are typed like any
 //     word, but no bullets fly.
-//   - Backspace drops the current target so the player can retarget.
+//   - TARGET LOCK: once a word is started, the player is locked onto it.
+//     A letter that does not fit it is a wrong key (it never jumps to
+//     another enemy's word). Backspace drops the current target so the
+//     player can retarget.
 //   - Escape pauses the game (and resumes it from the pause panel, see
 //     GameManager.OnPauseKey). Keys typed while paused are ignored.
 //   - Enter closes a first-time tip box, starts the game from the Start
@@ -96,6 +99,9 @@ public class TypingController : MonoBehaviour
     private readonly List<ITypingTarget> candidates = new List<ITypingTarget>();
 
     // ---- Half-typed words kept for later (PARKED) ----
+    // NOTE: with the TARGET LOCK (see HandleCharacter) a started word is never
+    // left behind by typing, so nothing is parked any more; this is kept for
+    // safety only.
     // Typing a letter that does not fit the word being typed but STARTS
     // another word switches to that word. The word left behind keeps its
     // typed letters if at least ParkMinLetters were typed ("elemen" waits for
@@ -616,6 +622,14 @@ public class TypingController : MonoBehaviour
         bool startsWord = false;
         if (!AnyNextIs(candidates, typed))
         {
+            // TARGET LOCK: once a word is started, only its own next letter
+            // counts. A letter that does not fit it is a wrong key - it never
+            // switches to another enemy. Backspace drops the word to retarget.
+            if (candidates.Count > 0)
+            {
+                WrongKey(typed);
+                return;
+            }
             ParkedWord resume = FindParked(typed);
             if (resume != null)
             {

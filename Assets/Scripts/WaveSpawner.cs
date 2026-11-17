@@ -1618,9 +1618,40 @@ public class WaveSpawner : MonoBehaviour
                     slow = true;
                 }
             }
+            rail.RideFocus = RideFocusZombie();
             rail.SpeedCap = slow ? AmbushRideSpeed : float.MaxValue;
             yield return null;
         }
+        rail.RideFocus = null;
+    }
+
+    // The woken ambush zombie the player should face while riding: the one
+    // whose word is being typed, or else the nearest one within
+    // AmbushSlowDistance (null = none: look along the road).
+    private Vector3? RideFocusZombie()
+    {
+        ITypingTarget typed = GameManager.Instance.Typing != null ? GameManager.Instance.Typing.CurrentTarget : null;
+        Zombie best = null;
+        float bestDistance = AmbushSlowDistance;
+        foreach (Zombie zombie in ambushers)
+        {
+            if (zombie == null || !zombie.IsAlive || zombie.IsLurking)
+            {
+                continue;
+            }
+            if (ReferenceEquals(typed, zombie))
+            {
+                return zombie.Position;
+            }
+            Vector3 fromPlayer = zombie.Position - player.position;
+            fromPlayer.y = 0f;
+            if (fromPlayer.magnitude < bestDistance)
+            {
+                bestDistance = fromPlayer.magnitude;
+                best = zombie;
+            }
+        }
+        return best != null ? best.Position : (Vector3?)null;
     }
 
     // A spot 'along' metres along the run from where it started (the run has
