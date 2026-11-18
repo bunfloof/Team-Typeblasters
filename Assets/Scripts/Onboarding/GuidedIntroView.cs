@@ -13,6 +13,8 @@
 //   - a bobbing ARROW over the word to type (a zombie, a barrel, a box);
 //   - a "skip intro" chip at the start (ENTER, or tap it);
 //   - a light dark TINT over the 3D view while the world is held.
+//   - CINEMA BARS (black, top and bottom) during a cutscene
+//     (GuidedIntro.Cutscene): the group walks out and the player only watches.
 // ---------------------------------------------------------------------------
 using TMPro;
 using UnityEngine;
@@ -38,8 +40,11 @@ public class GuidedIntroView : MonoBehaviour
     private const float StepsHeight = 112f;
     private const float HoldTint = 0.22f;
     private const float AimingAlpha = 0.45f;   // while 1 is held the card fades, so the landing point shows through
+    private const float CinemaBarHeight = 64f;  // canvas units
+    private const float CinemaBarSpeed = 320f;  // canvas units per second
 
     private RectTransform root, card, accent, steps, divider, pointer, skipChip;
+    private RectTransform cinemaTop, cinemaBottom;
     private HUD hud;
     private float cardShift;                  // canvas units the card is moved right to keep clear of the power list
     private int cardPositionFrame = -1;
@@ -84,6 +89,9 @@ public class GuidedIntroView : MonoBehaviour
 
     private void Build()
     {
+        cinemaTop = CinemaBar("Cinema Bar Top", 1f);
+        cinemaBottom = CinemaBar("Cinema Bar Bottom", 0f);
+
         card = Rect("Card", root, new Vector2(0.5f, 0f), new Vector2(0f, CardBottom), new Vector2(600f, 120f));
         card.pivot = new Vector2(0.5f, 0f);
         Image plate = card.gameObject.AddComponent<Image>();
@@ -180,6 +188,25 @@ public class GuidedIntroView : MonoBehaviour
         pointed = target;
     }
 
+    // A black bar across the whole width at the top (y = 1) or bottom (y = 0)
+    // edge, 0 high until a cutscene starts.
+    private RectTransform CinemaBar(string name, float y)
+    {
+        var go = new GameObject(name, typeof(RectTransform), typeof(Image));
+        var bar = (RectTransform)go.transform;
+        bar.SetParent(root, false);
+        bar.anchorMin = new Vector2(0f, y);
+        bar.anchorMax = new Vector2(1f, y);
+        bar.pivot = new Vector2(0.5f, y);
+        bar.anchoredPosition = Vector2.zero;
+        bar.sizeDelta = Vector2.zero;
+        Image image = go.GetComponent<Image>();
+        image.color = Color.black;
+        image.raycastTarget = false;
+        bar.SetAsFirstSibling(); // under the card and the arrow
+        return bar;
+    }
+
     public void Nudge()
     {
         nudgeAt = Time.unscaledTime;
@@ -226,6 +253,12 @@ public class GuidedIntroView : MonoBehaviour
         bool playing = GameManager.Instance == null || GameManager.Instance.State == GameState.Playing;
         rootGroup.alpha = playing ? 1f : 0f;
         rootGroup.blocksRaycasts = playing;
+
+        // Cinema bars slide in during a cutscene and out when the card shows.
+        float barHeight = Mathf.MoveTowards(cinemaTop.sizeDelta.y, playing && GuidedIntro.Cutscene ? CinemaBarHeight : 0f,
+            CinemaBarSpeed * Time.unscaledDeltaTime);
+        cinemaTop.sizeDelta = new Vector2(0f, barHeight);
+        cinemaBottom.sizeDelta = new Vector2(0f, barHeight);
 
         // The tint fades in while the world is held.
         float tintAlpha = Mathf.MoveTowards(tint.color.a, GuidedIntro.Holding ? HoldTint : 0f, Time.unscaledDeltaTime * 1.2f);

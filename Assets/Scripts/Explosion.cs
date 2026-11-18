@@ -11,6 +11,7 @@
 //      are drawn. A RED zombie caught in the blast explodes too, ChainDelay
 //      seconds later, with its own blast radius (a chain reaction);
 //   2. every active barrel within the radius explodes too (Barrel.Detonate);
+//      and every luring lure bomb goes off (LureBomb.Detonate);
 //   3. the boss, if its body is within radius + 3.5 m, takes bossDamage.
 //   All kills of one chain reaction are scored together at the end, as one
 //   multi-kill (see ExplosionChain).
@@ -88,6 +89,7 @@ public class Explosion : MonoBehaviour
         {
             HitZombies(waveSpawner, chain);
             HitBarrels(waveSpawner, chain);
+            HitLures(chain);
             HitBoss(waveSpawner, chain, bossDamage);
         }
 
@@ -145,6 +147,20 @@ public class Explosion : MonoBehaviour
             if (FlatDistance(barrel.Position, center) <= radius + BarrelReach)
             {
                 barrel.Detonate(chain);
+            }
+        }
+    }
+
+    // 2b. Lures: a luring lure bomb in the blast goes off too (LureBomb.Detonate),
+    // and the zombies crowded round it die. This is the LURE + RPG combo.
+    private void HitLures(ExplosionChain chain)
+    {
+        List<LureBomb> lures = new List<LureBomb>(LureBomb.Active);
+        foreach (LureBomb lure in lures)
+        {
+            if (lure != null && lure.IsLuring && FlatDistance(lure.Position, center) <= radius + BarrelReach)
+            {
+                lure.Detonate(chain);
             }
         }
     }

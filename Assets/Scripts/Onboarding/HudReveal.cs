@@ -63,6 +63,10 @@ public static class HudReveal
     // May this power be used? ("shield", "lure", "freeze", "frenzy", "rpg", as Powers names them)
     public static bool PowerAllowed(string item)
     {
+        if (GuidedIntro.OnlyPower != null && item != GuidedIntro.OnlyPower)
+        {
+            return false; // a lesson card waits for ONE power: the others wait too
+        }
         switch (item)
         {
             case "shield": return IsShown(HudFeature.Shield);

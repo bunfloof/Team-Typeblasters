@@ -332,7 +332,7 @@ public class TutorialCoachView : MonoBehaviour
         energyCost.gameObject.SetActive(energySkill);
         if (energySkill)
         {
-            int cost = key == "1" ? Powers.LureCost : key == "2" ? Powers.FreezeCost : key == "4" ? Powers.RocketCost : Powers.FrenzyCost;
+            int cost = key == "1" ? Powers.LureCost : key == "2" ? Powers.FreezeCost : key == "3" ? Powers.RocketCost : Powers.FrenzyCost;
             int available = GameManager.Instance.SkillEnergy;
             energyCost.text = cost + (effect ? " ENERGY USED" : " ENERGY") + "   |   ENERGY " + available;
             energyCost.color = effect ? Teal : available >= cost ? Gold : new Color(1f,.35f,.3f);

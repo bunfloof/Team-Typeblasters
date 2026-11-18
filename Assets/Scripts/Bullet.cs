@@ -29,7 +29,20 @@ public class Bullet : MonoBehaviour
     private const float RocketSpeed = 40f;
     private const float RocketSize = 0.35f;
     private const float RocketTrailSeconds = 0.3f;
-    public const float RocketBlastRadius = 3.5f;
+    public const float RocketBlastRadius = 3.8f; // a little under a barrel (4): enough to reach a lure in the crowd it pulled in
+    private const float GuidedRocketRadius = 8f;   // Normal's guided wave 1: the whole group goes in one rocket
+    private const float TutorialRocketRadius = 6f; // the Easy tutorial's lessons
+
+    // The rocket's blast reach right now: much bigger while it is being taught.
+    public static float RocketRadius
+    {
+        get
+        {
+            if (GuidedIntro.Running) return GuidedRocketRadius;
+            bool learning = EasyTutorial.Active != null && !EasyTutorial.Active.IsFinalWave;
+            return learning ? TutorialRocketRadius : RocketBlastRadius;
+        }
+    }
     public const float RocketBossDamage = 60f;    // weaker than a barrel (150) on the boss, so the RPG is no boss killer
     private static readonly Color RocketColor = new Color(1f, 0.35f, 0.1f);
 
@@ -132,7 +145,7 @@ public class Bullet : MonoBehaviour
             AnalyticsEvent report = Analytics.NewEvent("blast");
             report.Add("source", "rpg");
             report.Add("target", Analytics.TargetType(target)); // the word the rocket was fired at
-            Explosion.Detonate(transform.position, RocketBlastRadius, null, RocketBossDamage, report);
+            Explosion.Detonate(transform.position, RocketRadius, null, RocketBossDamage, report);
         }
     }
 

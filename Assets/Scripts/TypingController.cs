@@ -34,7 +34,7 @@
 //   - 1: TAP to throw a lure bomb, HOLD to aim it (a dashed arc) and release
 //     to throw (see Powers); while aiming, the ARROW keys steer the throw.
 //     1 is read as a key going down / up, not as a typed character.
-//     2 uses the freeze power; 3 / 4 are the combo weapons (TAP = use a kept
+//     2 uses the freeze power; 3 (RPG) / 4 (FRENZY) are the combo weapons (TAP = use a kept
 //     FRENZY / RPG, HOLD = buy one;
 //     see Powers). No word contains the keys 1-4, and arrow
 //     keys type nothing, so they never clash with typing.
@@ -75,8 +75,8 @@ public class TypingController : MonoBehaviour
 
     private const char LureKey = '1';
     private const char FreezeKey = '2';
-    private const char FrenzyKey = '3';  // combo weapons (see Powers)
-    private const char RocketKey = '4';
+    private const char RocketKey = '3';  // combo weapons (see Powers): 3 RPG, 4 FRENZY
+    private const char FrenzyKey = '4';
 
     // A typed "2" while the 2 key has been held longer than this is the key
     // repeating, not a new press (key repeat starts after 0.25 s or more).
@@ -206,8 +206,8 @@ public class TypingController : MonoBehaviour
         int endPanelStep;   // LEFT/A/W (-1) / RIGHT/D/S (+1) on the win panel
         bool lureDown;     // 1 went down this frame (start aiming)...
         bool lureUp;       // ...and came up (throw)
-        bool frenzyDown, frenzyUp; // 3 went down / came up: TAP = use a FRENZY, HOLD = buy one (see Powers)
-        bool rocketDown, rocketUp; // 4, the same for the RPG
+        bool frenzyDown, frenzyUp; // 4 went down / came up: TAP = use a FRENZY, HOLD = buy one (see Powers)
+        bool rocketDown, rocketUp; // 3, the same for the RPG
         bool textModifier;
         Vector2 arrows;    // arrow keys held: x = Right - Left, y = Up - Down (steer the lure bomb)
         bool freezeRepeat; // a typed "2" this frame is only the held 2 key repeating (see below)
@@ -244,10 +244,10 @@ public class TypingController : MonoBehaviour
             - ((keyboard.leftArrowKey.wasPressedThisFrame || keyboard.aKey.wasPressedThisFrame || keyboard.wKey.wasPressedThisFrame) ? 1 : 0);
         lureDown = keyboard != null && (keyboard.digit1Key.wasPressedThisFrame || keyboard.numpad1Key.wasPressedThisFrame);
         lureUp = keyboard != null && (keyboard.digit1Key.wasReleasedThisFrame || keyboard.numpad1Key.wasReleasedThisFrame);
-        frenzyDown = keyboard != null && (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame);
-        frenzyUp = keyboard != null && (keyboard.digit3Key.wasReleasedThisFrame || keyboard.numpad3Key.wasReleasedThisFrame);
-        rocketDown = keyboard != null && (keyboard.digit4Key.wasPressedThisFrame || keyboard.numpad4Key.wasPressedThisFrame);
-        rocketUp = keyboard != null && (keyboard.digit4Key.wasReleasedThisFrame || keyboard.numpad4Key.wasReleasedThisFrame);
+        frenzyDown = keyboard != null && (keyboard.digit4Key.wasPressedThisFrame || keyboard.numpad4Key.wasPressedThisFrame);
+        frenzyUp = keyboard != null && (keyboard.digit4Key.wasReleasedThisFrame || keyboard.numpad4Key.wasReleasedThisFrame);
+        rocketDown = keyboard != null && (keyboard.digit3Key.wasPressedThisFrame || keyboard.numpad3Key.wasPressedThisFrame);
+        rocketUp = keyboard != null && (keyboard.digit3Key.wasReleasedThisFrame || keyboard.numpad3Key.wasReleasedThisFrame);
         arrows = Vector2.zero;
         if (keyboard != null)
         {
@@ -279,10 +279,10 @@ public class TypingController : MonoBehaviour
             - ((Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.W)) ? 1 : 0);
         lureDown = Input.GetKeyDown(KeyCode.Alpha1) || Input.GetKeyDown(KeyCode.Keypad1);
         lureUp = Input.GetKeyUp(KeyCode.Alpha1) || Input.GetKeyUp(KeyCode.Keypad1);
-        frenzyDown = Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3);
-        frenzyUp = Input.GetKeyUp(KeyCode.Alpha3) || Input.GetKeyUp(KeyCode.Keypad3);
-        rocketDown = Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4);
-        rocketUp = Input.GetKeyUp(KeyCode.Alpha4) || Input.GetKeyUp(KeyCode.Keypad4);
+        frenzyDown = Input.GetKeyDown(KeyCode.Alpha4) || Input.GetKeyDown(KeyCode.Keypad4);
+        frenzyUp = Input.GetKeyUp(KeyCode.Alpha4) || Input.GetKeyUp(KeyCode.Keypad4);
+        rocketDown = Input.GetKeyDown(KeyCode.Alpha3) || Input.GetKeyDown(KeyCode.Keypad3);
+        rocketUp = Input.GetKeyUp(KeyCode.Alpha3) || Input.GetKeyUp(KeyCode.Keypad3);
         arrows = new Vector2(
             (Input.GetKey(KeyCode.RightArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.LeftArrow) ? 1f : 0f),
             (Input.GetKey(KeyCode.UpArrow) ? 1f : 0f) - (Input.GetKey(KeyCode.DownArrow) ? 1f : 0f));
@@ -381,6 +381,19 @@ public class TypingController : MonoBehaviour
             }
         }
 
+        // ---- 4b. Guided intro CUTSCENE (before a lesson's card shows): every
+        //          input is ignored - no letters, no Backspace, no powers, no shield.
+        //          (Key releases still go through, so nothing stays held.)
+        if (GuidedIntro.Cutscene)
+        {
+            typedText = "";
+            dropPressed = false;
+            shieldPressed = false;
+            lureDown = false;
+            frenzyDown = false;
+            rocketDown = false;
+        }
+
         // ---- 5. Backspace: drop the word being typed (nothing typed: the newest waiting word) ----
         if (dropPressed && candidates.Count == 0 && parked.Count > 0)
         {
@@ -434,7 +447,7 @@ public class TypingController : MonoBehaviour
             GameManager.Instance.Powers.ReleaseLureAim();
         }
 
-        // ---- 5c. 3 / 4: TAP to use a kept combo weapon, HOLD to buy one (Powers) ----
+        // ---- 5c. 3 (RPG) / 4 (FRENZY): TAP to use a kept combo weapon, HOLD to buy one (Powers) ----
         if (frenzyDown && !textModifier)
         {
             GameManager.Instance.Powers.WeaponKeyDown(false);

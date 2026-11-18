@@ -541,7 +541,7 @@ public class GameManager : MonoBehaviour
         bool rewardSecond = Random.value < 0.5f; // RPG (not frenzy) / FREEZE (not lure)
         bool rewardSkill = !afterBoss && spawner.CurrentWave <= EndlessEasyRewardWaves;
         string freeName = afterBoss ? "RPG + FRENZY"
-            : rewardSkill ? (rewardSecond ? "FREEZE" : "LURE BOMB")
+            : rewardSkill ? (rewardSecond ? "FREEZE" : "LURE")
             : rewardSecond ? "RPG" : "FRENZY";
 
         hud.ShowEndlessWaveReward(

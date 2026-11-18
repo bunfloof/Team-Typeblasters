@@ -2,13 +2,13 @@
 // ---------------------------------------------------------------------------
 // The player's special powers, used with the number keys (and Tab):
 //
-//   [1] LURE BOMB - HOLD 1: a dashed arc (ThrowArc) shows where it will land,
+//   [1] LURE BOMB - a DECOY (it only explodes if a blast such as the RPG reaches it). HOLD 1: a dashed arc (ThrowArc) shows where it will land,
 //       throwDistance metres ahead, where you look, and a hint (bottom-right)
 //       says to use the ARROW keys: Left / Right turn the throw, Up / Down
 //       move the landing point farther / closer. RELEASE 1 to throw it there
 //       (a quick tap throws straight ahead).
 //       It blinks; every zombie near it walks to it and crowds around it
-//       (they forget about you), then it explodes. See LureBomb.
+//       (they forget about you) for LureBomb.LureSeconds. See LureBomb.
 //   [2] FREEZE    - every zombie, energy orb and the boss stop for
 //       freezeSeconds. You keep typing. While frozen, IsFrozen is true.
 //
@@ -23,7 +23,7 @@
 //       and stays alive, so it can still be shot. While it is up, IsShielded
 //       is true and EnemySpeedFactor is below 1.
 //
-// Skills use independent energy: tap 3 (10) or 4 (15). Combo is only a score multiplier.
+// Skills use independent energy: 1 lure (5), 2 freeze (8), 3 RPG (15), 4 FRENZY (20). Combo is only a score multiplier.
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -43,9 +43,9 @@ public class Powers : MonoBehaviour
     // including the kills of a blast the player typed off (a barrel or a red
     // zombie), never from a blast a power set off (lure bomb, RPG), and stops at GameManager.MaxSkillEnergy: a lure
     // bomb or RPG can never pay for the next one, and energy cannot be hoarded.
-    public const int FrenzyCost = 12;
-    public const int RocketCost = 18;
-    public const int LureCost = 6;
+    public const int FrenzyCost = 20;
+    public const int RocketCost = 15;
+    public const int LureCost = 5;
     public const int FreezeCost = 8;
 
     [Header("Energy skills")]
@@ -251,7 +251,7 @@ public class Powers : MonoBehaviour
 
     private static string TipTitle(PowerKind kind)
     {
-        return kind == PowerKind.Lure ? "YOU GOT A LURE BOMB!" : "YOU GOT A FREEZE!";
+        return kind == PowerKind.Lure ? "YOU GOT A LURE!" : "YOU GOT A FREEZE!";
     }
 
     // Called by GameManager whenever the combo changes (up by one per kill, back
@@ -332,6 +332,7 @@ public class Powers : MonoBehaviour
         if (EasyTutorial.Active != null && !EasyTutorial.Active.AllowsPower(rocket ? "rpg" : "frenzy")) return;
         if (!HudReveal.PowerAllowed(rocket ? "rpg" : "frenzy")) return;
 
+        if (GuidedIntro.Cutscene) return; // the guided intro's cutscene: every input waits for the card
         string item = rocket ? "rpg" : "frenzy";
 
         if (rocket ? RocketLoaded : IsFrenzy)
@@ -366,7 +367,7 @@ public class Powers : MonoBehaviour
             RocketLoaded = true;
 
             if (!GuidedIntroView.CardVisible)
-                hud.ShowBigMessage("RPG LOADED!", "TYPE A WORD");
+                hud.ShowBigMessage("RPG LOADED!", LureBomb.Active.Count > 0 ? "HIT THE CROWD AT THE LURE" : "TYPE A WORD");
         }
         else
         {
@@ -435,7 +436,7 @@ public class Powers : MonoBehaviour
     }
 
     // Endless wave reward (early waves): one FREE lure bomb (freeze = false) or
-    // FREEZE, used instead of energy next time. Returns "LURE BOMB" / "FREEZE",
+    // FREEZE, used instead of energy next time. Returns "LURE" / "FREEZE",
     // or null if KeptLimit of it are already kept.
     public string GrantFreePowerReward(bool freeze)
     {
@@ -455,7 +456,23 @@ public class Powers : MonoBehaviour
         AnalyticsEvent e = PowerEvent("reward", freeze ? "freeze" : "lure");
         e.Add("via", "wave_reward");
         SendPowerEvent(e);
-        return freeze ? "FREEZE" : "LURE BOMB";
+        return freeze ? "FREEZE" : "LURE";
+    }
+
+    // Ends a FRENZY at once (the guided intro: it never runs into the next
+    // group). Does nothing when none is on.
+    public void EndFrenzy()
+    {
+        if (frenzyTimeLeft <= 0f)
+        {
+            return;
+        }
+        frenzyTimeLeft = 0f;
+        RestoreRealWords();
+        AnalyticsEvent e = PowerEvent("frenzy_end", "frenzy");
+        e.Add("kills_during", GameManager.Instance.Stats.Kills - killsAtFrenzyStart);
+        e.Add("ended_early", true);
+        SendPowerEvent(e);
     }
 
     // FRENZY: every enemy word is short for frenzySeconds.

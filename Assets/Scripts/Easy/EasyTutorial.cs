@@ -17,8 +17,8 @@ public class EasyTutorial : MonoBehaviour
          CurrentLesson >= 4 && (used || CurrentLesson == 6 && Power.RocketLoaded));
 
     private static readonly string[] Tools = { "", "", "shield", "lure", "freeze", "frenzy", "rpg" };
-    private static readonly string[] Names = { "", "", "SHIELD", "LURE BOMB", "FREEZE", "FRENZY", "RPG" };
-    private static readonly string[] Keys = { "", "", "TAB", "1", "2", "3", "4" };
+    private static readonly string[] Names = { "", "", "SHIELD", "LURE", "FREEZE", "FRENZY", "RPG" };
+    private static readonly string[] Keys = { "", "", "TAB", "1", "2", "4", "3" }; // FRENZY is key 4, the RPG key 3 (the lessons stay in this order)
     private WaveSpawner spawner;
     private TutorialCoachView view;
     private bool used, blocked, scripted, replay;
@@ -139,7 +139,10 @@ public class EasyTutorial : MonoBehaviour
                 SpawnGroup(false); Log("practice");
                 int before = GameManager.Instance.Stats.Kills;
                 int wanted = lesson == 4 || lesson == 5 ? 2 : 3;
-                while (!used || GameManager.Instance.Stats.Kills - before < wanted || spawner.AliveZombies.Count > 0)
+                // The LURE lesson passes once the thrown lure has pulled the
+                // zombies in for a moment (it does not kill them any more);
+                // the others once the tool is used and the group is dead.
+                while (lesson == 3 ? !LureShown() : !used || GameManager.Instance.Stats.Kills - before < wanted || spawner.AliveZombies.Count > 0)
                 {
                     if (replay) break;
                     if (Time.time >= nextRefill)
@@ -156,6 +159,7 @@ public class EasyTutorial : MonoBehaviour
                     string instruction = lesson == 3 ? LureInstruction()
                         : lesson < 5 ? "TAP " + Keys[lesson]
                         : lesson == 6 && Power.RocketLoaded ? "TYPE A WORD!" : "TAP " + Keys[lesson];
+                    if (used && lesson == 3) instruction = "WATCH: THEY CHASE THE LURE!";
                     if (used && lesson == 4) instruction = "TYPE THE WORDS!";
                     if (used && lesson == 5) instruction = "TYPE THE SHORT WORDS!";
                     if (used && lesson == 6) instruction = "NICE SHOT!";
@@ -178,6 +182,14 @@ public class EasyTutorial : MonoBehaviour
             Finished = true;
             GameManager.Instance.WinGame();
         }
+    }
+
+    // The lure lesson: a thrown lure has landed and pulled the zombies in
+    // for LureShowSeconds.
+    private const float LureShowSeconds = 2f;
+    private bool LureShown()
+    {
+        return used && LureBomb.Active.Any(bomb => bomb != null && bomb.LuringSeconds >= LureShowSeconds);
     }
 
     private IEnumerator Success()
@@ -264,7 +276,7 @@ public class EasyTutorial : MonoBehaviour
             } while (!thrown);
             view.Cue("HOW IT WORKS", Names[CurrentLesson], Keys[CurrentLesson], true);
             view.DemoPressed = false;
-            yield return new WaitForSeconds(5.5f); // actual flight, attraction and explosion
+            yield return new WaitForSeconds(5.5f); // actual flight and attraction (a lure does not explode by itself)
         }
         else if (CurrentLesson == 4)
         {

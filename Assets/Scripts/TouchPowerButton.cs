@@ -8,8 +8,8 @@
 //                   (drag left / right = direction, up / down = distance) and
 //                   let go to throw. The drag works like the arrow keys.
 //   [2] FREEZE      TAP to freeze every enemy.
-//   [3] FRENZY      TAP to spend 10 energy and activate.
-//   [4] RPG         TAP to spend 15 energy and load a rocket.
+//   [3] RPG         TAP to spend 15 energy and load a rocket.
+//   [4] FRENZY      TAP to spend 20 energy and activate.
 //
 // The button shows what the player has (charges, weapons kept), lights up
 // while touched, fills up while a weapon is being bought, and is dimmed when
@@ -229,7 +229,7 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
         bool pressed = ownerFinger != NoFinger;
         bool active = power == Power.Lure ? powers.IsAiming : power == Power.Freeze ? Powers.IsFrozen
             : power == Power.Shield ? Powers.IsShielded : power == Power.Frenzy ? Powers.IsFrenzy : powers.RocketLoaded;
-        float reminder = power == Power.Shield || pressed || active ? 0f : EnergyUseReminder.Pulse((int)power);
+        float reminder = power == Power.Shield || pressed || active ? 0f : EnergyUseReminder.Pulse(power == Power.Rocket ? 2 : power == Power.Frenzy ? 3 : (int)power);
         background.color = Color.Lerp(Color.black, color, pressed ? 0.7f : active ? 0.6f : 0.35f);
         background.color = Color.Lerp(background.color, new Color(0.15f, 0.65f, 0.58f), reminder * 0.65f);
         transform.localScale *= 1f + reminder * 0.035f;
@@ -279,10 +279,10 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
                 TouchInput.Type('2'); // the game reads the typed character 2 for the freeze
                 break;
             case Power.Frenzy:
-                TouchInput.Press(Key.Digit3);
+                TouchInput.Press(Key.Digit4);
                 break;
             case Power.Rocket:
-                TouchInput.Press(Key.Digit4);
+                TouchInput.Press(Key.Digit3);
                 break;
             case Power.Shield:
                 TouchInput.Press(Key.Tab);
@@ -346,10 +346,10 @@ public class TouchPowerButton : MonoBehaviour, IPointerDownHandler, IPointerUpHa
                 TouchInput.Release(Key.Digit1);
                 break;
             case Power.Frenzy:
-                TouchInput.Release(Key.Digit3);
+                TouchInput.Release(Key.Digit4);
                 break;
             case Power.Rocket:
-                TouchInput.Release(Key.Digit4);
+                TouchInput.Release(Key.Digit3);
                 break;
             case Power.Shield:
                 TouchInput.Release(Key.Tab);

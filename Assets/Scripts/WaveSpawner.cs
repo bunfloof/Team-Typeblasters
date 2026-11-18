@@ -1407,7 +1407,7 @@ public class WaveSpawner : MonoBehaviour
             rideStartEvent.Add("boss_next", encounter.IsBossFight);
             Analytics.Send(rideStartEvent);
 
-            Coroutine ambush = index > 0 && EasyTutorial.Active == null ? StartCoroutine(RideAmbush(wave)) : null;
+            Coroutine ambush = index > 0 && EasyTutorial.Active == null ? StartCoroutine(RideAmbush(wave, encounter.IsBossFight)) : null;
             while (!rail.IsStopped)
             {
                 yield return null;
@@ -1548,6 +1548,10 @@ public class WaveSpawner : MonoBehaviour
     [SerializeField] private float ambushSpacing = 30f;   // metres of run per ambush zombie
     [SerializeField] private float ambushMinApart = 18f;  // metres between two of them along the road
     [SerializeField] private int ambushMax = 3;
+    // NORMAL: the two ambushers on the run INTO THE BOSS FIGHT are special:
+    // the first a RUNNER (yellow, fast), the second a SPITTER (it stops and
+    // spits acid globs whose words must be typed too). Off = plain ones.
+    [SerializeField] private bool bossRunSpecials = false;
     private const float AmbushWakeGap = 2.5f;   // seconds between two ambushers waking
     private const float AmbushSearchStep = 2f;    // looking for a hidden spot: try every 2 m further along
 
@@ -1557,7 +1561,7 @@ public class WaveSpawner : MonoBehaviour
     private readonly Dictionary<Zombie, float> ambushAlong = new Dictionary<Zombie, float>(); // where each one waits: metres along the run (RailMover.Travelled)
     private const float AmbushPassedBy = 1.5f;   // ridden this far past where it waited: it is behind the player, it goes
 
-    private IEnumerator RideAmbush(int wave)
+    private IEnumerator RideAmbush(int wave, bool bossNext)
     {
         yield return null; // the run has just been set up: let it start
         float runLength = rail.RemainingDistance;
@@ -1579,7 +1583,9 @@ public class WaveSpawner : MonoBehaviour
             {
                 continue; // no hidden spot left on this run
             }
-            PlaceAmbusher(AmbushSpot(along, i), speed, rail.Travelled + along);
+            ZombieKind kind = !bossRunSpecials || !bossNext ? ZombieKind.Normal
+                : i == 0 ? ZombieKind.Runner : i == 1 ? ZombieKind.Spitter : ZombieKind.Normal;
+            PlaceAmbusher(AmbushSpot(along, i), speed, rail.Travelled + along, kind);
             lastPlaced = along;
         }
 
@@ -1702,9 +1708,9 @@ public class WaveSpawner : MonoBehaviour
 
     // A lurking zombie: in the scene, but not yet one of the zombies that can be
     // typed, hit or seen on the HUD (it is out of the alive list until it wakes).
-    private void PlaceAmbusher(Vector3 at, float speed, float along)
+    private void PlaceAmbusher(Vector3 at, float speed, float along, ZombieKind kind = ZombieKind.Normal)
     {
-        Zombie zombie = SpawnZombieAt(at, at, 0.2f, ZombieKind.Normal, speed, "AMBUSH");
+        Zombie zombie = SpawnZombieAt(at, at, 0.2f, kind, speed, "AMBUSH");
         if (zombie == null)
         {
             return;

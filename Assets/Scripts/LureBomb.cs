@@ -1,12 +1,15 @@
 // LureBomb.cs
 // ---------------------------------------------------------------------------
-// The lure bomb (tap 1 to throw, hold 1 to aim, see Powers): a plain dark
-// sphere. It is thrown ahead of the player along ArcPoint (longer throws fly
-// higher), lands, and blinks red for FuseSeconds (faster and faster). Every
-// zombie within LureRadius forgets the player and crowds around it (each
-// Zombie asks FindLure). Then it explodes (Explosion.Detonate with
-// BlastRadius): everything that gathered around it dies. Its blast ring is
-// drawn on the ground while it waits, so you can see what will die.
+// The lure (tap 1 to throw, hold 1 to aim, see Powers): a plain dark sphere.
+// It is thrown ahead of the player along ArcPoint (longer throws fly higher),
+// lands, and blinks red for LureSeconds. Every zombie within LureRadius
+// forgets the player and crowds around it (each Zombie asks FindLure).
+// It does NOT explode by itself: used alone it is a DECOY that buys time
+// (then it fizzles out and the zombies come on again). But any blast that
+// reaches it - an RPG rocket, a barrel, a red zombie - sets it off
+// (Detonate, Explosion.HitLures) with BlastRadius: the crowd around it dies.
+// So LURE (1) + RPG (3) is the combo. Its blast ring is drawn on the ground
+// while it lures, so you can see what a detonation would catch.
 //
 // How it is used:
 //   LureBomb.Throw(from, pointOnTheGround);             // by the Powers script
@@ -21,6 +24,13 @@ using UnityEngine;
 public class LureBomb : MonoBehaviour
 {
     public const float LureRadius = 16f;   // zombies closer than this walk to the bomb
+    private const float GuidedLureRadius = 26f; // Normal's guided lesson: zombies from both doors are pulled in
+
+    // How far it pulls zombies in right now (farther while it is being taught).
+    public static float LureReach
+    {
+        get { return GuidedIntro.Running ? GuidedLureRadius : LureRadius; }
+    }
     private const float NormalBlastRadius = 4.5f;
     private const float TutorialBlastRadius = 8f; // the tutorial's lure lessons: big enough that the gathered zombies surely die
     private const float GuidedBlastRadius = 11f;  // Normal's guided first wave: even a quick, unaimed tap catches the group
@@ -38,7 +48,8 @@ public class LureBomb : MonoBehaviour
             return learning ? TutorialBlastRadius : NormalBlastRadius;
         }
     }
-    public const float FuseSeconds = 3.5f; // from landing to the explosion
+    public const float LureSeconds = 6f;   // from landing until it fizzles out (unless a blast sets it off first)
+    private const float FizzleSeconds = 0.3f; // it shrinks away this long when the time is up
     public const float BossDamage = 120f;  // if it goes off next to the boss
 
     private const float MinFlightSeconds = 0.5f;    // from the hand to the ground, for a short throw...
@@ -47,9 +58,9 @@ public class LureBomb : MonoBehaviour
     private const float ArcHeightPerMetre = 0.22f;  // ...a longer throw goes higher (the larger of the two is used)
     private const float BombSize = 0.35f;           // diameter in metres
     private const float FirstBlinkInterval = 0.5f;  // seconds between blinks right after landing...
-    private const float LastBlinkInterval = 0.1f;   // ...and just before the explosion
+    private const float LastBlinkInterval = 0.15f;  // ...and just before it fizzles out
 
-    // Bombs that have landed and are waiting to explode.
+    // Lures that have landed and are luring (they can be set off).
     public static readonly List<LureBomb> Active = new List<LureBomb>();
 
     private Vector3 startPoint;
@@ -60,6 +71,7 @@ public class LureBomb : MonoBehaviour
     private float blinkTimer;
     private bool blinkOn;
     private Renderer ball;
+    private bool done; // fizzled out or set off: nothing more to do
 
     // Throws a bomb from "from" so that it lands on landingPoint (on the ground).
     public static LureBomb Throw(Vector3 from, Vector3 landingPoint)
@@ -75,19 +87,25 @@ public class LureBomb : MonoBehaviour
         return bomb;
     }
 
-    // True while it is on the ground, waiting to explode.
+    // True while it is on the ground, luring (and can be set off).
     public bool IsLuring { get; private set; }
+
+    // Seconds it has been luring on the ground (0 before it lands).
+    public float LuringSeconds
+    {
+        get { return IsLuring ? fuseTimer : 0f; }
+    }
 
     public Vector3 Position
     {
         get { return transform.position; }
     }
 
-    // The luring bomb closest to position, if it is within LureRadius; otherwise null.
+    // The luring bomb closest to position, if it is within LureReach; otherwise null.
     public static LureBomb FindLure(Vector3 position)
     {
         LureBomb closest = null;
-        float closestDistance = LureRadius;
+        float closestDistance = LureReach;
         foreach (LureBomb bomb in Active)
         {
             if (bomb == null || !bomb.IsLuring)
@@ -111,6 +129,10 @@ public class LureBomb : MonoBehaviour
     private void Update()
     {
         if (GameManager.Instance == null || GameManager.Instance.State != GameState.Playing)
+        {
+            return;
+        }
+        if (done)
         {
             return;
         }
@@ -164,20 +186,16 @@ public class LureBomb : MonoBehaviour
         BlastRing.Create(transform, BlastRadius, Palette.LureCrate);
     }
 
-    // On the ground: blink faster and faster, then explode.
+    // On the ground: blink faster and faster, then fizzle out (no blast).
     private void Tick()
     {
         fuseTimer += Time.deltaTime;
-        if (fuseTimer >= FuseSeconds)
+        if (fuseTimer >= LureSeconds)
         {
-            AnalyticsEvent report = Analytics.NewEvent("blast");
-            report.Add("source", "lure");
-            report.Add("lured_now", CountLured()); // counted while this bomb still lures
-
             Active.Remove(this);
-            IsLuring = false;
-            Explosion.Detonate(transform.position, BlastRadius, null, BossDamage, report);
-            Destroy(gameObject);
+            IsLuring = false; // the zombies forget it and come on again
+            done = true;
+            StartCoroutine(Fizzle());
             return;
         }
 
@@ -186,8 +204,45 @@ public class LureBomb : MonoBehaviour
         {
             blinkOn = !blinkOn;
             ball.sharedMaterial = Palette.Lit(blinkOn ? Palette.BombBlink : Palette.Bomb);
-            blinkTimer = Mathf.Lerp(FirstBlinkInterval, LastBlinkInterval, fuseTimer / FuseSeconds);
+            blinkTimer = Mathf.Lerp(FirstBlinkInterval, LastBlinkInterval, fuseTimer / LureSeconds);
         }
+    }
+
+    // A blast reached it (Explosion.HitLures): it goes off at once as part of
+    // that chain reaction, and everything crowded around it dies.
+    public void Detonate(ExplosionChain chain)
+    {
+        if (!IsLuring)
+        {
+            return;
+        }
+        if (chain.Report != null)
+        {
+            chain.Report.Add("lure_detonated", true);
+            chain.Report.Add("lured_now", CountLured()); // counted while it still lures
+        }
+        Active.Remove(this);
+        IsLuring = false;
+        done = true;
+        chain.Begin(); // Explosion.Detonate calls the matching End()
+        Explosion.Detonate(transform.position, BlastRadius, chain, BossDamage, null);
+        Destroy(gameObject);
+    }
+
+    // Time is up: it shrinks away quietly.
+    private System.Collections.IEnumerator Fizzle()
+    {
+        foreach (BlastRing ring in GetComponentsInChildren<BlastRing>())
+        {
+            Destroy(ring.gameObject);
+        }
+        Vector3 size = ball.transform.localScale;
+        for (float time = 0f; time < FizzleSeconds; time += Time.deltaTime)
+        {
+            ball.transform.localScale = size * (1f - time / FizzleSeconds);
+            yield return null;
+        }
+        Destroy(gameObject);
     }
 
     // For analytics: how many zombies this bomb is luring right now (the

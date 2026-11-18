@@ -36,10 +36,10 @@ public static class EnergyUseReminder
         {
             Powers powers = game.Powers;
             if (powers == null || toolIndex > 3) return 0f;
-            string item = toolIndex == 0 ? "lure" : toolIndex == 1 ? "freeze" : toolIndex == 2 ? "frenzy" : "rpg";
+            string item = toolIndex == 0 ? "lure" : toolIndex == 1 ? "freeze" : toolIndex == 2 ? "rpg" : "frenzy"; // the slot order: 1 2 3 4
             if (!HudReveal.PowerAllowed(item)) return 0f;
             bool active = toolIndex == 0 ? powers.IsAiming : toolIndex == 1 ? Powers.IsFrozen
-                : toolIndex == 2 ? Powers.IsFrenzy : powers.RocketLoaded;
+                : toolIndex == 2 ? powers.RocketLoaded : Powers.IsFrenzy;
             if (active) return 0f;
             phase -= 0.35f + toolIndex * 0.18f;
         }

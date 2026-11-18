@@ -110,7 +110,7 @@ public class EndlessWaveReward : MonoBehaviour
 
         // Display the exact weapon that this reward will grant.
         cardDetails[2].text = weaponName;
-        cardTitles[2].text = weaponName == "LURE BOMB" || weaponName == "FREEZE" ? "FREE SKILL" : "FREE WEAPON"; // early waves give a skill
+        cardTitles[2].text = weaponName == "LURE" || weaponName == "FREEZE" ? "FREE SKILL" : "FREE WEAPON"; // early waves give a skill
 
         // The amounts of this reward (bigger after a boss).
         title.text = afterBoss ? "BOSS DEFEATED!" : "WAVE CLEARED!";

@@ -6,8 +6,8 @@
 //   - the COMBO, big, on a dark plate at the top-centre (nothing covers it). Under
 //     it: what the combo can buy (the COMBO WEAPONS status line + a thin bar)
 //   - the powers (bottom-left, just above the height of the bottom word box so
-//     they never overlap it): "[1] LURE BOMB" and "[2] FREEZE" with their charges,
-//     and the combo weapons kept for later, "[3] FRENZY" and "[4] RPG": one
+//     they never overlap it): "[1] LURE" and "[2] FREEZE" with their charges,
+//     and the combo weapons kept for later, "[3] RPG" and "[4] FRENZY": one
 //     square per slot, lit while a weapon is kept, clickable to use it; a bar
 //     under the slots fills while 3 / 4 is HELD to buy one
 //   - the SHIELD just above the powers: "[TAB] SHIELD" with its charge, a bar
@@ -716,17 +716,17 @@ public class HUD : MonoBehaviour
         UpdateComboLook();
     }
 
-    // The combo's colour: white, then the FRENZY red once it can buy a frenzy,
-    // then the RPG orange once it can buy an RPG.
+    // The combo's colour: white, then the RPG orange once it can buy an RPG,
+    // then the FRENZY red once it can buy a frenzy.
     private Color ComboColor()
     {
-        if (shownCombo >= Powers.RocketCost)
-        {
-            return Palette.BlastOrange;
-        }
         if (shownCombo >= Powers.FrenzyCost)
         {
             return Palette.WeaponFrenzy;
+        }
+        if (shownCombo >= Powers.RocketCost)
+        {
+            return Palette.BlastOrange;
         }
         return Color.white;
     }
@@ -1946,21 +1946,25 @@ public class HUD : MonoBehaviour
     // a white key cap with the key to press, the power's name, then one small
     // square ("pip") per possible charge, filled in the power's colour.
     // Rows 2 and 3 are the COMBO WEAPONS the player has bought and kept for later:
-    //   [3] FRENZY     [ ] [ ]
-    //   [4] RPG        [ ] [ ]
+    //   [3] RPG        [ ] [ ]
+    //   [4] FRENZY     [ ] [ ]
     // one plain square per slot, filled in the weapon's colour while one is kept.
     // These two rows can also be CLICKED to use the weapon (same as tapping its key);
     // a thin bar under the slots fills while the key is HELD to buy one.
 
     private const int PowerCount = 4;
-    private const int FrenzyRow = 2;
-    private const int RocketRow = 3;
+    private const int FirstWeaponRow = 2; // rows 0-1: lure, freeze; rows 2-3: the weapons
+    private const int RocketRow = 2;      // [3] RPG
+    private const int FrenzyRow = 3;      // [4] FRENZY
     private const float WeaponSlotSize = 44f;   // dark square of one weapon slot
     private const float WeaponSquareSize = 32f; // the square inside it (grey, or lit while a weapon is kept)
     private const float PowerRowHeight = 44f;
     private const float PowerRowGap = 10f;
     private const float PowerKeySize = 40f;
-    private const float PowerNameX = 54f;       // the name starts this far right of the row's left end
+    private const float PowerIconX = 48f;       // the skill's small icon, just right of the key cap
+    private const float PowerIconSize = 28f;
+    private const float PowerNameX = 82f;       // the name starts this far right of the row's left end (after the icon)
+    private const float PowerNameSize = 29f;    // the skill names use the compact HUD font (HudFont)
     private const float PowerNameWidth = 300f;
     private const float PowerPipsX = 250f;      // the pips start this far right of the row's left end
     private const float PowerPipSize = 24f;
@@ -1973,7 +1977,8 @@ public class HUD : MonoBehaviour
     private readonly CanvasGroup[] powerRowGroups = new CanvasGroup[PowerCount]; // dims a whole row at once
     private readonly Image[] powerKeyCaps = new Image[PowerCount];
     private readonly TMP_Text[] powerNames = new TMP_Text[PowerCount];
-    private readonly string[] powerNameBase = new string[PowerCount]; // "LURE BOMB  6 E": the count ("x2") is added after it
+    private readonly Image[] powerIcons = new Image[PowerCount];
+    private readonly string[] powerNameBase = new string[PowerCount]; // "LURE  5 E": the count ("x2") is added after it
     private readonly RectTransform[] powerPipStrips = new RectTransform[PowerCount]; // dark strip behind the pips
     private readonly List<Image> lurePips = new List<Image>();
     private readonly List<Image> freezePips = new List<Image>();
@@ -1991,7 +1996,7 @@ public class HUD : MonoBehaviour
         powerCharges[(int)PowerKind.Lure] = lureCharges;
         powerCharges[(int)PowerKind.Freeze] = freezeCharges;
         RefreshPowerCounts();
-        for (int row = 0; row < FrenzyRow; row++)
+        for (int row = 0; row < FirstWeaponRow; row++)
         {
             powerPipStrips[row].gameObject.SetActive(false);
             if (powerPulseTimers[row] <= 0f)
@@ -2012,7 +2017,7 @@ public class HUD : MonoBehaviour
         powerCharges[FrenzyRow] = frenzyKept;
         powerCharges[RocketRow] = rocketKept;
         RefreshPowerCounts();
-        for (int row = FrenzyRow; row <= RocketRow; row++)
+        for (int row = FirstWeaponRow; row < PowerCount; row++)
         {
             for (int slot = 0; slot < Powers.MaxKept; slot++)
             {
@@ -2106,13 +2111,13 @@ public class HUD : MonoBehaviour
 
         Color color = PowerColor(row);
         bool active = IsPowerRowActive(row);
-        bool ready = row >= FrenzyRow && GameManager.Instance.Powers.HasWeaponReady(row == RocketRow); // (not dimmed during the 3-2-1 countdown)
+        bool ready = row >= FirstWeaponRow && GameManager.Instance.Powers.HasWeaponReady(row == RocketRow); // (not dimmed during the 3-2-1 countdown)
         flash = Mathf.Max(flash, active ? 0.7f : 0f);
         powerKeyCaps[row].color = Color.Lerp(Color.white, color, flash);
         powerNames[row].color = Color.Lerp(Color.white, color, flash);
 
         // No charges: the whole row is dimmed (but fully visible while it flashes).
-        bool energyReady = row < FrenzyRow && GameManager.Instance.SkillEnergy >= (row == 0 ? Powers.LureCost : Powers.FreezeCost);
+        bool energyReady = row < FirstWeaponRow && GameManager.Instance.SkillEnergy >= (row == 0 ? Powers.LureCost : Powers.FreezeCost);
         float restAlpha = active || ready || energyReady || powerCharges[row] > 0 ? 1f : powerEmptyAlpha;
         powerRowGroups[row].alpha = Mathf.Lerp(restAlpha, 1f, flash);
     }
@@ -2197,7 +2202,8 @@ public class HUD : MonoBehaviour
         PlaceRect(powersPanel, BottomLeft, BottomLeft, new Vector2(powersMargin, BottomRowY()),
             new Vector2(PowerPipsX + 120f, panelHeight));
 
-        string[] rowNames = { "LURE BOMB", "FREEZE", "FRENZY", "RPG" };
+        string[] rowNames = { "LURE", "FREEZE", "RPG", "FRENZY" };
+        HudIcons.Icon[] rowIcons = { HudIcons.Icon.Lure, HudIcons.Icon.Freeze, HudIcons.Icon.Rpg, HudIcons.Icon.Frenzy };
         for (int row = 0; row < PowerCount; row++)
         {
             string key = (row + 1).ToString();
@@ -2219,19 +2225,20 @@ public class HUD : MonoBehaviour
             keyText.color = Color.black;
             keyText.fontStyle = FontStyles.Bold;
 
-            TMP_Text nameText = CreateText(rowRect, "Name", powerName, 30f, Vector2.zero);
+            powerIcons[row] = CreateSkillIcon(rowRect, rowIcons[row], PowerColor(row), PowerIconX);
+
+            TMP_Text nameText = CreateText(rowRect, "Name", powerName, PowerNameSize, Vector2.zero);
             int cost = row == 0 ? Powers.LureCost : row == 1 ? Powers.FreezeCost : row == FrenzyRow ? Powers.FrenzyCost : Powers.RocketCost;
             nameText.text += "  " + cost + " E";
             powerNameBase[row] = nameText.text;
             PlaceRect(nameText.rectTransform, LeftMiddle, LeftMiddle, new Vector2(PowerNameX, 0f),
                 new Vector2(PowerNameWidth, PowerRowHeight));
             nameText.alignment = TextAlignmentOptions.Left;
-            nameText.fontStyle = FontStyles.Bold;
             nameText.textWrappingMode = TextWrappingModes.NoWrap;
-            nameText.fontSharedMaterial = OutlineMaterial(nameText);
+            UseCompactFont(nameText);
             powerNames[row] = nameText;
 
-            if (row < FrenzyRow)
+            if (row < FirstWeaponRow)
             {
                 Image strip = CreateImage("Pips", rowRect, new Color(0f, 0f, 0f, 0.55f));
                 PlaceRect(strip.rectTransform, LeftMiddle, LeftMiddle, new Vector2(PowerPipsX, 0f), Vector2.zero);
@@ -2275,8 +2282,8 @@ public class HUD : MonoBehaviour
         fill.rectTransform.anchorMax = new Vector2(0f, 1f);
         fill.rectTransform.offsetMin = Vector2.zero;
         fill.rectTransform.offsetMax = Vector2.zero;
-        weaponHoldBars[row - FrenzyRow] = bar.rectTransform;
-        weaponHoldFills[row - FrenzyRow] = fill.rectTransform;
+        weaponHoldBars[row == RocketRow ? 1 : 0] = bar.rectTransform;
+        weaponHoldFills[row == RocketRow ? 1 : 0] = fill.rectTransform;
         bar.gameObject.SetActive(false);
 
         // An invisible image over the row catches the mouse click.
@@ -2430,6 +2437,53 @@ public class HUD : MonoBehaviour
 
     // ShieldRow (above the powers) > KeyCap (+ Key), Name, Pips, Bar (+ Fill);
     // ShieldGlow (four edge bands + a faint tint) at the back of the readouts.
+    // ---- The skill rows' look (bottom-left): a small icon and a compact font ----
+
+    // The compact HUD font (Barlow Semi Condensed SemiBold, OFL, see
+    // Assets/Fonts): narrower and smoother than the default, so the rows stay
+    // short. Loaded from Resources once; null = keep the default font.
+    private static TMP_FontAsset hudFont;
+    private static bool hudFontLoaded;
+    private Material compactMaterial; // that font with a thin black outline
+
+    private void UseCompactFont(TMP_Text text)
+    {
+        if (!hudFontLoaded)
+        {
+            hudFont = Resources.Load<TMP_FontAsset>("Fonts/HudCompact SDF");
+            hudFontLoaded = true;
+        }
+        if (hudFont == null)
+        {
+            text.fontStyle = FontStyles.Bold;
+            text.fontSharedMaterial = OutlineMaterial(text);
+            return;
+        }
+        text.font = hudFont;
+        text.fontStyle = FontStyles.Normal; // the font is SemiBold already
+        text.characterSpacing = 1f;
+        if (compactMaterial == null)
+        {
+            compactMaterial = new Material(hudFont.material);
+            compactMaterial.EnableKeyword(ShaderUtilities.Keyword_Outline);
+            compactMaterial.SetFloat(ShaderUtilities.ID_OutlineWidth, 0.18f); // thin: smooth edges, still readable over the scene
+            compactMaterial.SetColor(ShaderUtilities.ID_OutlineColor, new Color(0f, 0f, 0f, 0.85f));
+        }
+        text.fontSharedMaterial = compactMaterial;
+    }
+
+    // The skill's icon (HudIcons), in its colour, centred PowerIconSize wide
+    // at x (from the row's left end).
+    private Image CreateSkillIcon(RectTransform row, HudIcons.Icon icon, Color color, float x)
+    {
+        Image image = CreateImage("Icon", row, color);
+        image.sprite = HudIcons.Get(icon);
+        image.preserveAspect = true;
+        image.raycastTarget = false;
+        PlaceRect(image.rectTransform, LeftMiddle, LeftMiddle, new Vector2(x, 0f), new Vector2(PowerIconSize, PowerIconSize));
+        return image;
+    }
+
     private void BuildShield()
     {
         if (powersPanel == null)
@@ -2450,13 +2504,14 @@ public class HUD : MonoBehaviour
         keyText.color = Color.black;
         keyText.fontStyle = FontStyles.Bold;
 
-        shieldName = CreateText(shieldRow, "Name", "SHIELD", 30f, Vector2.zero);
-        PlaceRect(shieldName.rectTransform, LeftMiddle, LeftMiddle, new Vector2(ShieldKeyWidth + 14f, 0f),
-            new Vector2(PowerPipsX - ShieldKeyWidth - 14f, PowerRowHeight));
+        CreateSkillIcon(shieldRow, HudIcons.Icon.Shield, Palette.Shield, ShieldKeyWidth + 8f);
+        float shieldNameX = ShieldKeyWidth + 8f + PowerIconSize + 8f;
+        shieldName = CreateText(shieldRow, "Name", "SHIELD", PowerNameSize, Vector2.zero);
+        PlaceRect(shieldName.rectTransform, LeftMiddle, LeftMiddle, new Vector2(shieldNameX, 0f),
+            new Vector2(PowerPipsX - shieldNameX, PowerRowHeight));
         shieldName.alignment = TextAlignmentOptions.Left;
-        shieldName.fontStyle = FontStyles.Bold;
         shieldName.textWrappingMode = TextWrappingModes.NoWrap;
-        shieldName.fontSharedMaterial = OutlineMaterial(shieldName);
+        UseCompactFont(shieldName);
 
         Image strip = CreateImage("Pips", shieldRow, new Color(0f, 0f, 0f, 0.55f));
         PlaceRect(strip.rectTransform, LeftMiddle, LeftMiddle, new Vector2(PowerPipsX, 0f), Vector2.zero);
@@ -2679,7 +2734,7 @@ public class HUD : MonoBehaviour
 
         TMP_Text plusOne = CreateText(powersPanel, "PlusOne", "+1", 34f, Vector2.zero);
         RectTransform rowRect = powerRows[row];
-        float x = row < FrenzyRow ? PowerPipsX + 140f : PowerPipsX + Powers.MaxKept * (WeaponSlotSize + PowerPipGap) + 10f;
+        float x = row < FirstWeaponRow ? PowerPipsX + 140f : PowerPipsX + Powers.MaxKept * (WeaponSlotSize + PowerPipGap) + 10f;
         Vector2 start = rowRect.anchoredPosition + new Vector2(x, 0f);
         PlaceRect(plusOne.rectTransform, BottomLeft, LeftMiddle, start, new Vector2(80f, PowerRowHeight));
         plusOne.alignment = TextAlignmentOptions.Left;

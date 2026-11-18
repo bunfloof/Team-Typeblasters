@@ -14,8 +14,8 @@
 //   Backspace  start a word, then BACKSPACE drops it
 //   energy     COMBO and ENERGY pop in; type the teal ENERGY BOX for +7
 //   barrel     a group walks into a barrel's ring (held there): type its word
-//   [1]        LURE BOMB: six come out; hold 1, aim with the arrow keys, let go
-//   [2]        FREEZE        [3] FRENZY        [4] RPG (load, then fire)
+//   [1]        LURE: three come out of two doors; hold 1, aim with the arrow keys, let go: they walk to it
+//   [2]        FREEZE        [3] RPG (load, then fire)        [4] FRENZY
 //   red        once the field is clear, a RED zombie with three others in
 //              its ring: shoot the red one
 //   [TAB]      SHIELD: press Tab (one every wave)
@@ -23,7 +23,7 @@
 //
 // Only NORMAL zombies and one red one come in wave 1 (the other kinds are
 // introduced one at a time in later waves, see WaveSpawner.IntroduceNewKinds).
-// Every lesson waits for a clear field (and a lure bomb to have gone off)
+// Every lesson waits for a clear field (and no lure still luring)
 // before it starts, so two never overlap (Calm).
 // While a card waits for a power key, words cannot be typed (they are
 // ignored, never wrong; the card shakes) and the power's energy is topped
@@ -52,6 +52,29 @@ public static class GuidedIntro
 
     // True while a card waits for a power key: words wait too (TypingController).
     public static bool BlocksLetters { get; private set; }
+
+    // A short CUTSCENE before each power's card: the group walks out while
+    // the player just watches (cinema bars, see GuidedIntroView; their words
+    // cannot be typed yet, and a key press does not shake anything). It ends
+    // the moment the card shows (BeginLesson).
+    public static bool Cutscene { get; private set; }
+
+    // While a lesson card waits for a power (e.g. "shield"), only that power
+    // can be used (HudReveal.PowerAllowed); null = any shown power.
+    public static string OnlyPower { get; private set; }
+
+    private static void BeginCutscene()
+    {
+        BlocksLetters = true;
+        Cutscene = true;
+    }
+
+    // The cutscene is over and nothing waits for a power key: typing is free again.
+    private static void EndCutscene()
+    {
+        Cutscene = false;
+        BlocksLetters = false;
+    }
 
     private const float WalkOutSeconds = 2f;   // new zombies walk out of their door before anything else
     private const float SkipArmSeconds = 1f;   // Enter is not a skip in the first second (a double press to start the level)
@@ -86,6 +109,8 @@ public static class GuidedIntro
         Running = true;
         Holding = false;
         BlocksLetters = false;
+        Cutscene = false;
+        OnlyPower = null;
         OnlyTarget = null;
         skipOffered = true;
         skipArmedAt = Time.unscaledTime + SkipArmSeconds;
@@ -128,6 +153,10 @@ public static class GuidedIntro
     // TypingController: letters arrived while a power key is wanted.
     public static void Nudge()
     {
+        if (Cutscene)
+        {
+            return; // just watching: nothing to point out yet
+        }
         if (view != null)
         {
             view.Nudge();
@@ -141,6 +170,8 @@ public static class GuidedIntro
         Running = false;
         Holding = false;
         BlocksLetters = false;
+        Cutscene = false;
+        OnlyPower = null;
         skipOffered = false;
         Powers.ActionPerformed -= OnPower;
     
@@ -162,6 +193,8 @@ public static class GuidedIntro
         Running = false;
         Holding = false;
         BlocksLetters = false;
+        Cutscene = false;
+        OnlyPower = null;
         skipOffered = false;
         Powers.ActionPerformed -= OnPower;
         if (hud != null)
@@ -191,9 +224,11 @@ public static class GuidedIntro
 
         // SHOOT: the first zombie, held until its word is typed.
         Zombie first = spawner.SpawnGuided(FrontPoint(), ZombieKind.Normal);
+        BeginCutscene(); // it walks out as a cutscene: no input until the card
         yield return new WaitForSeconds(WalkOutSeconds);
         Holding = true;
         BeginLesson("TYPE TO SHOOT", "Type the word above the zombie.", null);
+        BlocksLetters = false; // the card is up: type its word
         view.PointAt(first);
         yield return UntilDead(first);
         view.PointAt(null);
@@ -212,7 +247,9 @@ public static class GuidedIntro
         // BACKSPACE: start a word, then drop it.
         yield return new WaitForSeconds(0.8f);
         group = Pair(ZombieKind.Normal);
+        BeginCutscene(); // they walk out first: no input until the line asks for it
         yield return new WaitForSeconds(WalkOutSeconds * 0.5f);
+        EndCutscene();
         view.ShowLine("Start typing a word...", 6f);
         while (AnyAlive(group) && !IsTypingOneOf(group))
         {
@@ -269,6 +306,7 @@ public static class GuidedIntro
         if (barrel != null)
         {
             spawner.ActivateProp(barrel);
+            BeginCutscene(); // the group walks into the barrel's ring as a cutscene: its word cannot be typed yet
             yield return new WaitForSeconds(0.8f);
             group = Group(point, ZombieKind.Normal, 3, GroupLanes);
             yield return new WaitForSeconds(WalkOutSeconds);
@@ -283,6 +321,7 @@ public static class GuidedIntro
             {
                 Holding = true;
                 BeginLesson("BARREL", "Type the barrel's word to blow it up.", null);
+                BlocksLetters = false; // now the barrel's word (and only it, OnlyTarget) can be typed
                 view.PointAt(barrel);
                 OnlyTarget = barrel; // the zombies wait in its ring; only the barrel's word passes
                 while (barrel.IsAlive && AnyAlive(group))
@@ -294,30 +333,34 @@ public static class GuidedIntro
                 view.HideCard();
                 Holding = false;
             }
+            EndCutscene();
             yield return Finish(group, "Finish them off.");
         }
 
-        // [1] LURE BOMB: a crowd of six from the nearest door; the moment the
-        // last one is out, the world waits for the bomb (even a fast typist
-        // has shot two or three at most, so a crowd is left for it).
+        // [1] LURE: three zombies from two doors (two and one); the moment they
+        // are out, the world waits for the lure. It does not explode: the
+        // lesson goes on once the player has SEEN it pull them in (they walk
+        // to it instead of the player), then they are shot as usual.
         yield return Calm(1f);
-        point = NearPoint();
-        group = Group(point, ZombieKind.Normal, 3, GroupLanes);
-        yield return new WaitForSeconds(0.9f);
-        group.AddRange(Group(point, ZombieKind.Normal, 3, GroupLanes));
+        int[] lureDoors = TwoNearDoors(); // two doors close together in front: one lure can pull both groups in
+        group = Group(lureDoors[0], ZombieKind.Normal, 2, GroupLanes);
+        group.AddRange(Group(lureDoors[1], ZombieKind.Normal, 1, GroupLanes));
+        BeginCutscene(); // they walk out as a cutscene: no typing their words before the power's card
         yield return new WaitForSeconds(WalkOutSeconds);
         yield return OfferPower(HudFeature.Lure, "lure", "throw", Powers.LureCost,
-            "LURE BOMB", touch ? "Tap Lure to throw or drag to aim."
-                : "Hold 1, aim with the arrows, then release.",
+            "LURE", touch ? "Tap Lure to throw or drag to aim. Zombies chase it, not you."
+                : "Hold 1, aim with the arrows, then release. Zombies chase it, not you.",
             touch ? new[] { GuideStep.Text("LURE", "TAP OR DRAG") }
                   : new[] { GuideStep.Key("1", "HOLD"), GuideStep.Arrows("AIM"), GuideStep.Key("1", "LET GO") });
-        yield return Finish(group, "Keep shooting!");
+        yield return UntilLured(1.5f); // let them be seen walking to it
+        yield return Finish(group, "They chase the lure, not you. Shoot them!");
 
-        // [2] FREEZE, only once the lure bomb has gone off and the dust settled.
+        // [2] FREEZE, only once the lure's group is gone and the dust settled.
         // Five come out (three from one side, two from the other): plenty to freeze.
         yield return Calm(2.5f);
         int[] sides = TwoDoors();
         group = Group(sides[0], ZombieKind.Normal, 3, GroupLanes);
+        BeginCutscene(); // they walk out as a cutscene: no typing their words before the power's card
         yield return new WaitForSeconds(0.6f);
         group.AddRange(Group(sides[1], ZombieKind.Normal, 2, PairLanes));
         yield return new WaitForSeconds(WalkOutSeconds + 0.5f);
@@ -325,27 +368,18 @@ public static class GuidedIntro
             "FREEZE", touch ? "Tap Freeze to stop the zombies." : "Press 2 to freeze the zombies.", null);
         yield return Finish(group, "Shoot the frozen zombies.");
 
-        // [3] FRENZY: words far too long, made short.
-        yield return Calm(1.5f);
-        int[] doors = TwoDoors();
-        group = new List<Zombie> { spawner.SpawnGuided(doors[0], ZombieKind.Normal, 0f, true), spawner.SpawnGuided(doors[1], ZombieKind.Normal, 0f, true) };
-        group.RemoveAll(zombie => zombie == null);
-        yield return new WaitForSeconds(WalkOutSeconds + 0.5f);
-        yield return OfferPower(HudFeature.Frenzy, "frenzy", "use", Powers.FrenzyCost,
-            "FRENZY", touch ? "Tap Frenzy to shorten enemy words." : "Press 3 to shorten enemy words.", null);
-        yield return Finish(group, null); // the FRENZY popup says it already
-
-        // [4] RPG: load it, then any finished word fires it into the group.
+        // [3] RPG: load it, then any finished word fires it into the group.
         // A crowd of five; the card shows the moment they are all out.
         yield return Calm(1.5f);
         point = NearPoint();
         group = Group(point, ZombieKind.Normal, 3, GroupLanes);
+        BeginCutscene(); // they walk out as a cutscene: no typing their words before the power's card
         yield return new WaitForSeconds(0.9f);
         group.AddRange(Group(point, ZombieKind.Normal, 2, PairLanes));
         yield return new WaitForSeconds(WalkOutSeconds);
         yield return OfferPower(HudFeature.Rpg, "rpg", "use", Powers.RocketCost,
-            "RPG", touch ? "Tap RPG, then finish a word to fire." : "Press 4, then finish a word to fire.",
-            new[] { touch ? GuideStep.Text("RPG", "TAP") : GuideStep.Key("4", "PRESS"), GuideStep.Text("TYPE", "A WORD") });
+            "RPG", touch ? "Tap RPG, then finish a word to fire." : "Press 3, then finish a word to fire.",
+            new[] { touch ? GuideStep.Text("RPG", "TAP") : GuideStep.Key("3", "PRESS"), GuideStep.Text("TYPE", "A WORD") });
         // The lesson is not over until the rocket has really flown: the world
         // waits, and if every target is somehow gone, new ones walk out.
         Holding = true;
@@ -372,11 +406,24 @@ public static class GuidedIntro
         Holding = false;
         yield return Finish(group, "Finish them off.");
 
+        // [4] FRENZY: words far too long, made short.
+        yield return Calm(1.5f);
+        int[] doors = TwoDoors();
+        group = new List<Zombie> { spawner.SpawnGuided(doors[0], ZombieKind.Normal, 0f, true), spawner.SpawnGuided(doors[1], ZombieKind.Normal, 0f, true) };
+        group.RemoveAll(zombie => zombie == null);
+        BeginCutscene(); // they walk out as a cutscene: no typing their words before the power's card
+        yield return new WaitForSeconds(WalkOutSeconds + 0.5f);
+        yield return OfferPower(HudFeature.Frenzy, "frenzy", "use", Powers.FrenzyCost,
+            "FRENZY", touch ? "Tap Frenzy to shorten enemy words." : "Press 4 to shorten enemy words.", null);
+        yield return Finish(group, null); // the FRENZY popup says it already
+        GameManager.Instance.Powers.EndFrenzy(); // over before the next group walks out
+
         // RED ZOMBIE, only once the RPG's group is gone and the field is
         // clear: it walks in with three others right beside it (in its ring).
         yield return Calm(2.5f);
         point = NearPoint();
         Zombie red = spawner.SpawnGuided(point, ZombieKind.Explosive, 0.01f);
+        BeginCutscene(); // they walk in as a cutscene: no shooting the red one before its card
         group = new List<Zombie> { red, spawner.SpawnGuided(point, ZombieKind.Normal, -1.3f), spawner.SpawnGuided(point, ZombieKind.Normal, 1.3f) };
         yield return new WaitForSeconds(0.7f);
         group.Add(spawner.SpawnGuided(point, ZombieKind.Normal, 0.01f)); // right behind it
@@ -387,6 +434,7 @@ public static class GuidedIntro
             yield return UntilNotTyping();
             Holding = true; // the others stay in its ring until it goes off
             BeginLesson("RED ZOMBIE", "Type the red zombie's word to set off its blast.", null);
+            BlocksLetters = false; // now its word (and only it, OnlyTarget) can be typed
             view.PointAt(red);
             OnlyTarget = red; // only its word passes: the others wait in its ring
             while (red != null && red.IsAlive)
@@ -398,12 +446,14 @@ public static class GuidedIntro
             view.HideCard();
             Holding = false;
         }
+        EndCutscene();
         yield return Finish(group, "Finish them off.");
 
         // [TAB] SHIELD: four come close (two from each side)...
         yield return Calm(1.5f);
         int[] shieldSides = TwoDoors();
         group = Group(shieldSides[0], ZombieKind.Normal, 2, PairLanes);
+        BeginCutscene(); // they walk out as a cutscene: no typing their words before the power's card
         yield return new WaitForSeconds(0.5f);
         group.AddRange(Group(shieldSides[1], ZombieKind.Normal, 2, PairLanes));
         yield return new WaitForSeconds(WalkOutSeconds);
@@ -418,6 +468,7 @@ public static class GuidedIntro
         Holding = true;
         BlocksLetters = true;
         HudReveal.Reveal(HudFeature.Shield);
+        OnlyPower = "shield"; // no other power before the shield is up
         BeginLesson("SHIELD", touch ? "Tap Shield to block hits." : "Press Tab to block hits.", null);
         while (!Powers.IsShielded)
         {
@@ -427,6 +478,7 @@ public static class GuidedIntro
             }
             yield return null;
         }
+        OnlyPower = null;
         view.HideCard();
         BlocksLetters = false;
         Holding = false;
@@ -462,6 +514,7 @@ public static class GuidedIntro
         Holding = true;
         BlocksLetters = true;
         GameManager.Instance.GrantTrainingEnergy(cost);
+        OnlyPower = item;
         HudReveal.Reveal(feature);
         BeginLesson(title, body, steps);
         while (!powerActions.Contains(item + ":" + done))
@@ -469,6 +522,7 @@ public static class GuidedIntro
             GameManager.Instance.GrantTrainingEnergy(cost); // never stuck for lack of energy
             yield return null;
         }
+        OnlyPower = null;
         view.HideCard();
         BlocksLetters = false;
         Holding = false;
@@ -483,6 +537,7 @@ public static class GuidedIntro
     // lesson a player was on when they left the intro can be told from the data.
     private static void BeginLesson(string title, string body, GuideStep[] steps)
     {
+        Cutscene = false;
         view.ShowCard(title, body, steps, false);
         Log("lesson_start:" + title);
     }
@@ -494,6 +549,30 @@ public static class GuidedIntro
         float giveUp = Time.time + 4f;
         while (typing != null && typing.IsTypingWord && Time.time < giveUp)
         {
+            yield return null;
+        }
+    }
+
+    // Until a thrown lure has landed and pulled zombies in for 'seconds'
+    // (or it is gone, or 5 s have passed: never stuck).
+    private static IEnumerator UntilLured(float seconds)
+    {
+        float giveUp = Time.time + 5f;
+        while (Time.time < giveUp)
+        {
+            bool luring = false;
+            foreach (LureBomb lure in LureBomb.Active)
+            {
+                if (lure != null && lure.LuringSeconds >= seconds)
+                {
+                    yield break;
+                }
+                luring |= lure != null && lure.IsLuring;
+            }
+            if (!luring && Time.time > giveUp - 3f && LureBomb.Active.Count == 0)
+            {
+                yield break; // it fizzled or was set off already
+            }
             yield return null;
         }
     }
@@ -514,8 +593,8 @@ public static class GuidedIntro
         view.HideLine();
     }
 
-    // Until nothing is left on the field (no zombie, no lure bomb still
-    // ticking), then a breather, so two lessons never overlap.
+    // Until nothing is left on the field (no zombie, no lure still
+    // luring), then a breather, so two lessons never overlap.
     private static IEnumerator Calm(float seconds)
     {
         float rocketWait = Time.time + 5f;
@@ -611,6 +690,36 @@ public static class GuidedIntro
             }
         }
         return best;
+    }
+
+    // The two NEAREST spawn points in front of the player (within 60 degrees),
+    // so one lure thrown ahead pulls in the zombies of both. Falls back to
+    // TwoDoors when fewer than two are in front.
+    private static int[] TwoNearDoors()
+    {
+        Encounter fight = spawner.CurrentEncounter;
+        List<SpawnPoint> points = fight.SpawnPoints;
+        int first = -1, second = -1;
+        float firstDistance = float.MaxValue, secondDistance = float.MaxValue;
+        for (int i = 0; i < points.Count; i++)
+        {
+            Vector3 to = Flat(points[i].Exit - fight.StopPosition);
+            if (Vector3.Angle(to, fight.Facing) > 60f)
+            {
+                continue;
+            }
+            float distance = to.magnitude;
+            if (distance < firstDistance)
+            {
+                second = first; secondDistance = firstDistance;
+                first = i; firstDistance = distance;
+            }
+            else if (distance < secondDistance)
+            {
+                second = i; secondDistance = distance;
+            }
+        }
+        return second >= 0 ? new[] { first, second } : TwoDoors();
     }
 
     // The leftmost and rightmost spawn points as the player sees them.
