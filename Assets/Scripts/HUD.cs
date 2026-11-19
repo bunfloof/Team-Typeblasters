@@ -1010,6 +1010,7 @@ public class HUD : MonoBehaviour
     {
         HideAllPanels();
         // BuildLevelSelection();
+        StartPanelStyle.Apply(startPanel); // the menu's look (once)
         startPanel.SetActive(true);
         if (EasyTutorial.Active == null) RefreshDifficulty();
     }
