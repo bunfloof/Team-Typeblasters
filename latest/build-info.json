@@ -1,15 +1,15 @@
 {
-  "version": "latest-2026-11-17-447c26d",
-  "source_commit": "447c26dae2c15b6ab4b50ca71640bb59f8d34276",
-  "commit_message": "Lure + RPG combo, skill order 1-4, tutorial cutscenes, HUD skill icons",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44231546278",
+  "version": "latest-2026-11-18-e178700",
+  "source_commit": "e1787001b7fb0413f0edb377ec54f8be7a952d55",
+  "commit_message": "Add gameplay pause control, distinct boss words and low-health warning",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44445909253",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-18T03:45:03.716588Z",
+  "published_utc": "2026-11-19T02:52:20.321190Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14533653,
-      "sha256": "bc161a2d3722c36fef3c5c38af0645698186e800eb78438abb77724ac65ba943"
+      "bytes": 14534020,
+      "sha256": "59e52a321b7d161121ef3420b10c831f2f616a1268c39f589bbebe62acf9a039"
     },
     {
       "path": "Build/WebGL.framework.js",
@@ -19,12 +19,12 @@
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "b316b8a30ad3e1e55819ab39925f18a5c3c74b06c0e3d870608853f610f63eba"
+      "sha256": "d75445c76f758e703664d42d61a67c9349395bb7e8c181ec8ee223147ca65eed"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48328319,
-      "sha256": "cec0485b208423707808bec83f2b62e23f4d9939ad927d01facc705f88ee4a01"
+      "bytes": 48330062,
+      "sha256": "0cb317df7f240f4ac1ae10e2e3e8145424d95a0f15c4a94109036f6294192a52"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7415,
-      "sha256": "4933878c753d3813bc3040f689752c8302f3255ea6085f10850c63edd5c8d828"
+      "sha256": "b84fea7b269a41000d42bdf3a5e41c86f61257535428ebdf1e1cb02c2228c856"
     }
   ]
 }
