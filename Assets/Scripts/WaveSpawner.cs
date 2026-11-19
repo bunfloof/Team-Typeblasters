@@ -108,6 +108,7 @@ public class WaveSpawner : MonoBehaviour
 
     [Header("References (wired in the scene)")]
     [SerializeField] private Zombie zombiePrefab;
+    public int NormalBiteDamage => zombiePrefab != null ? zombiePrefab.NormalBiteDamage : 0;
     [SerializeField] private Transform player;
     [SerializeField] private HUD hud;
     [SerializeField] private Level level;

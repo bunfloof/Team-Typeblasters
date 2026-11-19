@@ -1087,6 +1087,8 @@ public class BossPart : ITypingTarget
         boss = owner;
         Limb = limb;
         Label = label;
+        Label.color = Palette.WordBoss;
+        Label.fontStyle |= FontStyles.Bold;
         labelLocalPosition = labelPosition;
         IsCleared = true; // until SetWord gives it a word
         Word = "?";       // a placeholder until the first SetWord
@@ -1164,7 +1166,6 @@ public class BossPart : ITypingTarget
     {
         Word = word;
         realWord = null; // a fresh word: not a frenzy word
-        Label.color = Color.white;
         TypedCount = 0;
         IsCleared = false;
         RefreshLabel();
@@ -1183,7 +1184,6 @@ public class BossPart : ITypingTarget
         realWord = Word;
         Word = TypingSettings.StyleShort(shortWord);
         TypedCount = 0;
-        Label.color = Palette.WordFrenzy;
         RefreshLabel();
     }
 
@@ -1196,7 +1196,6 @@ public class BossPart : ITypingTarget
         Word = realWord;
         realWord = null;
         TypedCount = 0;
-        Label.color = Color.white;
         RefreshLabel();
     }
 

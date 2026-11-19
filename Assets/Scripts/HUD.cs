@@ -165,6 +165,10 @@ public class HUD : MonoBehaviour
     private RectTransform bossBarFill;
     private TMP_Text bossBarTitle;
 
+    private const float PauseColumnWidth = 88f;
+    private Button gameplayPauseButton;
+    private CanvasGroup lowHealthWarning;
+
     private void Awake()
     {
         // Keep the full reference HUD inside narrow desktop and editor views.
@@ -178,6 +182,19 @@ public class HUD : MonoBehaviour
         {
             SetFlashAlpha(0f);
         }
+
+        waveText.rectTransform.anchoredPosition += Vector2.left * PauseColumnWidth;
+        scoreText.rectTransform.anchoredPosition += Vector2.left * PauseColumnWidth;
+        RectTransform warningFrame = Ui.Frame(readoutLayer, new Color(1f, 0.42f, 0.42f), 9f);
+        warningFrame.name = "Low Health Warning";
+        lowHealthWarning = warningFrame.gameObject.AddComponent<CanvasGroup>();
+        lowHealthWarning.blocksRaycasts = false;
+        warningFrame.gameObject.SetActive(false);
+
+        gameplayPauseButton = SettingsPanel.AddButton(readoutLayer, new Vector2(-32f, -32f),
+            () => GameManager.Instance.PauseGame(), "PAUSE");
+        gameplayPauseButton.transform.localScale = Vector3.one * 0.7f;
+        gameplayPauseButton.gameObject.SetActive(false);
 
         endlessWaveReward = GetComponent<EndlessWaveReward>();
         if (endlessWaveReward == null)
@@ -248,8 +265,15 @@ public class HUD : MonoBehaviour
 
     private void Update()
     {
+        SetShown(gameplayPauseButton.gameObject, GameManager.Instance != null && GameManager.Instance.State == GameState.Playing);
         UpdateMultiKill();
         UpdateRedFlash();
+        GameManager game = GameManager.Instance;
+        bool warn = game != null && game.State == GameState.Playing && game.Spawner != null
+            && game.Health > 0 && game.Health <= 3 * game.Spawner.NormalBiteDamage;
+        SetShown(lowHealthWarning.gameObject, warn);
+        if (warn)
+            lowHealthWarning.alpha = 0.5f + 0.14f * Mathf.Sin(Time.unscaledTime * 3f);
         UpdatePowerPulses();
         UpdateShieldLook();
         UpdateComboRewardBar();
@@ -774,7 +798,7 @@ public class HUD : MonoBehaviour
         // Room on the right: up to the Wave / Score texts.
         float rightTexts = Mathf.Max(waveText != null ? waveText.preferredWidth : 0f,
             scoreText != null ? scoreText.preferredWidth : 0f);
-        float right = width - (RightTextMargin + rightTexts + ComboSideGap);
+        float right = width - (RightTextMargin + PauseColumnWidth + rightTexts + ComboSideGap);
         float halfRoom = right - centre;
 
         // Room on the left: up to the health bar at its SHORTEST.

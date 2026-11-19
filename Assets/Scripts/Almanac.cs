@@ -162,7 +162,7 @@ public static class Almanac
                 "Never walks. Aims a red laser and fires bullets at you from the stands.",
                 "Type the bullet's word before it hits, then the sniper's own word.",
                 "Endless wave 6"),
-            Entry("boss", "THE BOSS", "Subject Zero. The Hollow Warden.", new Color(0.55f, 0.58f, 0.62f), Color.white, 5, 2.2f, 2.4f,
+            Entry("boss", "THE BOSS", "Subject Zero. The Hollow Warden.", new Color(0.55f, 0.58f, 0.62f), Palette.WordBoss, 5, 2.2f, 2.4f,
                 "Words on its head and limbs. Throws energy orbs and stomps up zombies.",
                 "Every word hurts it. Type the orbs before they land, and answer its quiz for a critical hit.",
                 "The last stop of Campus and Forest / every 10th Endless wave"),

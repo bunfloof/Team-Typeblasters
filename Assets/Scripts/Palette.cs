@@ -91,6 +91,7 @@ public static class Palette
             default: return Color.white; // normal zombies are grey
         }
     }
+    public static readonly Color WordBoss = new Color32(54, 255, 198, 255); // bright mint for boss limbs, including during Frenzy
     public static readonly Color WordChain = new Color(1.00f, 0.35f, 1.00f); // magenta: a WORD CHAIN pair (hunt / hunter) and its link line (not the shifter's purple)
     public static readonly Color WordOrb = new Color(1.00f, 0.55f, 0.85f);   // pink, like the boss's energy orbs (their words are case-sensitive); lighter than WordFrenzy so the two never look alike
     public static readonly Color WordOrbFlash = new Color(1.00f, 0.92f, 0.97f); // almost white: an orb's word flashes up to this with every throb

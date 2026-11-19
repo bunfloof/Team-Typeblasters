@@ -58,7 +58,7 @@ public class SettingsPanel : MonoBehaviour
 
     // Adds the gear to 'parent' (a full-screen panel). offset: from the
     // parent's top-right corner to the gear's top-right corner.
-    public static void AddButton(RectTransform parent, Vector2 offset)
+    public static Button AddButton(RectTransform parent, Vector2 offset, UnityEngine.Events.UnityAction action = null, string label = "SETTINGS")
     {
         RectTransform rect = CreateRect("Settings Button", parent);
         Place(rect, Vector2.one, Vector2.one, offset, GearSize);
@@ -71,7 +71,8 @@ public class SettingsPanel : MonoBehaviour
         colors.selectedColor = Color.white;
         button.colors = colors;
         NoNavigation(button);
-        button.onClick.AddListener(() => Open(parent));
+        if (action == null) button.onClick.AddListener(() => Open(parent));
+        else button.onClick.AddListener(action);
 
         // The gear: 4 bars crossing make the 8 teeth, two squares at 0 and
         // 45 degrees make the round body, two small dark ones the hole.
@@ -84,9 +85,10 @@ public class SettingsPanel : MonoBehaviour
         AddShape(rect, new Vector2(15f, 15f), 0f, PlateColor);
         AddShape(rect, new Vector2(15f, 15f), 45f, PlateColor);
 
-        TMP_Text caption = CreateText(rect, "Caption", "SETTINGS", 17f);
+        TMP_Text caption = CreateText(rect, "Caption", label, 17f);
         Place(caption.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 1f), new Vector2(0f, -4f), new Vector2(140f, 24f));
         caption.color = new Color(0.8f, 0.82f, 0.86f);
+        return button;
     }
 
     // ---- The panel ----

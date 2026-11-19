@@ -1260,6 +1260,8 @@ public class Zombie : MonoBehaviour, ITypingTarget
         }
     }
 
+    public int NormalBiteDamage => damagePerHit;
+
     private int BiteDamage
     {
         get
