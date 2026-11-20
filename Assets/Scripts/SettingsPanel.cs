@@ -10,6 +10,9 @@
 //   ADAPTIVE DIFFICULTY                  [ ON ]
 //   what it does
 //   Your speed: 42 WPM (measured)
+//
+//   SOUND EFFECTS VOLUME                 70%
+//   [---------------- slider ----------------]
 //                 [ DONE ]
 //
 // The switch is DynamicDifficulty.Enabled (saved, on by default). Changing it
@@ -39,7 +42,7 @@ public class SettingsPanel : MonoBehaviour
     private const string Grey = "<color=#9AA0AA>";
 
     private static readonly Vector2 GearSize = new Vector2(76f, 76f);
-    private static readonly Vector2 BoxSize = new Vector2(860f, 500f);
+    private static readonly Vector2 BoxSize = new Vector2(860f, 620f);
 
     // The panel open now, or null.
     private static SettingsPanel open;
@@ -52,6 +55,8 @@ public class SettingsPanel : MonoBehaviour
     private Image switchImage;
     private TMP_Text switchLabel;
     private TMP_Text statusText;
+    private Slider volumeSlider;
+    private TMP_Text volumeValueText;
     private GameState openedIn;
 
     // ---- The gear button ----
@@ -71,6 +76,7 @@ public class SettingsPanel : MonoBehaviour
         colors.selectedColor = Color.white;
         button.colors = colors;
         NoNavigation(button);
+        Sfx.HookButton(button);
         if (action == null) button.onClick.AddListener(() => Open(parent));
         else button.onClick.AddListener(action);
 
@@ -117,6 +123,7 @@ public class SettingsPanel : MonoBehaviour
 
     private void Close()
     {
+        Sfx.SavePreferences();
         gameObject.SetActive(false);
         if (open == this)
         {
@@ -190,6 +197,27 @@ public class SettingsPanel : MonoBehaviour
             speed += "   " + Grey + (DynamicDifficulty.Calibrated ? "(enemies tuned to it)" : "(still measuring)") + "</color>";
         }
         statusText.text = speed;
+
+        float volume = Sfx.MasterVolume;
+        if (volumeSlider != null)
+        {
+            volumeSlider.SetValueWithoutNotify(volume);
+        }
+        UpdateVolumeLabel(volume);
+    }
+
+    private void SetSfxVolume(float volume)
+    {
+        Sfx.SetMasterVolume(volume);
+        UpdateVolumeLabel(volume);
+    }
+
+    private void UpdateVolumeLabel(float volume)
+    {
+        if (volumeValueText != null)
+        {
+            volumeValueText.text = Mathf.RoundToInt(Mathf.Clamp01(volume) * 100f) + "%";
+        }
     }
 
     private static SettingsPanel Build(Transform root)
@@ -237,6 +265,24 @@ public class SettingsPanel : MonoBehaviour
         Place(panel.statusText.rectTransform, new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -350f), new Vector2(760f, 36f));
         panel.statusText.alignment = TextAlignmentOptions.MidlineLeft;
         panel.statusText.color = new Color(0.35f, 0.95f, 0.85f);
+
+        TMP_Text volumeTitle = CreateText(box, "SFX Volume Title", "SOUND EFFECTS VOLUME", 28f);
+        Place(volumeTitle.rectTransform, new Vector2(0f, 1f), new Vector2(0f, 1f),
+            new Vector2(50f, -410f), new Vector2(560f, 42f));
+        volumeTitle.alignment = TextAlignmentOptions.MidlineLeft;
+        volumeTitle.fontStyle = FontStyles.Bold;
+
+        panel.volumeValueText = CreateText(box, "SFX Volume Value", "70%", 27f);
+        Place(panel.volumeValueText.rectTransform, new Vector2(1f, 1f), new Vector2(1f, 1f),
+            new Vector2(-50f, -410f), new Vector2(120f, 42f));
+        panel.volumeValueText.alignment = TextAlignmentOptions.MidlineRight;
+        panel.volumeValueText.color = new Color(0.35f, 0.95f, 0.85f);
+
+        panel.volumeSlider = CreateSlider(box, "SFX Volume Slider", panel.SetSfxVolume);
+        Place((RectTransform)panel.volumeSlider.transform, new Vector2(0.5f, 1f),
+            new Vector2(0.5f, 0.5f), new Vector2(0f, -465f), new Vector2(700f, 32f));
+        panel.volumeSlider.SetValueWithoutNotify(Sfx.MasterVolume);
+        panel.UpdateVolumeLabel(Sfx.MasterVolume);
 
         TMP_Text doneLabel;
         Button done = CreateButton(box, "Done Button", "DONE", panel.Close, out doneLabel);
@@ -296,6 +342,7 @@ public class SettingsPanel : MonoBehaviour
         image.color = ButtonColor;
         Button button = rect.gameObject.AddComponent<Button>();
         button.targetGraphic = image;
+        Sfx.HookButton(button);
         button.onClick.AddListener(onClick);
         NoNavigation(button);
         label = CreateText(rect, "Text", text, 34f);
@@ -304,6 +351,59 @@ public class SettingsPanel : MonoBehaviour
         label.rectTransform.offsetMin = Vector2.zero;
         label.rectTransform.offsetMax = Vector2.zero;
         return button;
+    }
+
+    private static Slider CreateSlider(Transform parent, string objectName, UnityAction<float> onValueChanged)
+    {
+        RectTransform root = CreateRect(objectName, parent);
+        Slider slider = root.gameObject.AddComponent<Slider>();
+        slider.minValue = 0f;
+        slider.maxValue = 1f;
+        slider.wholeNumbers = false;
+        slider.direction = Slider.Direction.LeftToRight;
+
+        RectTransform background = CreateRect("Track", root);
+        background.anchorMin = Vector2.zero;
+        background.anchorMax = Vector2.one;
+        background.offsetMin = new Vector2(0f, 9f);
+        background.offsetMax = new Vector2(0f, -9f);
+        Image trackImage = background.gameObject.AddComponent<Image>();
+        trackImage.color = new Color(0.22f, 0.23f, 0.27f);
+
+        RectTransform fillArea = CreateRect("Fill Area", root);
+        fillArea.anchorMin = new Vector2(0f, 0.2f);
+        fillArea.anchorMax = new Vector2(1f, 0.8f);
+        fillArea.offsetMin = new Vector2(4f, 0f);
+        fillArea.offsetMax = new Vector2(-4f, 0f);
+
+        RectTransform fill = CreateRect("Fill", fillArea);
+        fill.anchorMin = Vector2.zero;
+        fill.anchorMax = Vector2.one;
+        fill.offsetMin = Vector2.zero;
+        fill.offsetMax = Vector2.zero;
+        Image fillImage = fill.gameObject.AddComponent<Image>();
+        fillImage.color = OnColor;
+        fillImage.raycastTarget = false;
+
+        RectTransform handleArea = CreateRect("Handle Slide Area", root);
+        handleArea.anchorMin = Vector2.zero;
+        handleArea.anchorMax = Vector2.one;
+        handleArea.offsetMin = new Vector2(10f, 0f);
+        handleArea.offsetMax = new Vector2(-10f, 0f);
+
+        RectTransform handle = CreateRect("Handle", handleArea);
+        handle.anchorMin = new Vector2(0f, 0f);
+        handle.anchorMax = new Vector2(0f, 1f);
+        handle.pivot = new Vector2(0.5f, 0.5f);
+        handle.sizeDelta = new Vector2(28f, 0f);
+        Image handleImage = handle.gameObject.AddComponent<Image>();
+        handleImage.color = GearColor;
+
+        slider.fillRect = fill;
+        slider.handleRect = handle;
+        slider.targetGraphic = handleImage;
+        slider.onValueChanged.AddListener(onValueChanged);
+        return slider;
     }
 
     // The keyboard is for typing only: arrow keys must not move a "selection".

@@ -201,6 +201,11 @@ public class HUD : MonoBehaviour
             endlessWaveReward = gameObject.AddComponent<EndlessWaveReward>();
         endlessWaveReward.Initialize(transform);
 
+        foreach (Button button in GetComponentsInChildren<Button>(true))
+        {
+            Sfx.HookButton(button);
+        }
+
         HudReveal.Revealed += RevealFeature;
         Almanac.Discovered += ShowAlmanacNotice;
     }
@@ -1951,6 +1956,7 @@ public class HUD : MonoBehaviour
 
         Button button = buttonObject.GetComponent<Button>();
         button.targetGraphic = image; // darkens when hovered / pressed
+        Sfx.HookButton(button);
         button.onClick.AddListener(onClick);
 
         // The keyboard is for typing only: the arrow keys must not move a

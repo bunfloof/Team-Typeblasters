@@ -143,6 +143,7 @@ public class MainMenu : MonoBehaviour
     private void Start()
     {
         Time.timeScale = 1f; // in case we arrive here from a paused game
+        Sfx.Preload("UI/button_click");
 
         Camera cam = Camera.main;
         if (cam != null)
@@ -984,6 +985,7 @@ public class MainMenu : MonoBehaviour
         colors.selectedColor = StartFace;
         colors.fadeDuration = 0.08f;
         button.colors = colors;
+        Sfx.HookButton(button);
         if (onClick != null) button.onClick.AddListener(onClick);
 
         Navigation navigation = button.navigation;
@@ -1035,6 +1037,7 @@ public class MainMenu : MonoBehaviour
         colors.selectedColor = TerminalFace;
         colors.fadeDuration = 0.08f;
         button.colors = colors;
+        Sfx.HookButton(button);
         if (onClick != null) button.onClick.AddListener(onClick);
 
         Navigation navigation = button.navigation;
@@ -1140,6 +1143,7 @@ public class MainMenu : MonoBehaviour
         colors.selectedColor = CardFace;
         colors.fadeDuration = 0.08f;
         button.colors = colors;
+        Sfx.HookButton(button);
         button.onClick.AddListener(onClick);
         Navigation navigation = button.navigation;
         navigation.mode = Navigation.Mode.None;

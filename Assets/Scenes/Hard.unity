@@ -20437,6 +20437,7 @@ MonoBehaviour:
   ambushSpacing: 30
   ambushMinApart: 18
   ambushMax: 3
+  bossRunSpecials: 0
 --- !u!4 &1239676765
 Transform:
   m_ObjectHideFlags: 0
@@ -23322,6 +23323,7 @@ GameObject:
   - component: {fileID: 1420677132}
   - component: {fileID: 1420677135}
   - component: {fileID: 1420677133}
+  - component: {fileID: 1420677136}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -23488,6 +23490,14 @@ MonoBehaviour:
   mapMinDistance: 12
   mapMaxDistance: 120
   mapZoomSmoothTime: 0.6
+--- !u!81 &1420677136
+AudioListener:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1420677129}
+  m_Enabled: 1
 --- !u!4 &1425192007 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: 3496228702278011108, guid: 625abcd65e9818c4e9cb317b20ffbd00, type: 3}

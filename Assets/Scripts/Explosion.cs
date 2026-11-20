@@ -71,6 +71,8 @@ public class Explosion : MonoBehaviour
         explosion.center = center;
         explosion.radius = Mathf.Max(0.5f, radius);
 
+        Sfx.Play("GameFlow/explosion", 0.05f);
+
         explosion.DealDamage(chain, bossDamage);
         explosion.StartCoroutine(explosion.PlayLook());
     }

@@ -1075,6 +1075,10 @@ public class WaveSpawner : MonoBehaviour
             // Every endlessBossEveryWaves-th wave is a BOSS fight (stronger each time).
             bool bossWave = endlessBossEveryWaves > 0 && wave % endlessBossEveryWaves == 0;
             hud.ShowBanner(bossWave ? "WAVE " + wave + "  -  BOSS FIGHT" : "WAVE " + wave);
+            if (bossWave)
+            {
+                Sfx.Play("Boss/boss_intro", 0.04f);
+            }
             yield return new WaitForSeconds(BannerSeconds);
             hud.HideBanner();
 
@@ -1429,6 +1433,10 @@ public class WaveSpawner : MonoBehaviour
 
             // 2. Fight.
             hud.ShowBanner(encounter.IsBossFight ? "BOSS FIGHT" : "Wave " + wave);
+            if (encounter.IsBossFight)
+            {
+                Sfx.Play("Boss/boss_intro", 0.04f);
+            }
             yield return new WaitForSeconds(BannerSeconds);
             hud.HideBanner();
             GameManager.Instance.Powers.OnWaveStart(); // a new combo weapon can be bought

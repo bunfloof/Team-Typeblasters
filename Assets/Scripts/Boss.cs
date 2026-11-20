@@ -959,6 +959,7 @@ public class Boss : MonoBehaviour
     private void Die(bool awardKill = true)
     {
         IsAlive = false; // TypingController and WaveSpawner see this right away
+        Sfx.Play("Boss/boss_defeated", 0.1f);
         StopAllCoroutines(); // any attack or quiz in progress
         attacking = false;
         windUp = 0f;

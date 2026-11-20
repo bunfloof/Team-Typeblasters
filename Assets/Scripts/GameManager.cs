@@ -122,6 +122,9 @@ public class GameManager : MonoBehaviour
         hud.ShowStartPanel();
         hud.SetTipsToggle(tipsEnabled); // after a Restart, show the choice the player made before
 
+        Sfx.Preload("Typing/typing_hit");
+        Sfx.Preload("Typing/word_completion");
+
         // Died and chose to go on: straight back into the run, at the start
         // of the wave they died in (CHECKPOINT), with that wave's score and energy.
         if (Checkpoint.TakeResume(SceneManager.GetActiveScene().name))
@@ -907,6 +910,7 @@ public class GameManager : MonoBehaviour
         LogRunEnd(won ? "won" : "lost", null);
 
         State = won ? GameState.Won : GameState.Lost;
+        // Sfx.PlayUnpaused(won ? "GameFlow/win" : "GameFlow/lose");
         if (won)
         {
             Checkpoint.Clear();
