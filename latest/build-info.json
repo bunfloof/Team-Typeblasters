@@ -1,30 +1,30 @@
 {
-  "version": "latest-2026-11-18-449a689",
-  "source_commit": "449a689c74e063b63cde12f46d24c31e75e1e0a2",
-  "commit_message": "Refresh main menu, animated background and level start screens",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44447811773",
+  "version": "latest-2026-11-19-13eb479",
+  "source_commit": "13eb4790962de478d37e812f292908af8eea1df8",
+  "commit_message": "Add sfx: button clicking, explosion, typing, word completion, boss fight, walking",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44685763187",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-19T03:07:05.723378Z",
+  "published_utc": "2026-11-20T06:19:36.376525Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14547298,
-      "sha256": "ce2b4f8c665e9ea651dd76ae82a22da64f3216ca079a23cab60c962fb7304da2"
+      "bytes": 14835733,
+      "sha256": "bf5ad0d4fdab323dcf4dabb5fce8d846580a3da886a03c7564854e9b0a5a1319"
     },
     {
       "path": "Build/WebGL.framework.js",
-      "bytes": 481837,
-      "sha256": "b3203f0194b1572812e2a4a06902f95cacc3988d7d0ca9a2c7b4628688e71a41"
+      "bytes": 482183,
+      "sha256": "88d31be4b7af0e57c5c942077bb7a95c1b0eb446bea5ff1ca7aa1471b2c0cbb1"
     },
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "d87235f5d5ad493996594df26c66d8f85251b1bb41c1017f757ab97917ecd728"
+      "sha256": "c37e95dc505048a7b8ba7a1237a1ec45618335f9b58194296ed974991e1dae7f"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48405771,
-      "sha256": "2fa15761c35e6ab7c6a81f08d2f9c177644902915a45a38204e5d06d356be69f"
+      "bytes": 48546052,
+      "sha256": "11a08851e76b24f2bb54b0a4cc7f543b06a198175e5f4f4ac58bbae42fc7ac09"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -88,8 +88,8 @@
     },
     {
       "path": "index.html",
-      "bytes": 7616,
-      "sha256": "31fe7a34a0b9fa87c30fdbb03e3f173833ba7dc3bebf4901a2f8eaf160f9edd9"
+      "bytes": 7415,
+      "sha256": "614565da068972f8fbf3ec1853c0a8b8f2ee5a8dfff712aa878538415da469ca"
     }
   ]
 }
