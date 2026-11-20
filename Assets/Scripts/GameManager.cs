@@ -910,7 +910,7 @@ public class GameManager : MonoBehaviour
         LogRunEnd(won ? "won" : "lost", null);
 
         State = won ? GameState.Won : GameState.Lost;
-        // Sfx.PlayUnpaused(won ? "GameFlow/win" : "GameFlow/lose");
+        Sfx.PlayUnpaused(won ? "GameFlow/win" : "GameFlow/lose", 0.01f);
         if (won)
         {
             Checkpoint.Clear();
