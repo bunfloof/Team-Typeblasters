@@ -1,15 +1,15 @@
 {
-  "version": "latest-2026-11-19-13eb479",
-  "source_commit": "13eb4790962de478d37e812f292908af8eea1df8",
-  "commit_message": "Add sfx: button clicking, explosion, typing, word completion, boss fight, walking",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44685763187",
+  "version": "latest-2026-11-20-b15daed",
+  "source_commit": "b15daede36a65a27dcf5d622b1a57a7f924eb050",
+  "commit_message": "change word_completion.wav",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44700477438",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-20T06:19:36.376525Z",
+  "published_utc": "2026-11-20T08:20:36.521450Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14835733,
-      "sha256": "bf5ad0d4fdab323dcf4dabb5fce8d846580a3da886a03c7564854e9b0a5a1319"
+      "bytes": 14851006,
+      "sha256": "7f536c8d51f43788bc326ad9a999b31c63f56f28db8ca41fa66e28e8dcdb2428"
     },
     {
       "path": "Build/WebGL.framework.js",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7415,
-      "sha256": "614565da068972f8fbf3ec1853c0a8b8f2ee5a8dfff712aa878538415da469ca"
+      "sha256": "d4b967eebc2659980950edf9cc96074a8a9eedccbe7ffecb4858f3831f095b38"
     }
   ]
 }
