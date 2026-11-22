@@ -1,15 +1,15 @@
 {
-  "version": "latest-2026-11-20-b15daed",
-  "source_commit": "b15daede36a65a27dcf5d622b1a57a7f924eb050",
-  "commit_message": "change word_completion.wav",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/44700477438",
+  "version": "latest-2026-11-22-6ecf189",
+  "source_commit": "6ecf189a26c113dfc0628d2a3c224ecc296de89f",
+  "commit_message": "endless save records when quitting from pause, Enter waits before leaving end screen",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/45072977657",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-20T08:20:36.521450Z",
+  "published_utc": "2026-11-22T21:46:24.356063Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14851006,
-      "sha256": "7f536c8d51f43788bc326ad9a999b31c63f56f28db8ca41fa66e28e8dcdb2428"
+      "bytes": 14937893,
+      "sha256": "1ecad79d6642716770589f525effc188b3b714caa699ba71e8239ccb58e44134"
     },
     {
       "path": "Build/WebGL.framework.js",
@@ -19,12 +19,12 @@
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "c37e95dc505048a7b8ba7a1237a1ec45618335f9b58194296ed974991e1dae7f"
+      "sha256": "52d52f57ff04e27986b320b82567d7cc1e0a776b03e7ccc665b2fd370ea54d57"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48546052,
-      "sha256": "11a08851e76b24f2bb54b0a4cc7f543b06a198175e5f4f4ac58bbae42fc7ac09"
+      "bytes": 48547144,
+      "sha256": "75275010cc4c548ced3479ee51d98eaedf4b1ed1d42c3b3998ec368d36e92dc3"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -88,8 +88,8 @@
     },
     {
       "path": "index.html",
-      "bytes": 7415,
-      "sha256": "d4b967eebc2659980950edf9cc96074a8a9eedccbe7ffecb4858f3831f095b38"
+      "bytes": 7416,
+      "sha256": "9dc794ceda5fac6f3d9a71b4d2f93578b4bf2b6d1853cb6fd44c1ddf58121b51"
     }
   ]
 }
