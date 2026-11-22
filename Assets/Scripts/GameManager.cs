@@ -365,6 +365,14 @@ public class GameManager : MonoBehaviour
         if (State == GameState.Playing || State == GameState.Paused || State == GameState.Tip || State == GameState.Reward)
         {
             LogRunEnd("restart", sceneName);
+
+            // ENDLESS never ends except by death, so leaving a run from the
+            // pause panel (Main Menu / Restart) is the normal way to stop it:
+            // its wave and score count for the personal records too.
+            if (spawner != null && spawner.IsEndlessMode)
+            {
+                EndlessRecords.SubmitRun(spawner.CurrentWave, Score);
+            }
         }
 
         Time.timeScale = 1f; // in case we restart from the pause panel

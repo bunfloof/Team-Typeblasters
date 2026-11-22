@@ -83,9 +83,9 @@ public class TypingController : MonoBehaviour
     private const float FreezeRepeatSeconds = 0.2f;
     private float freezeKeyDownTime = -1f; // unscaled time the 2 key last went down
 
-    // The end screens (won / lost) take Esc / Backspace (back to the menu) only
-    // after this many seconds, so a key still being hit at the moment of death
-    // does not skip the results.
+    // The end screens (won / lost) take Esc / Backspace (back to the menu) and
+    // Enter (restart / continue / next level) only after this many seconds, so
+    // a key still being hit at the moment of death does not skip the results.
     private const float EndScreenKeyDelay = 1f;
     private GameState lastSeenState = GameState.Start;
     private float stateChangedAt;
@@ -317,11 +317,14 @@ public class TypingController : MonoBehaviour
         if (GameManager.Instance.State != GameState.Playing)
         {
             GameState endState = GameManager.Instance.State;
-            // Start panel: Esc / Backspace go back to the menu. The end screens
-            // (won / lost, every mode) do the same, after EndScreenKeyDelay, so a
-            // key the player was still hitting when they died cannot skip the results.
-            bool leaveToMenu = endState == GameState.Start
-                || ((endState == GameState.Won || endState == GameState.Lost) && Time.unscaledTime - stateChangedAt >= EndScreenKeyDelay);
+            // The end screens (won / lost, every mode) take keys only after
+            // EndScreenKeyDelay, so a key the player was still hitting when the
+            // run ended (an Enter after a word, say) cannot skip the results
+            // (REACHED WAVE, PERSONAL BEST...).
+            bool endScreen = endState == GameState.Won || endState == GameState.Lost;
+            bool endScreenReady = endScreen && Time.unscaledTime - stateChangedAt >= EndScreenKeyDelay;
+            // Start panel and end screens: Esc / Backspace go back to the menu.
+            bool leaveToMenu = endState == GameState.Start || endScreenReady;
             if (leaveToMenu && (pausePressed || dropPressed))
             {
                 GameManager.Instance.LoadMenu();
@@ -333,7 +336,7 @@ public class TypingController : MonoBehaviour
                 {
                     hud.CycleWonPanelSelection(endPanelStep);
                 }
-                if (enterPressed)
+                if (enterPressed && endScreenReady)
                 {
                     hud.ConfirmWonPanelSelection();
                 }
@@ -344,7 +347,7 @@ public class TypingController : MonoBehaviour
             {
                 GameManager.Instance.CycleTypingDifficulty(difficultyStep);
             }
-            if (enterPressed)
+            if (enterPressed && (!endScreen || endScreenReady))
             {
                 GameManager.Instance.StartOrRestart();
             }
