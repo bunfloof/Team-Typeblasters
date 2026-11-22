@@ -543,14 +543,34 @@ public class GameManager : MonoBehaviour
         // early waves a skill (lure bomb / freeze), later a weapon (RPG / frenzy).
         bool rewardSecond = Random.value < 0.5f; // RPG (not frenzy) / FREEZE (not lure)
         bool rewardSkill = !afterBoss && spawner.CurrentWave <= EndlessEasyRewardWaves;
-        string freeName = afterBoss ? "RPG + FRENZY"
+
+        // Never offer an item the player already keeps Powers.KeptLimit of
+        // (picking it would give nothing): offer the other one instead. When
+        // both are full, the card is greyed out (EndlessWaveReward).
+        int limit = Powers.KeptLimit;
+        bool firstHasRoom = (rewardSkill ? powers.LureCharges : powers.FrenzyKept) < limit;   // LURE / FRENZY
+        bool secondHasRoom = (rewardSkill ? powers.FreezeCharges : powers.RocketKept) < limit; // FREEZE / RPG
+        if (rewardSecond && !secondHasRoom && firstHasRoom)
+        {
+            rewardSecond = false;
+        }
+        else if (!rewardSecond && !firstHasRoom && secondHasRoom)
+        {
+            rewardSecond = true;
+        }
+        bool freeAvailable = afterBoss ? (firstHasRoom || secondHasRoom) : (rewardSecond ? secondHasRoom : firstHasRoom);
+
+        // After a boss: both weapons, or only the one that still has room.
+        string bossName = firstHasRoom && secondHasRoom ? "RPG + FRENZY" : secondHasRoom ? "RPG" : "FRENZY";
+        string freeName = afterBoss ? bossName
             : rewardSkill ? (rewardSecond ? "FREEZE" : "LURE")
             : rewardSecond ? "RPG" : "FRENZY";
 
         hud.ShowEndlessWaveReward(
             freeName,
             choice => CompleteEndlessWaveReward(choice, rewardSecond, rewardSkill),
-            afterBoss);
+            afterBoss,
+            freeAvailable);
     }
 
     // rewardSecond: the FREE card's second item (RPG / FREEZE); rewardSkill: it is a skill, not a weapon.

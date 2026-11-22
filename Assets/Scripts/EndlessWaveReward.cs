@@ -12,6 +12,11 @@
 // energy, BOTH weapons, +500 score (Show(..., afterBoss: true)).
 // Endless mode has no other way to get health back.
 //
+// Each card shows what it would REALLY give now (health and energy stop at
+// their maximum, a free item stops at Powers.KeptLimit). A card that would
+// give nothing says FULL, is greyed out and cannot be picked, so a reward is
+// never wasted by accident.
+//
 // How it is used:
 //   HUD:         creates this component in Awake and calls Initialize(canvas);
 //                ShowEndlessWaveReward / HideEndlessWaveReward call Show / Hide.
@@ -27,6 +32,8 @@
 // Controls: click a card, or use W A S D / the arrow keys to move the
 // selection and Enter / Space to pick it. The yellow selection frame only
 // appears after the first key press, so a mouse player never sees it.
+// Keys are ignored for KeyDelaySeconds after the panel opens: a letter or
+// Space still being typed when the last zombie died must not pick a reward.
 // Update still runs while the game is frozen (it uses no game time).
 // ---------------------------------------------------------------------------
 using System;
@@ -54,6 +61,10 @@ public class EndlessWaveReward : MonoBehaviour
 
     private const float FrameThickness = 6f;
     private const float SelectedScale = 1.04f;
+    private const float KeyDelaySeconds = 0.5f;   // real time: the game is frozen while the panel is open
+
+    private static readonly Color UnavailableTextColor = new Color(0.55f, 0.57f, 0.62f); // a FULL card's texts
+    private static readonly Color UnavailableCardShade = new Color(0.08f, 0.09f, 0.11f); // a FULL card turns toward this
 
     private static readonly Color[] CardColors =
     {
@@ -79,6 +90,7 @@ public class EndlessWaveReward : MonoBehaviour
     private Action<EndlessWaveRewardChoice> onChoice;
     private int selected;
     private bool keyboardSelectionStarted;
+    private float shownAt;          // Time.unscaledTime when the panel opened (see KeyDelaySeconds)
     private Vector2 lastLayoutSize;
 
     public void Initialize(Transform root)
@@ -96,7 +108,10 @@ public class EndlessWaveReward : MonoBehaviour
         Build();
     }
 
-    public void Show(Action<EndlessWaveRewardChoice> callback, string weaponName, bool afterBoss = false)
+    // weaponAvailable: false when the player already keeps the most of the FREE
+    // item (Powers.KeptLimit, see GameManager.BeginEndlessWaveReward): its card
+    // is then greyed out instead of giving nothing.
+    public void Show(Action<EndlessWaveRewardChoice> callback, string weaponName, bool afterBoss = false, bool weaponAvailable = true)
     {
         if (panel == null)
         {
@@ -107,16 +122,26 @@ public class EndlessWaveReward : MonoBehaviour
         onChoice = callback;
         selected = Mathf.Max(0, buttons.IndexOf(skipButton)); // Enter / Space with no key moved first = SKIP (+score), never an accidental pick
         keyboardSelectionStarted = false;
+        shownAt = Time.unscaledTime;
 
         // Display the exact weapon that this reward will grant.
-        cardDetails[2].text = weaponName;
+        cardDetails[2].text = weaponAvailable ? weaponName : "ALREADY FULL";
         cardTitles[2].text = weaponName == "LURE" || weaponName == "FREEZE" ? "FREE SKILL" : "FREE WEAPON"; // early waves give a skill
 
-        // The amounts of this reward (bigger after a boss).
+        // What HEALTH and ENERGY would really give now: they stop at their
+        // maximum (bigger rewards after a boss, see GameManager).
+        GameManager game = GameManager.Instance;
+        int healthGain = Mathf.Min(game.EndlessRewardHealth, game.MaxHealth - game.Health);
+        int energyGain = Mathf.Min(afterBoss ? GameManager.EndlessBossRewardEnergy : GameManager.EndlessRewardEnergy,
+            GameManager.MaxSkillEnergy - game.SkillEnergy);
+
         title.text = afterBoss ? "BOSS DEFEATED!" : "WAVE CLEARED!";
         subtitle.text = afterBoss ? "BIG REWARD - CHOOSE ONE" : "CHOOSE ONE REWARD";
-        cardDetails[0].text = "+" + Mathf.RoundToInt((afterBoss ? GameManager.EndlessBossRewardHealthFraction : GameManager.EndlessRewardHealthFraction) * 100f) + "% HEALTH";
-        cardDetails[1].text = "+" + (afterBoss ? GameManager.EndlessBossRewardEnergy : GameManager.EndlessRewardEnergy) + " ENERGY";
+        cardDetails[0].text = healthGain > 0 ? "+" + healthGain + " HEALTH" : "HEALTH FULL";
+        cardDetails[1].text = energyGain > 0 ? "+" + energyGain + " ENERGY" : "ENERGY FULL";
+        SetCardAvailable(0, healthGain > 0);
+        SetCardAvailable(1, energyGain > 0);
+        SetCardAvailable(2, weaponAvailable);
         TMP_Text skipLabel = skipButton != null ? skipButton.GetComponentInChildren<TMP_Text>() : null;
         if (skipLabel != null)
         {
@@ -266,6 +291,7 @@ public class EndlessWaveReward : MonoBehaviour
         colors.highlightedColor = Color.Lerp(normalColor, Color.white, 0.13f);
         colors.pressedColor = Color.Lerp(normalColor, Color.black, 0.2f);
         colors.selectedColor = normalColor;
+        colors.disabledColor = Color.Lerp(normalColor, UnavailableCardShade, 0.6f); // a FULL card (SetCardAvailable)
         button.colors = colors;
 
         Navigation navigation = button.navigation;
@@ -425,6 +451,11 @@ public class EndlessWaveReward : MonoBehaviour
         if (keyboard == null)
             return;
 
+        // Right after the panel opens, keys are still the last word's: they
+        // must not move the selection or pick a reward the player has not seen.
+        if (Time.unscaledTime - shownAt < KeyDelaySeconds)
+            return;
+
         bool previous =
             keyboard.upArrowKey.wasPressedThisFrame ||
             keyboard.leftArrowKey.wasPressedThisFrame ||
@@ -447,7 +478,14 @@ public class EndlessWaveReward : MonoBehaviour
         if (step != 0)
         {
             keyboardSelectionStarted = true;
-            selected = (selected + step + buttons.Count) % buttons.Count;
+            // Move to the next card that can be picked: a FULL card is skipped
+            // (SKIP can always be picked, so this always stops).
+            for (int tries = 0; tries < buttons.Count; tries++)
+            {
+                selected = (selected + step + buttons.Count) % buttons.Count;
+                if (buttons[selected].interactable)
+                    break;
+            }
             RefreshSelection();
         }
 
@@ -459,6 +497,16 @@ public class EndlessWaveReward : MonoBehaviour
                 button.onClick.Invoke();
         }
 #endif
+    }
+
+    // A card that would give nothing right now (FULL) is greyed out and
+    // cannot be picked by mouse, touch or keys (HandleKeyboard skips it).
+    private void SetCardAvailable(int index, bool available)
+    {
+        buttons[index].interactable = available;
+        Color textColor = available ? Color.white : UnavailableTextColor;
+        cardTitles[index].color = textColor;
+        cardDetails[index].color = textColor;
     }
 
     private void RefreshSelection()

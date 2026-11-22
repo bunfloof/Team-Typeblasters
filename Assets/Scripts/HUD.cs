@@ -1725,10 +1725,11 @@ public class HUD : MonoBehaviour
     }
 
     // afterBoss: the bigger rewards after a BOSS wave (see GameManager).
-    public void ShowEndlessWaveReward(string weaponName, System.Action<EndlessWaveRewardChoice> onChoice, bool afterBoss = false)
+    // weaponAvailable: false = the FREE item is already kept at its limit (the card is greyed out).
+    public void ShowEndlessWaveReward(string weaponName, System.Action<EndlessWaveRewardChoice> onChoice, bool afterBoss = false, bool weaponAvailable = true)
     {
         if (endlessWaveReward != null)
-            endlessWaveReward.Show(onChoice, weaponName, afterBoss);
+            endlessWaveReward.Show(onChoice, weaponName, afterBoss, weaponAvailable);
     }
 
     public void HideEndlessWaveReward()
