@@ -936,7 +936,7 @@ KEYBOARDS = {"red": red_key, "flow": flow_key, "deep": deep_key,
 for _name in ("alpaca", "black", "redheavy", "m_alpaca", "m_inkblack", "m_k2red", "m_void"):
     SETS["cinematic_" + _name] = dict(key=KEYBOARDS[_name], shot=(lambda k=KEYBOARDS[_name]: heavy_shot(k)),
                                       kill=cinematic_kill, multi=cinematic_multi)
-ACTIVE_SET = "cinematic_alpaca"   # the set the game uses
+ACTIVE_SET = "cinematic_m_void"   # the set the game uses
 
 
 def build(name, folder=None):
