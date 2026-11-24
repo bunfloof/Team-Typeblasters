@@ -2680,6 +2680,25 @@ public class WaveSpawner : MonoBehaviour
             && hit.GetComponentInParent<Zombie>() == null;
     }
 
+    // Where the zombies of a wall gate appear: INSIDE the wall's collider, so
+    // they walk out of it (a zombie is never stopped by what it starts in).
+    // Behind a thin wall that point could be outside it again, on the far
+    // side - then the wall would block them for ever - so if no point inside
+    // is found, they appear in the gate itself.
+    private static Vector3 InsideWall(RaycastHit wall, Vector3 face)
+    {
+        Vector3 surface = new Vector3(wall.point.x, 0f, wall.point.z);
+        for (float depth = 0.25f; depth <= 1.5f; depth += 0.25f)
+        {
+            Vector3 probe = surface - face * depth + Vector3.up * 1f;
+            if ((wall.collider.ClosestPoint(probe) - probe).sqrMagnitude < 0.0001f)
+            {
+                return new Vector3(probe.x, 0f, probe.z);
+            }
+        }
+        return surface + face * 0.4f;
+    }
+
     // The wall the zombies of this point come through: looking back from
     // where they walk to, the first building in the way.
     private static bool FindWall(SpawnPoint point, Vector3 outward, out RaycastHit wall)
@@ -2795,7 +2814,7 @@ public class WaveSpawner : MonoBehaviour
                     face.y = 0f;
                     face = face.sqrMagnitude > 0.01f ? face.normalized : outward;
                     BuildWallGate(point.name, wallHit.point, face, wall, trim, lamp, hazard, doorway);
-                    spawnFrom[point] = new Vector3(wallHit.point.x, 0f, wallHit.point.z) - face * 1.2f;
+                    spawnFrom[point] = InsideWall(wallHit, face);
                     continue;
                 }
 
@@ -2803,13 +2822,12 @@ public class WaveSpawner : MonoBehaviour
                 // sides), and moved back out of anything it would overlap.
                 outward = SquareToStreets(point.Position, outward);
                 Vector3 at = new Vector3(point.Position.x, 0f, point.Position.z);
-                for (float back = 0f; back <= 4f && TowerBlocked(at, outward); back += 0.5f)
+                // (Only the tower moves, and never so far that the spawn point
+                // leaves its footprint: the zombies keep the team's own spot,
+                // whose way out is known to be clear.)
+                for (float back = 0f; back <= 1.25f && TowerBlocked(at, outward); back += 0.25f)
                 {
                     at = new Vector3(point.Position.x, 0f, point.Position.z) - outward * back;
-                }
-                if (at != new Vector3(point.Position.x, 0f, point.Position.z))
-                {
-                    spawnFrom[point] = at;
                 }
                 GameObject tower = new GameObject("Spawn Tower (" + point.name + ")");
                 tower.transform.SetPositionAndRotation(at, Quaternion.LookRotation(outward));

@@ -135,9 +135,55 @@ public class Zombie : MonoBehaviour, ITypingTarget
     private const float WallSkin = 0.05f;         // stop this far short of a wall
     private static readonly RaycastHit[] wallHits = new RaycastHit[8];
 
-    private void MoveBy(Vector3 move)
+    // STUCK SAFETY NET: a zombie whose walk is blocked by a wall for
+    // StuckSeconds (it slides along it and gets nowhere) walks THROUGH walls
+    // for a moment. A wave waits for every zombie, so one stuck behind a wall
+    // would stop the game; this way none can.
+    private const float StuckSeconds = 2.5f;
+    private const float UnstickSeconds = 1.5f;
+    private float blockedTime, unstickTime;
+
+    // walking: its own walk toward where it is going (the only move the
+    // safety net watches; pushes, bounces and recoils just stop at walls).
+    private void MoveBy(Vector3 move, bool walking = false)
     {
         move.y = 0f;
+        if (!walking)
+        {
+            MoveAlongWalls(move);
+            return;
+        }
+        if (unstickTime > 0f)
+        {
+            unstickTime -= Time.deltaTime;
+            transform.position += move;
+            return;
+        }
+        Vector3 before = transform.position;
+        float wanted = move.magnitude;
+        MoveAlongWalls(move);
+        Vector3 done = transform.position - before;
+        done.y = 0f;
+        // Progress is what it gained in the direction it wanted: sliding
+        // sideways along a wall it cannot get past counts as none.
+        float progress = wanted > 0.0001f ? Vector3.Dot(done, move / wanted) : 0f;
+        if (wanted > 0.0001f && progress < wanted * 0.25f)
+        {
+            blockedTime += Time.deltaTime;
+            if (blockedTime > StuckSeconds)
+            {
+                blockedTime = 0f;
+                unstickTime = UnstickSeconds;
+            }
+        }
+        else if (wanted > 0.0001f && progress > wanted * 0.5f)
+        {
+            blockedTime = 0f;
+        }
+    }
+
+    private void MoveAlongWalls(Vector3 move)
+    {
         for (int attempt = 0; attempt < 2 && move.sqrMagnitude > 0.000001f; attempt++)
         {
             RaycastHit wall;
@@ -626,7 +672,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
             flinchTimer -= Time.deltaTime;
             currentSpeed *= flinchSlowdown;
         }
-        MoveBy(direction * currentSpeed * Time.deltaTime); // slides along walls instead of going through
+        MoveBy(direction * currentSpeed * Time.deltaTime, true); // slides along walls (through them only if stuck)
 
         // SPITTER: in range of the player, it spits acid globs.
         if (Kind == ZombieKind.Spitter && chasingPlayer
