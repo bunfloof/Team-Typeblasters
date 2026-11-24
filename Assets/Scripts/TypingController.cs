@@ -798,6 +798,11 @@ public class TypingController : MonoBehaviour
         }
         candidates.RemoveAll(candidate => candidate.IsWordComplete);
         Sfx.Play(anyFinished ? "Typing/word_completion" : "Typing/typing_hit", 0.02f);
+        KillSounds.Key();          // a crisp tick for the letter
+        if (anyFinished)
+        {
+            KillSounds.Shot();     // ...and the bullet leaving
+        }
 
         // A word was finished but a longer one goes on: the chain is running.
         // Say so right where it happened, so the player keeps typing.

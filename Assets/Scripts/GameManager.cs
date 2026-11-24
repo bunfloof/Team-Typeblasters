@@ -124,6 +124,8 @@ public class GameManager : MonoBehaviour
 
         Sfx.Preload("Typing/typing_hit");
         Sfx.Preload("Typing/word_completion");
+        KillSounds.Warm();
+        KillSounds.Reset();
 
         // Died and chose to go on: straight back into the run, at the start
         // of the wave they died in (CHECKPOINT), with that wave's score and energy.
@@ -772,6 +774,7 @@ public class GameManager : MonoBehaviour
         Stats.BiggestMultiKill = Mathf.Max(Stats.BiggestMultiKill, count);
         hud.SetScore(Score);
         hud.SetCombo(Combo);
+        KillSounds.OnKills(count);   // the ping of a kill, climbing with every quick one after it
 
         if (count >= 2)
         {
