@@ -1,7 +1,9 @@
 // EndlessLeaderboard.cs
 // ---------------------------------------------------------------------------
-// The ENDLESS leaderboard: the best runs on this computer, ranked by the wave
-// reached (then the score), each with who played it and how fast they typed.
+// The ENDLESS leaderboard: ONE row per player - their best run (the highest
+// wave; the same wave: the higher score) - ranked by wave, then score, with
+// how fast they typed in that run. A run that does not beat the player's own
+// best changes nothing.
 //
 //   PlayerProfile.Name           who is playing (asked in the menu; a run
 //                                played without a name is not recorded)
@@ -97,6 +99,15 @@ public static class EndlessLeaderboard
         }
         Board board = Load();
         LeaderboardEntry entry = new LeaderboardEntry { name = name, wave = wave, wpm = Mathf.Max(0, wpm), score = Mathf.Max(0, score) };
+        LeaderboardEntry best = board.entries.Find(e => e.name == name);
+        if (best != null)
+        {
+            if (Compare(entry, best) >= 0)
+            {
+                return board.entries.IndexOf(best) + 1; // not better than their own best: the board stays as it is
+            }
+            board.entries.Remove(best);
+        }
         board.entries.Add(entry);
         board.entries.Sort(Compare);
         int rank = board.entries.IndexOf(entry) + 1;
@@ -137,6 +148,9 @@ public static class EndlessLeaderboard
             board = new Board();
         }
         board.entries.Sort(Compare);
+        // A board saved before "one row per player": keep each name's best row only.
+        HashSet<string> seen = new HashSet<string>();
+        board.entries.RemoveAll(e => e == null || !seen.Add(e.name));
         return board;
     }
 }
