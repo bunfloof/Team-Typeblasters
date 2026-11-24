@@ -230,6 +230,13 @@ public class MainMenu : MonoBehaviour
     private void Update()
     {
         UpdateResponsiveLayout();
+        // GO FULL SCREEN switches when the mouse button comes UP, and the
+        // resize can swallow the click: the question closes the moment the
+        // browser really is full screen.
+        if (fullscreenGate != null && TouchFullscreenButton.IsFullscreen)
+        {
+            CloseFullscreenGate();
+        }
         LayoutFullscreenGate();
         UpdateFullscreenLabel();
         AnimateKeys(mainKeys);
