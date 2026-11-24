@@ -1,30 +1,30 @@
 {
-  "version": "latest-2026-11-24-72a4fd6",
-  "source_commit": "72a4fd6e9707fd68049156b2237e18d5b27ca3a8",
-  "commit_message": "Popup says NEW ZOMBIE DISCOVERED instead of NEW ALMANAC ENTRY",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/45417458005",
+  "version": "latest-2026-11-24-53e3ab0",
+  "source_commit": "53e3ab0f8e57e1beedda1dd573573c96026ac30c",
+  "commit_message": "Typing sound: deep low-profile Void-style keys",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/45455171331",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-24T14:53:44.273865Z",
+  "published_utc": "2026-11-24T18:21:31.546022Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 14937902,
-      "sha256": "73eb54a33fc25d2ee0414f797539db6bb30a1432c280c439fdaa3d102eec18ce"
+      "bytes": 15307523,
+      "sha256": "d0f675ab5a8593c8002b910b94fb84f8f1c14113ade28aa5682d79f707157d1a"
     },
     {
       "path": "Build/WebGL.framework.js",
       "bytes": 482183,
-      "sha256": "88d31be4b7af0e57c5c942077bb7a95c1b0eb446bea5ff1ca7aa1471b2c0cbb1"
+      "sha256": "0799afabc3184b37015a92c391cf175b09876c12b37d3d1fce2609f75b91e206"
     },
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "52d52f57ff04e27986b320b82567d7cc1e0a776b03e7ccc665b2fd370ea54d57"
+      "sha256": "25cd8484e82c8ae432fd5d86d90770163a2f8cf41b5c7332b028675b1af6feff"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48547144,
-      "sha256": "33998904bc75f61fa95216975b56ad18e30a8dc73bc2ebfb87419548081ae685"
+      "bytes": 48638264,
+      "sha256": "dd4a5462538d5d4241a83c62568b8f74cda13d448dfa992f3d3f0cbb372f1956"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7416,
-      "sha256": "28968e0a45bb337b20c552701149ebd7a5ba6d1ad3a73d8641db95dcfe88350e"
+      "sha256": "0357b90ab1889e81b55f75664622401c377d05cdce7e32eb6532bebe79755d0c"
     }
   ]
 }
