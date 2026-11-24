@@ -113,6 +113,26 @@ public class MainMenu : MonoBehaviour
     private RectTransform startButton, backButton;
     private RectTransform endlessButton;
     private RectTransform almanacButton;
+    private RectTransform leaderboardButton;
+
+    // The LEADERBOARD page (Endless runs: wave, typing speed, score).
+    private GameObject boardPage;
+    private KeyTitle boardKeys;
+    private TMP_Text boardSubtitle, boardEmpty;
+    private RectTransform boardTable, boardBackButton, boardNameButton;
+    private TMP_Text boardNameLabel;
+    private readonly List<TMP_Text[]> boardRows = new List<TMP_Text[]>(); // rank, name, wave, wpm, score
+    private TMP_Text[] boardHeader;
+    private readonly List<Image> boardStripes = new List<Image>();
+
+    // The name prompt ("WHO'S PLAYING?"), over everything while it is open.
+    private GameObject nameEntry;
+    private TMP_Text nameField;
+    private string nameDraft = "";
+    private System.Action nameSaved;
+    private float nameClosedAt = -1f;
+    private RectTransform nameSave, nameCancel;
+    private TMP_Text nameTitle, nameText;
     private AlmanacPanel almanac;   // the ALMANAC screen, opened over the menu
     private RectTransform fullscreenButton;
     private TMP_Text fullscreenHint, fullscreenLabel, footer;
@@ -172,6 +192,7 @@ public class MainMenu : MonoBehaviour
         MenuBackground.Create((RectTransform)canvas);
         mainPage = BuildMainPage(canvas);
         levelPage = BuildLevelPage(canvas);
+        boardPage = BuildBoardPage(canvas);
         Canvas.ForceUpdateCanvases();
         UpdateResponsiveLayout();
         if (openLevelSelectionOnStart)
@@ -277,6 +298,8 @@ public class MainMenu : MonoBehaviour
         float width = Mathf.Max(240f, Mathf.Min(portrait ? 900f : 1700f, size.x - 120f));
         LayoutMainPage(size, width, portrait);
         LayoutLevelPage(size, width, portrait);
+        LayoutBoardPage(size, width, portrait);
+        LayoutNameEntry();
     }
 
     private void LayoutMainPage(Vector2 size, float width, bool portrait)
@@ -291,20 +314,25 @@ public class MainMenu : MonoBehaviour
         LayoutButton(startButton, new Vector2(0f, portrait ? -10f : top - 501f),
             portrait ? new Vector2(780f, 210f) : new Vector2(640f, 172f), portrait ? 96f : 84f);
 
-        // FULL SCREEN and ALMANAC: side by side (stacked on a phone) under START.
+        // FULL SCREEN, ALMANAC and LEADERBOARD: in a row (stacked on a phone) under START.
         bool hasFullscreen = fullscreenButton != null;
-        Vector2 small = portrait ? new Vector2(700f, 120f) : new Vector2(495f, 93f);
-        float smallSize = portrait ? 48f : 40f;
+        Vector2 small = portrait ? new Vector2(700f, 120f) : new Vector2(420f, 93f);
+        float smallSize = portrait ? 48f : 36f;
+        List<RectTransform> row = new List<RectTransform>();
+        if (hasFullscreen) row.Add(fullscreenButton);
+        row.Add(almanacButton);
+        row.Add(leaderboardButton);
+        for (int i = 0; i < row.Count; i++)
+        {
+            Vector2 at = portrait
+                ? new Vector2(0f, -250f - i * 150f)
+                : new Vector2((i - (row.Count - 1) * 0.5f) * (small.x + 36f), top - 684f);
+            LayoutButton(row[i], at, small, smallSize);
+        }
         if (hasFullscreen)
         {
-            LayoutButton(fullscreenButton, new Vector2(portrait ? 0f : -315f, portrait ? -250f : top - 684f), small, smallSize);
-            LayoutButton(almanacButton, new Vector2(portrait ? 0f : 315f, portrait ? -400f : top - 684f), small, smallSize);
             fullscreenLabel.fontSize = smallSize;
-            PlaceText(fullscreenHint, width, 60f, portrait ? -500f : top - 759f, portrait ? 32f : 28f);
-        }
-        else
-        {
-            LayoutButton(almanacButton, new Vector2(0f, portrait ? -250f : top - 684f), small, smallSize);
+            PlaceText(fullscreenHint, width, 60f, portrait ? -250f - row.Count * 150f + 40f : top - 759f, portrait ? 32f : 28f);
         }
 
         // the crowd stands at the bottom of a wide screen only
@@ -499,6 +527,7 @@ public class MainMenu : MonoBehaviour
     {
         mainPage.SetActive(true);
         levelPage.SetActive(false);
+        boardPage.SetActive(false);
         selected = 0;
         keyboardSelectionStarted = false;
         RefreshHighlight();
@@ -509,6 +538,7 @@ public class MainMenu : MonoBehaviour
         levelMessage.text = "";
         mainPage.SetActive(false);
         levelPage.SetActive(true);
+        boardPage.SetActive(false);
         levelPageOpenedAt = Time.unscaledTime;
         selected = 0;
         keyboardSelectionStarted = false;
@@ -548,6 +578,7 @@ public class MainMenu : MonoBehaviour
 
         startButton = (RectTransform)CreateComicButton(page.transform, "Start Button", "START", ShowLevels).transform;
         almanacButton = (RectTransform)CreateTerminalButton(page.transform, "Almanac Button", "ALMANAC", OpenAlmanac).transform;
+        leaderboardButton = (RectTransform)CreateTerminalButton(page.transform, "Leaderboard Button", "LEADERBOARD", ShowBoard).transform;
         BuildFullscreenControl(page.transform);
         SettingsPanel.AddButton((RectTransform)page.transform, new Vector2(-64f, -48f));
 
@@ -634,6 +665,338 @@ public class MainMenu : MonoBehaviour
         rect.pivot = Ui.Centre;
         rect.anchoredPosition = new Vector2(x, yFromBottom);
         rect.sizeDelta = new Vector2(word.GetPreferredValues(plainText).x + 44f, fontSize * 1.7f);
+    }
+
+    // ---- ENDLESS: who is playing? ----
+    // The first Endless run on this computer asks for a name (it goes on the
+    // leaderboard). Phones have no keyboard for it: they play as PLAYER.
+    private void StartEndless()
+    {
+        if (!PlayerProfile.HasName && !Application.isMobilePlatform)
+        {
+            OpenNameEntry(() => LoadScene(EndlessScene, endlessButton));
+            return;
+        }
+        LoadScene(EndlessScene, endlessButton);
+    }
+
+    // ---- The LEADERBOARD page ----
+    // ENDLESS runs on this computer, best first: the wave reached, the typing
+    // speed and the score, with the player's own runs lit up.
+
+    private static readonly string[] BoardColumns = { "#", "PLAYER", "WAVE", "WPM", "SCORE" };
+    private static readonly float[] BoardColumnStart = { 0.03f, 0.11f, 0.50f, 0.66f, 0.79f };
+    private static readonly float[] BoardColumnEnd = { 0.10f, 0.49f, 0.64f, 0.77f, 0.97f };
+    private static readonly Color BoardDim = new Color(0.93f, 0.91f, 0.87f, 0.62f);
+    private static readonly Color BoardRed = new Color(0.88f, 0.15f, 0.16f);
+
+    private GameObject BuildBoardPage(Transform canvas)
+    {
+        GameObject page = CreatePage("Leaderboard Page", canvas);
+        boardKeys = CreateKeyTitle(page.transform, "LEADERBOARD", 6, 5);
+
+        boardSubtitle = Ui.Label(page.transform, "Subtitle", "ENDLESS  /  THE COLISEUM", 30f, FontStyles.Bold);
+        MenuArt.Style(boardSubtitle, 0f, Ink);
+        boardSubtitle.color = BoardDim;
+        Ui.Caps(boardSubtitle, 6f);
+
+        // The table: a terminal window like the level cards.
+        boardTable = Ui.Rect(page.transform, "Table");
+        boardTable.anchorMin = Ui.Centre;
+        boardTable.anchorMax = Ui.Centre;
+        Image outline = Ui.Panel(boardTable, "Outline", Cream);
+        SetSliced(outline, 10);
+        Ui.Stretch(outline.rectTransform);
+        Image face = Ui.Panel(boardTable, "Face", CardFace);
+        SetSliced(face, 8);
+        Ui.Stretch(face.rectTransform, 4f, 4f, 4f, 4f);
+
+        boardHeader = new TMP_Text[BoardColumns.Length];
+        for (int c = 0; c < BoardColumns.Length; c++)
+        {
+            boardHeader[c] = BoardCell(boardTable, "Header", BoardColumns[c], c);
+            boardHeader[c].color = BoardDim;
+        }
+        for (int r = 0; r < EndlessLeaderboard.Size; r++)
+        {
+            Image stripe = Ui.Panel(boardTable, "Row Stripe", new Color(1f, 1f, 1f, 0.04f));
+            boardStripes.Add(stripe);
+            TMP_Text[] cells = new TMP_Text[BoardColumns.Length];
+            for (int c = 0; c < BoardColumns.Length; c++)
+            {
+                cells[c] = BoardCell(boardTable, "Cell", "", c);
+            }
+            boardRows.Add(cells);
+        }
+        boardEmpty = Ui.Label(boardTable, "Empty", "NO RUNS YET.\nPLAY ENDLESS TO SET THE FIRST RECORD.", 34f, FontStyles.Bold);
+        MenuArt.Style(boardEmpty, 0f, Ink);
+        boardEmpty.color = BoardDim;
+        boardEmpty.textWrappingMode = TextWrappingModes.Normal;
+        Ui.Stretch(boardEmpty.rectTransform, 40f, 40f, 120f, 40f);
+
+        Button nameButton = CreateTerminalButton(page.transform, "Name Button", "PLAYER", () => OpenNameEntry(RefreshBoard));
+        boardNameButton = (RectTransform)nameButton.transform;
+        boardNameLabel = nameButton.GetComponentInChildren<TMP_Text>();
+        boardBackButton = (RectTransform)CreateTerminalButton(page.transform, "Board Back Button", "BACK", ShowMain).transform;
+        page.SetActive(false);
+        return page;
+    }
+
+    private TMP_Text BoardCell(RectTransform table, string objectName, string text, int column)
+    {
+        TMP_Text cell = Ui.Label(table, objectName, text, 34f, FontStyles.Bold,
+            column == 1 ? TextAlignmentOptions.Left : TextAlignmentOptions.Right);
+        MenuArt.Style(cell, 0f, Ink);
+        cell.color = Cream;
+        cell.textWrappingMode = TextWrappingModes.NoWrap;
+        cell.overflowMode = TextOverflowModes.Ellipsis;
+        RectTransform rect = cell.rectTransform;
+        rect.anchorMin = new Vector2(BoardColumnStart[column], 1f);
+        rect.anchorMax = new Vector2(BoardColumnEnd[column], 1f);
+        rect.pivot = new Vector2(0.5f, 1f);
+        return cell;
+    }
+
+    private void ShowBoard()
+    {
+        mainPage.SetActive(false);
+        levelPage.SetActive(false);
+        boardPage.SetActive(true);
+        RefreshBoard();
+        selected = 1; // BACK
+        keyboardSelectionStarted = false;
+        RefreshHighlight();
+    }
+
+    private void RefreshBoard()
+    {
+        List<LeaderboardEntry> entries = EndlessLeaderboard.Entries;
+        string me = PlayerProfile.Name;
+        for (int r = 0; r < boardRows.Count; r++)
+        {
+            TMP_Text[] cells = boardRows[r];
+            bool has = r < entries.Count;
+            bool mine = has && entries[r].name == me;
+            cells[0].text = has ? (r + 1).ToString() : "";
+            cells[1].text = has ? (mine ? Prompt + entries[r].name : entries[r].name) : "";
+            cells[1].richText = true;
+            cells[2].text = has ? entries[r].wave.ToString() : "";
+            cells[3].text = has ? entries[r].wpm.ToString() : "";
+            cells[4].text = has ? entries[r].score.ToString("N0") : "";
+            Color color = mine ? Cream : BoardDim;
+            foreach (TMP_Text cell in cells) cell.color = color;
+            if (has && r == 0) cells[0].color = BoardRed; // the record
+            boardStripes[r].enabled = has;
+            boardStripes[r].color = mine ? new Color(0.88f, 0.15f, 0.16f, 0.16f) : new Color(1f, 1f, 1f, r % 2 == 0 ? 0.045f : 0.015f);
+        }
+        boardEmpty.gameObject.SetActive(entries.Count == 0);
+        foreach (TMP_Text header in boardHeader) header.gameObject.SetActive(entries.Count > 0);
+        boardNameLabel.text = Prompt + "PLAYER: " + (PlayerProfile.HasName ? me : "SET NAME");
+    }
+
+    private void LayoutBoardPage(Vector2 size, float width, bool portrait)
+    {
+        if (boardTable == null) return;
+        float top = size.y * 0.5f;
+        LayoutKeys(boardKeys, portrait ? top - 230f : top - 111f, portrait ? 66f : 75f, width);
+        PlaceText(boardSubtitle, width, 50f, portrait ? top - 330f : top - 196f, portrait ? 34f : 28f);
+
+        float rowHeight = portrait ? 66f : 54f;
+        float headerHeight = portrait ? 70f : 58f;
+        float tableWidth = portrait ? Mathf.Min(1000f, size.x - 60f) : Mathf.Min(1240f, size.x - 160f);
+        float tableHeight = headerHeight + rowHeight * EndlessLeaderboard.Size + 36f;
+        float tableTop = portrait ? top - 390f : top - 236f;
+        PlaceCenter(boardTable, new Vector2(0f, tableTop - tableHeight * 0.5f), new Vector2(tableWidth, tableHeight));
+
+        float font = portrait ? 38f : 32f;
+        for (int c = 0; c < boardHeader.Length; c++)
+        {
+            RectTransform rect = boardHeader[c].rectTransform;
+            rect.anchoredPosition = new Vector2(0f, -18f);
+            rect.sizeDelta = new Vector2(0f, headerHeight);
+            boardHeader[c].fontSize = font * 0.8f;
+        }
+        for (int r = 0; r < boardRows.Count; r++)
+        {
+            float y = -18f - headerHeight - r * rowHeight;
+            RectTransform stripe = boardStripes[r].rectTransform;
+            stripe.anchorMin = new Vector2(0f, 1f);
+            stripe.anchorMax = new Vector2(1f, 1f);
+            stripe.pivot = new Vector2(0.5f, 1f);
+            stripe.anchoredPosition = new Vector2(0f, y);
+            stripe.sizeDelta = new Vector2(-24f, rowHeight - 6f);
+            foreach (TMP_Text cell in boardRows[r])
+            {
+                cell.rectTransform.anchoredPosition = new Vector2(0f, y);
+                cell.rectTransform.sizeDelta = new Vector2(0f, rowHeight - 6f);
+                cell.fontSize = font;
+            }
+        }
+        boardEmpty.fontSize = portrait ? 40f : 34f;
+
+        Vector2 buttonSize = portrait ? new Vector2(520f, 110f) : new Vector2(420f, 78f);
+        float buttonFont = portrait ? 46f : 34f;
+        if (portrait)
+        {
+            LayoutButton(boardNameButton, new Vector2(0f, -size.y * 0.5f + 260f), new Vector2(760f, 110f), buttonFont);
+            LayoutButton(boardBackButton, new Vector2(0f, -size.y * 0.5f + 130f), buttonSize, buttonFont);
+        }
+        else
+        {
+            float y = -size.y * 0.5f + 40f + buttonSize.y * 0.5f;
+            LayoutButton(boardBackButton, new Vector2(-size.x * 0.5f + 50f + buttonSize.x * 0.5f, y), buttonSize, buttonFont);
+            LayoutButton(boardNameButton, new Vector2(size.x * 0.5f - 50f - 280f, y), new Vector2(560f, buttonSize.y), buttonFont);
+        }
+    }
+
+    // ---- The name prompt ----
+
+    private void OpenNameEntry(System.Action saved)
+    {
+        if (nameEntry != null) return;
+        nameSaved = saved;
+        nameDraft = PlayerProfile.HasName ? PlayerProfile.Name : "";
+
+        RectTransform root = Ui.Rect(canvasRect, "Name Entry");
+        Ui.Stretch(root);
+        root.SetAsLastSibling();
+        nameEntry = root.gameObject;
+        Image shade = Ui.Panel(root, "Shade", backgroundColor);
+        Ui.Stretch(shade.rectTransform);
+
+        nameTitle = Ui.Label(root, "Title", "WHO'S PLAYING?", 84f, FontStyles.Bold);
+        MenuArt.Style(nameTitle, 0f, Ink);
+        nameTitle.color = Cream;
+        nameText = Ui.Label(root, "Text", "Your name goes on the Endless leaderboard.", 34f);
+        MenuArt.Style(nameText, 0f, Ink);
+        nameText.color = BoardDim;
+
+        Button field = CreateTerminalButton(root, "Name Field", "", null);
+        nameField = field.GetComponentInChildren<TMP_Text>();
+        nameField.fontSize = 56f;
+        SetHighlight((RectTransform)field.transform, true);
+
+        nameSave = (RectTransform)CreateTerminalButton(root, "Save", "SAVE", SaveName).transform;
+        nameCancel = (RectTransform)CreateTerminalButton(root, "Cancel", "CANCEL", CloseNameEntry).transform;
+        LayoutNameEntry();
+        UpdateNameField();
+#if ENABLE_INPUT_SYSTEM
+        if (Keyboard.current != null) Keyboard.current.onTextInput += OnTextInput;
+#endif
+    }
+
+    private void LayoutNameEntry()
+    {
+        if (nameEntry == null) return;
+        bool portrait = portraitLayout;
+        float width = Mathf.Max(240f, canvasRect.rect.width - 120f);
+        PlaceText(nameTitle, width, 130f, portrait ? 300f : 230f, portrait ? 76f : 84f);
+        PlaceText(nameText, width, 70f, portrait ? 190f : 130f, portrait ? 36f : 32f);
+        LayoutButton((RectTransform)nameField.transform.parent.parent, new Vector2(0f, portrait ? 40f : 10f),
+            portrait ? new Vector2(820f, 130f) : new Vector2(720f, 110f), 56f);
+        Vector2 size = portrait ? new Vector2(560f, 110f) : new Vector2(330f, 86f);
+        LayoutButton(nameSave, portrait ? new Vector2(0f, -140f) : new Vector2(-185f, -140f), size, portrait ? 46f : 38f);
+        LayoutButton(nameCancel, portrait ? new Vector2(0f, -280f) : new Vector2(185f, -140f), size, portrait ? 46f : 38f);
+    }
+
+    private void UpdateNameField()
+    {
+        if (nameField == null) return;
+        bool blink = Mathf.Repeat(Time.unscaledTime, 1f) < 0.55f;
+        nameField.text = Prompt + nameDraft + (nameDraft.Length < PlayerProfile.MaxLength && blink ? "_" : " ");
+        SetHighlight(nameSave, nameDraft.Trim().Length > 0);
+    }
+
+    private void OnNameCharacter(char c)
+    {
+        if (nameEntry == null || char.IsControl(c) || !PlayerProfile.Allowed(c)) return;
+        if (nameDraft.Length >= PlayerProfile.MaxLength) return;
+        if (c == ' ' && (nameDraft.Length == 0 || nameDraft.EndsWith(" "))) return;
+        nameDraft += char.ToUpperInvariant(c);
+        UpdateNameField();
+    }
+
+#if ENABLE_INPUT_SYSTEM
+    // The keys are read one by one (letters, digits, space, -), which works
+    // the same in every browser; the name is always in capitals.
+    private static readonly Key[] NameKeys =
+    {
+        Key.A, Key.B, Key.C, Key.D, Key.E, Key.F, Key.G, Key.H, Key.I, Key.J, Key.K, Key.L, Key.M,
+        Key.N, Key.O, Key.P, Key.Q, Key.R, Key.S, Key.T, Key.U, Key.V, Key.W, Key.X, Key.Y, Key.Z,
+        Key.Digit0, Key.Digit1, Key.Digit2, Key.Digit3, Key.Digit4, Key.Digit5, Key.Digit6, Key.Digit7, Key.Digit8, Key.Digit9,
+        Key.Space, Key.Minus
+    };
+    private const string NameKeyChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 -";
+
+    // The browser's text events keep the order of fast typing; reading keys
+    // one by one is the fallback for a browser that sends none (it is used
+    // only until the first text event arrives).
+    private bool textEventsWork;
+
+    private void OnTextInput(char c)
+    {
+        textEventsWork = true;
+        OnNameCharacter(c);
+    }
+
+    private void OnDestroy()
+    {
+        if (Keyboard.current != null) Keyboard.current.onTextInput -= OnTextInput;
+    }
+
+    private void HandleNameKeys(Keyboard keyboard)
+    {
+        for (int i = 0; i < NameKeys.Length && !textEventsWork; i++)
+        {
+            if (keyboard[NameKeys[i]].wasPressedThisFrame)
+            {
+                OnNameCharacter(NameKeyChars[i]);
+            }
+        }
+        if (keyboard.backspaceKey.wasPressedThisFrame && nameDraft.Length > 0)
+        {
+            nameDraft = nameDraft.Substring(0, nameDraft.Length - 1);
+        }
+        if (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame)
+        {
+            SaveName();
+            return;
+        }
+        if (keyboard.escapeKey.wasPressedThisFrame)
+        {
+            CloseNameEntry();
+            return;
+        }
+        UpdateNameField();
+    }
+#endif
+
+    private void SaveName()
+    {
+        string clean = PlayerProfile.Clean(nameDraft);
+        if (clean.Length == 0)
+        {
+            return; // nothing typed yet: the prompt stays
+        }
+        PlayerProfile.Name = clean;
+        System.Action then = nameSaved;
+        CloseNameEntry();
+        if (then != null) then();
+    }
+
+    private void CloseNameEntry()
+    {
+        if (nameEntry == null) return;
+#if ENABLE_INPUT_SYSTEM
+        if (Keyboard.current != null) Keyboard.current.onTextInput -= OnTextInput;
+#endif
+        Destroy(nameEntry);
+        nameEntry = null;
+        nameField = null;
+        nameSaved = null;
+        nameClosedAt = Time.unscaledTime;
+        if (boardPage != null && boardPage.activeSelf) RefreshBoard();
+        RefreshHighlight();
     }
 
     // ---- The full-screen question ----
@@ -773,7 +1136,7 @@ public class MainMenu : MonoBehaviour
 
         int best = EndlessRecords.BestWave;
         LevelCard endless = CreateCard(page.transform, "Level Endless", count + 1, "ENDLESS", "THE COLISEUM",
-            best > 0 ? "BEST WAVE " + best : "SURVIVE THE HORDE", EndlessAccent, 5, 2, () => LoadScene(EndlessScene, endlessButton));
+            best > 0 ? "BEST WAVE " + best : "SURVIVE THE HORDE", EndlessAccent, 5, 2, StartEndless);
         cards.Add(endless);
         endlessButton = endless.root;
 
@@ -837,6 +1200,12 @@ public class MainMenu : MonoBehaviour
             menuItems.Add(startButton);
             if (fullscreenButton != null) menuItems.Add(fullscreenButton);
             menuItems.Add(almanacButton);
+            menuItems.Add(leaderboardButton);
+        }
+        else if (boardPage.activeSelf)
+        {
+            menuItems.Add(boardNameButton);
+            menuItems.Add(boardBackButton);
         }
         else
         {
@@ -873,7 +1242,12 @@ public class MainMenu : MonoBehaviour
             HandleGateKeys(keyboard);
             return;
         }
-        if (Time.unscaledTime - gateClosedAt < 0.15f)
+        if (nameEntry != null)
+        {
+            HandleNameKeys(keyboard);
+            return;
+        }
+        if (Time.unscaledTime - gateClosedAt < 0.15f || Time.unscaledTime - nameClosedAt < 0.15f)
         {
             return;
         }
@@ -904,7 +1278,7 @@ public class MainMenu : MonoBehaviour
             else
                 item.GetComponent<Button>().onClick.Invoke();
         }
-        else if (back && levelPage.activeSelf)
+        else if (back && (levelPage.activeSelf || boardPage.activeSelf))
         {
             ShowMain();
         }
@@ -914,6 +1288,10 @@ public class MainMenu : MonoBehaviour
     // The mouse moving over a button selects it, like the keys do.
     private void SelectByMouse(RectTransform button)
     {
+        if (nameEntry != null)
+        {
+            return;
+        }
         if (fullscreenGate != null)
         {
             if (button == gateYes) gateSelected = 0;
@@ -935,6 +1313,9 @@ public class MainMenu : MonoBehaviour
 
         SetHighlight(startButton, false);
         SetHighlight(almanacButton, false);
+        SetHighlight(leaderboardButton, false);
+        SetHighlight(boardNameButton, false);
+        SetHighlight(boardBackButton, false);
         if (fullscreenButton != null) SetHighlight(fullscreenButton, false);
         foreach (RectTransform level in levelButtons)
         {

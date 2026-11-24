@@ -374,6 +374,7 @@ public class GameManager : MonoBehaviour
             if (spawner != null && spawner.IsEndlessMode)
             {
                 EndlessRecords.SubmitRun(spawner.CurrentWave, Score);
+                SubmitToLeaderboard();
             }
         }
 
@@ -958,9 +959,30 @@ public class GameManager : MonoBehaviour
         if (spawner != null && spawner.IsEndlessMode)
         {
             endlessRecord = EndlessRecords.SubmitRun(spawner.CurrentWave, Score);
+            SubmitToLeaderboard();
         }
         
         hud.ShowResults(won, Stats, endlessRecord);
+    }
+
+    // An Endless run is over (died, or left from the pause panel): it goes on
+    // the leaderboard with the player's name and measured typing speed.
+    private bool submittedToLeaderboard;
+    private void SubmitToLeaderboard()
+    {
+        if (submittedToLeaderboard)
+        {
+            return;
+        }
+        submittedToLeaderboard = true;
+        if (Score <= 0)
+        {
+            return; // nothing was shot: not a run for the board
+        }
+        // The measured speed once there is enough typing to measure (before
+        // that the estimate is only a first guess), else the plain average.
+        float wpm = DynamicDifficulty.Calibrated ? DynamicDifficulty.EstimatedWpm : Stats.WordsPerMinute;
+        EndlessLeaderboard.Submit(PlayerProfile.Name, spawner.CurrentWave, Mathf.RoundToInt(wpm), Score);
     }
 
     // The "run_end" analytics event: how the run ended and its statistics.
