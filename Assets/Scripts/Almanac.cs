@@ -246,6 +246,7 @@ public static class Almanac
         Capsule(pixels, feet, width, height, body, alpha, !locked && entry.Id == "ghost");
         if (locked)
         {
+            Signature(pixels, feet, width, height, body, true); // the silhouette still has its visor, antenna and feet
             return;
         }
 
@@ -253,8 +254,8 @@ public static class Almanac
         if (entry.Id == "armored")
         {
             Color plate = Color.Lerp(entry.Color, Color.white, 0.45f);
-            Band(pixels, feet, width, height, 0.36f, 0.44f, plate);
-            Band(pixels, feet, width, height, 0.60f, 0.68f, plate);
+            Band(pixels, feet, width, height, 0.30f, 0.38f, plate);
+            Band(pixels, feet, width, height, 0.46f, 0.54f, plate);
         }
         else if (entry.Id == "splitter")
         {
@@ -274,6 +275,68 @@ public static class Almanac
             // An acid glob in the air.
             Ellipse(pixels, new Vector2(feet.x - 84f, groundY + height * 0.9f), 13f, 13f, WithAlpha(Palette.SpitterAcid, 0.95f), true, 0f);
             Ellipse(pixels, new Vector2(feet.x - 60f, groundY + height * 0.78f), 7f, 7f, WithAlpha(Palette.SpitterAcid, 0.7f), true, 0f);
+        }
+        Signature(pixels, feet, width, height, body, false);
+    }
+
+    // ---- The signature look (the same as in the game, see Zombie.BuildFace) ----
+    // A narrow dark slit visor with a red scanner light, a short antenna with a
+    // red light on top, and two stubby feet. A locked entry keeps the shapes
+    // (that is what a silhouette is) but no lights.
+    private static readonly Color VisorGlass = new Color(0.05f, 0.06f, 0.09f);
+    private static readonly Color ScanRed = new Color(1.00f, 0.22f, 0.14f);
+
+    private static void Signature(Color32[] pixels, Vector2 feet, float width, float height, Color body, bool locked)
+    {
+        Color dark = locked ? Color.Lerp(Silhouette, Color.black, 0.45f) : VisorGlass;
+        // The feet: two dark ovals peeking out at the bottom.
+        Color foot = locked ? Color.Lerp(Silhouette, Color.black, 0.25f) : new Color(body.r * 0.62f, body.g * 0.62f, body.b * 0.66f);
+        Ellipse(pixels, new Vector2(feet.x - width * 0.22f, feet.y + 3f), width * 0.19f, 7f, foot, true, 0f);
+        Ellipse(pixels, new Vector2(feet.x + width * 0.22f, feet.y + 3f), width * 0.19f, 7f, foot, true, 0f);
+
+        // The antenna: a slightly leaning stalk from the top of the head, a light on top.
+        Vector2 root = new Vector2(feet.x + width * 0.12f, feet.y + height - width * 0.06f);
+        Vector2 tip = root + new Vector2(width * 0.06f, height * 0.13f);
+        Line(pixels, root, tip, dark, Mathf.Max(2.5f, width * 0.045f));
+        if (!locked)
+        {
+            Ellipse(pixels, tip, 11f, 11f, WithAlpha(ScanRed, 0.25f), true, 0f);   // the glow
+        }
+        Ellipse(pixels, tip, 5.5f, 5.5f, locked ? dark : ScanRed, true, 0f);
+
+        // The slit visor across the face, with a thin shine along its top.
+        float visorY = feet.y + height * 0.71f;
+        float half = width * 0.44f;
+        float thick = Mathf.Max(7f, height * 0.055f);
+        Stadium(pixels, new Vector2(feet.x - half, visorY), new Vector2(feet.x + half, visorY), thick, dark);
+        if (!locked)
+        {
+            Line(pixels, new Vector2(feet.x - half * 0.7f, visorY + thick * 0.45f), new Vector2(feet.x + half * 0.2f, visorY + thick * 0.45f),
+                new Color(1f, 1f, 1f, 0.18f), 1.5f);
+            // The scanner light, a little off centre (it sweeps), with its glow.
+            Vector2 light = new Vector2(feet.x - half * 0.25f, visorY);
+            Ellipse(pixels, light, thick * 2.2f, thick * 1.3f, WithAlpha(ScanRed, 0.22f), true, 0f);
+            Stadium(pixels, light - new Vector2(thick * 0.9f, 0f), light + new Vector2(thick * 0.9f, 0f), thick * 0.42f, ScanRed);
+        }
+    }
+
+    // A horizontal rounded bar (a capsule lying down) from a to b, 'radius' thick each side.
+    private static void Stadium(Color32[] pixels, Vector2 a, Vector2 b, float radius, Color color)
+    {
+        for (int y = Mathf.Max(0, (int)(a.y - radius - 2f)); y < Mathf.Min(Size, a.y + radius + 3f); y++)
+        {
+            for (int x = Mathf.Max(0, (int)(Mathf.Min(a.x, b.x) - radius - 2f)); x < Mathf.Min(Size, Mathf.Max(a.x, b.x) + radius + 3f); x++)
+            {
+                Vector2 p = new Vector2(x + 0.5f, y + 0.5f);
+                Vector2 ab = b - a;
+                float t = Mathf.Clamp01(Vector2.Dot(p - a, ab) / Mathf.Max(ab.sqrMagnitude, 0.0001f));
+                float d = Vector2.Distance(p, a + ab * t);
+                float edge = Mathf.Clamp01(radius - d + 0.5f);
+                if (edge > 0f)
+                {
+                    Blend(pixels, x, y, new Color(color.r, color.g, color.b, color.a * edge));
+                }
+            }
         }
     }
 
