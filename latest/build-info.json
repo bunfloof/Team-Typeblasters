@@ -1,30 +1,30 @@
 {
-  "version": "latest-2026-11-24-53e3ab0",
-  "source_commit": "53e3ab0f8e57e1beedda1dd573573c96026ac30c",
-  "commit_message": "Typing sound: deep low-profile Void-style keys",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/45455171331",
+  "version": "latest-2026-11-24-fb88e94",
+  "source_commit": "fb88e943e5298f489311524b5cfb5ad102a30a42",
+  "commit_message": "Leaderboard: one row per player, holding their best wave",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/45476211935",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-24T18:21:31.546022Z",
+  "published_utc": "2026-11-24T20:11:05.943739Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 15307523,
-      "sha256": "d0f675ab5a8593c8002b910b94fb84f8f1c14113ade28aa5682d79f707157d1a"
+      "bytes": 15308745,
+      "sha256": "f3765a619b5ae3e73011f698ceb12a0b1ae109e61a852bd973c7446bb8424011"
     },
     {
       "path": "Build/WebGL.framework.js",
       "bytes": 482183,
-      "sha256": "0799afabc3184b37015a92c391cf175b09876c12b37d3d1fce2609f75b91e206"
+      "sha256": "063afb253ac02bab2f982aecc408eb80df994c2778e9bc0f4b33483c6b66ee90"
     },
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "25cd8484e82c8ae432fd5d86d90770163a2f8cf41b5c7332b028675b1af6feff"
+      "sha256": "6f11102b8c88dbadc764f1abc19b3a1cb67083110d79a72f7086811ebeae15e6"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48638264,
-      "sha256": "dd4a5462538d5d4241a83c62568b8f74cda13d448dfa992f3d3f0cbb372f1956"
+      "bytes": 48644141,
+      "sha256": "4849f5fbbbc56897d6edc8c30187663d769004e69b98a13a90f8678d98d5f29b"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7416,
-      "sha256": "0357b90ab1889e81b55f75664622401c377d05cdce7e32eb6532bebe79755d0c"
+      "sha256": "61ac60e9a0626ff59c991c54daaa7009cfdd0c09a8d1000528b5271c2f4929d2"
     }
   ]
 }
