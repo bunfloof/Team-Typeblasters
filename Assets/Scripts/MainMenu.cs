@@ -60,6 +60,7 @@ public class MainMenu : MonoBehaviour
     private static readonly Color CardPressed = new Color(0.06f, 0.045f, 0.09f);
     private static readonly Color FrameGold = new Color(0.93f, 0.91f, 0.87f);
     private const string Prompt = "<color=#E0262A>></color>  ";   // the terminal's ">" in front of a label
+    private const string BackPrompt = "<color=#E0262A><noparse><</noparse></color>  ";   // BACK points the other way
 
     // What each level card says, in the order of GameManager's list; Endless comes last.
     private static readonly string[] LevelPlaces = { "USC CAMPUS", "THE HOLLOW FOREST" };
@@ -1553,7 +1554,7 @@ public class MainMenu : MonoBehaviour
             Ui.Place(down.rectTransform, new Vector2(cx, cy), new Vector2(cx, cy), Vector2.zero, new Vector2(6f, 22f));
         }
 
-        TMP_Text label = Ui.Label(face.transform, "Text", Prompt + text, 44f, FontStyles.Bold, TextAlignmentOptions.Left);
+        TMP_Text label = Ui.Label(face.transform, "Text", (text == "BACK" ? BackPrompt : Prompt) + text, 44f, FontStyles.Bold, TextAlignmentOptions.Left);
         MenuArt.Style(label, 0.1f, Ink);
         label.color = Cream;
         label.richText = true;
