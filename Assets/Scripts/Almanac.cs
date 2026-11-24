@@ -166,6 +166,10 @@ public static class Almanac
                 "Words on its head and limbs. Throws energy orbs and stomps up zombies.",
                 "Every word hurts it. Type the orbs before they land, and answer its quiz for a critical hit.",
                 "The last stop of Campus and Forest / every 10th Endless wave"),
+            Entry("hydra", "THE HYDRA", "Cut it, then burn it.", new Color(0.32f, 0.80f, 0.56f), Palette.WordBoss, 5, 2.6f, 2.0f,
+                "Three heads on long necks. A head rears up, its scanner burning white, then strikes. Miss a stump and two heads grow back.",
+                "Type a head's word to CUT it, then the burning stump's short word to SEAR it in time. Cut a rearing head first. With every head gone, type the phrase on its body.",
+                "Endless wave 15, then every 10 waves"),
         };
     }
 
@@ -194,7 +198,11 @@ public static class Almanac
         }
 
         Color32[] pixels = new Color32[Size * Size];
-        if (entry.Id == "boss")
+        if (entry.Id == "hydra")
+        {
+            DrawHydra(pixels, locked);
+        }
+        else if (entry.Id == "boss")
         {
             DrawBoss(pixels, entry, locked);
         }
@@ -336,6 +344,35 @@ public static class Almanac
                 {
                     Blend(pixels, x, y, new Color(color.r, color.g, color.b, color.a * edge));
                 }
+            }
+        }
+    }
+
+    // The Hydra: a big bean with three heads on curved necks, all with the slit visor.
+    private static void DrawHydra(Color32[] pixels, bool locked)
+    {
+        Color skin = locked ? Silhouette : new Color(0.32f, 0.80f, 0.56f);
+        Vector2 feet = new Vector2(Size * 0.5f, 34f);
+        Ellipse(pixels, feet, 70f, 16f, new Color(0f, 0f, 0f, 0.45f), true, 0f);
+        Vector2[] heads = { new Vector2(feet.x - 74f, 196f), new Vector2(feet.x, 214f), new Vector2(feet.x + 74f, 196f) };
+        foreach (Vector2 head in heads)
+        {
+            Vector2 root = new Vector2(feet.x + (head.x - feet.x) * 0.3f, feet.y + 92f);
+            Vector2 mid = new Vector2((root.x + head.x) * 0.5f + (head.x - feet.x) * 0.15f, (root.y + head.y) * 0.5f + 12f);
+            Line(pixels, root, mid, skin, 13f);
+            Line(pixels, mid, head, skin, 11f);
+        }
+        Capsule(pixels, feet, 104f, 124f, skin, 1f, false);
+        Signature(pixels, feet, 104f, 124f, skin, locked);
+        foreach (Vector2 head in heads)
+        {
+            Vector2 headFeet = new Vector2(head.x, head.y - 18f);
+            Capsule(pixels, headFeet, 40f, 34f, skin, 1f, false);
+            Stadium(pixels, new Vector2(head.x - 14f, head.y - 4f), new Vector2(head.x + 14f, head.y - 4f), 4.5f,
+                locked ? Color.Lerp(Silhouette, Color.black, 0.45f) : VisorGlass);
+            if (!locked)
+            {
+                Ellipse(pixels, new Vector2(head.x - 4f, head.y - 4f), 5f, 2.4f, ScanRed, true, 0f);
             }
         }
     }

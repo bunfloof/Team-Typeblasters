@@ -373,8 +373,11 @@ public class GameManager : MonoBehaviour
             // its wave and score count for the personal records too.
             if (spawner != null && spawner.IsEndlessMode)
             {
-                EndlessRecords.SubmitRun(spawner.CurrentWave, Score);
-                SubmitToLeaderboard();
+                if (!WaveSpawner.IsTestRun)
+                {
+                    EndlessRecords.SubmitRun(spawner.CurrentWave, Score);
+                    SubmitToLeaderboard();
+                }
             }
         }
 
@@ -958,8 +961,11 @@ public class GameManager : MonoBehaviour
         
         if (spawner != null && spawner.IsEndlessMode)
         {
-            endlessRecord = EndlessRecords.SubmitRun(spawner.CurrentWave, Score);
-            SubmitToLeaderboard();
+            if (!WaveSpawner.IsTestRun) // a ?wave= test run counts for nothing
+            {
+                endlessRecord = EndlessRecords.SubmitRun(spawner.CurrentWave, Score);
+                SubmitToLeaderboard();
+            }
         }
         
         hud.ShowResults(won, Stats, endlessRecord);

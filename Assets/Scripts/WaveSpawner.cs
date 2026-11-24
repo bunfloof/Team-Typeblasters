@@ -88,6 +88,33 @@ public class WaveSpawner : MonoBehaviour
     [SerializeField, Min(1)] private int endlessSpecialGrowthWaves = 5; // each special kind: 1 in its first wave, +1 every this many waves after
     [SerializeField, Min(0)] private int endlessBossEveryWaves = 10;    // every this many waves is a BOSS fight (0 = never)
     [SerializeField, Min(0f)] private float endlessBossHealthGrowth = 0.4f; // each later boss has this much more health (+40%, +80%...)
+    private const int HydraFirstWave = 15;    // THE HYDRA (Hydra.cs): wave 15, then every 10 waves (25, 35...)
+    private const int HydraEveryWaves = 10;
+    private Hydra hydra;
+
+    // A quick way to try a late wave: the web page's address ends in ?wave=15
+    // (or &wave=15). Such a run does not count for records or the leaderboard.
+    public static bool IsTestRun { get; private set; }
+
+    private static int TestStartWave()
+    {
+        IsTestRun = false;
+        string url = Application.absoluteURL;
+        int at = string.IsNullOrEmpty(url) ? -1 : url.IndexOf("wave=", System.StringComparison.OrdinalIgnoreCase);
+        if (at < 0)
+        {
+            return 1;
+        }
+        int end = at + 5;
+        while (end < url.Length && char.IsDigit(url[end])) end++;
+        int wave;
+        if (int.TryParse(url.Substring(at + 5, end - at - 5), out wave) && wave > 1)
+        {
+            IsTestRun = true;
+            return Mathf.Min(wave, 200);
+        }
+        return 1;
+    }
 
     [Header("Endless: snipers on the stands")]
     [SerializeField, Min(1)] private int sniperFirstWave = 6;    // the first wave with a SNIPER (Zombie: shoots from the stands)
@@ -268,6 +295,10 @@ public class WaveSpawner : MonoBehaviour
         if (boss != null && boss.IsAlive)
         {
             boss.AddTypeableParts(typingTargets);
+        }
+        if (hydra != null && hydra.IsAlive)
+        {
+            hydra.AddTypeableParts(typingTargets);
         }
         strayOrbs.RemoveAll(orb => orb == null || !orb.IsAlive);
         typingTargets.AddRange(strayOrbs);
@@ -1068,14 +1099,17 @@ public class WaveSpawner : MonoBehaviour
 
         GameManager game = GameManager.Instance;
 
-        for (int wave = 1; game != null && game.State == GameState.Playing; wave++)
+        for (int wave = TestStartWave(); game != null && game.State == GameState.Playing; wave++)
         {
             CurrentWave = wave;
             hud.SetWave(wave, 0);
 
-            // Every endlessBossEveryWaves-th wave is a BOSS fight (stronger each time).
-            bool bossWave = endlessBossEveryWaves > 0 && wave % endlessBossEveryWaves == 0;
-            hud.ShowBanner(bossWave ? "WAVE " + wave + "  -  BOSS FIGHT" : "WAVE " + wave);
+            // Every endlessBossEveryWaves-th wave is a BOSS fight (stronger each
+            // time); wave 15, 25, 35... is THE HYDRA.
+            bool hydraWave = wave >= HydraFirstWave && (wave - HydraFirstWave) % HydraEveryWaves == 0;
+            bool bossWave = hydraWave || (endlessBossEveryWaves > 0 && wave % endlessBossEveryWaves == 0);
+            hud.ShowBanner(hydraWave ? (wave == HydraFirstWave ? "WAVE " + wave + "  -  NEW BOSS: THE HYDRA" : "WAVE " + wave + "  -  THE HYDRA")
+                : bossWave ? "WAVE " + wave + "  -  BOSS FIGHT" : "WAVE " + wave);
             if (bossWave)
             {
                 Sfx.Play("Boss/boss_intro", 0.04f);
@@ -1102,7 +1136,11 @@ public class WaveSpawner : MonoBehaviour
             int healthAtStart = game.Health;
 
             // Reuse the existing zombie spawning and combat implementation.
-            if (bossWave)
+            if (hydraWave)
+            {
+                yield return RunHydraFight(arena, 1 + (wave - HydraFirstWave) / HydraEveryWaves);
+            }
+            else if (bossWave)
             {
                 yield return RunBossFight(arena, wave / endlessBossEveryWaves);
             }
@@ -3160,6 +3198,49 @@ public class WaveSpawner : MonoBehaviour
                 break;
             }
         }
+    }
+
+    // ---- The Hydra (Endless, wave 15, 25...) ----
+
+    private IEnumerator RunHydraFight(Encounter encounter, int level)
+    {
+        CameraDirector.Shake(0.4f);
+        hydra = Hydra.Create(encounter.BossStand, player.position, this, hud, player, level);
+        hud.ShowBossBar(level > 1 ? Hydra.BossName + "  LV " + level : Hydra.BossName);
+        Tutorial.Once("hydra", "THE HYDRA: type a head's word to CUT it, then type the burning stump's word to SEAR it before two heads grow back!", 8f);
+
+        AnalyticsEvent e = Analytics.NewEvent("wave_start");
+        e.Add("boss_fight", true);
+        e.Add("boss", "hydra");
+        e.Add("boss_level", level);
+        Analytics.AddPlayerState(e);
+        Analytics.Send(e);
+
+        // A few zombies keep coming while the player is doing well, as with the other boss.
+        float nextExtra = Time.time + 10f;
+        int extraSide = 0;
+        while (hydra != null && hydra.IsAlive)
+        {
+            GameManager game = GameManager.Instance;
+            float healthy = game.MaxHealth > 0 ? (float)game.Health / game.MaxHealth : 0f;
+            if (Time.time >= nextExtra && game.State == GameState.Playing)
+            {
+                if (healthy >= 0.6f && aliveZombies.Count < 3)
+                {
+                    SpawnBossExtra(encounter, extraSide++);
+                }
+                nextExtra = Time.time + (healthy >= 0.9f ? 8f : 14f);
+            }
+            yield return null;
+        }
+
+        foreach (Zombie minion in new List<Zombie>(aliveZombies))
+        {
+            minion.KillByBlast(hydra != null ? hydra.BodyCenter : encounter.BossStand, "boss_died");
+        }
+        yield return new WaitForSeconds(1.5f);
+        hydra = null;
+        hud.HideBossBar();
     }
 
     // ---- The boss ----
