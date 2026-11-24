@@ -210,7 +210,7 @@ public class HUD : MonoBehaviour
         Almanac.Discovered += ShowAlmanacNotice;
     }
 
-    // ---- "New Almanac entry" notice (right edge, under the score) ----
+    // ---- "New zombie discovered" notice (right edge, under the score) ----
     // A small card slides in from the right when an enemy is met for the very
     // first time, stays a moment and slides out. Real time, so it also plays
     // while a lesson holds the world.
@@ -242,7 +242,7 @@ public class HUD : MonoBehaviour
             picture.sprite = Almanac.Portrait(entry, false);
             picture.preserveAspect = true;
             Ui.Place(picture.rectTransform, Ui.LeftMiddle, Ui.LeftMiddle, new Vector2(16f, 0f), new Vector2(84f, 84f));
-            TMP_Text top = Ui.Caps(Ui.Label(rect, "Top", "NEW ALMANAC ENTRY", 18f, FontStyles.Bold, TextAlignmentOptions.Left), 6f);
+            TMP_Text top = Ui.Caps(Ui.Label(rect, "Top", "NEW ZOMBIE DISCOVERED", 16f, FontStyles.Bold, TextAlignmentOptions.Left), 3f);
             top.color = Ui.Teal;
             Ui.Place(top.rectTransform, Ui.TopLeft, Ui.TopLeft, new Vector2(112f, -16f), new Vector2(300f, 24f));
             TMP_Text name = Ui.Caps(Ui.Label(rect, "Name", entry.Name, 32f, FontStyles.Bold, TextAlignmentOptions.Left), 4f);
