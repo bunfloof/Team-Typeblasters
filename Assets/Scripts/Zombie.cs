@@ -362,6 +362,7 @@ public class Zombie : MonoBehaviour, ITypingTarget
         normalMaterial = bodyRenderer.sharedMaterial;
         headHeight = 2f * size.y;
         BodyRadius = 0.5f * size.x;
+        BuildFace();
 
         if (IsExplosive)
         {
@@ -510,6 +511,8 @@ public class Zombie : MonoBehaviour, ITypingTarget
                 inRingMaxWhileTyped = Mathf.Max(inRingMaxWhileTyped, inRing);
             }
         }
+
+        UpdateFace();
 
         // GHOST: its word fades in and out (also while frozen).
         if (Kind == ZombieKind.Ghost)
@@ -731,6 +734,198 @@ public class Zombie : MonoBehaviour, ITypingTarget
         get { return transform.position + Vector3.up * (headHeight + LabelAboveHead); }
     }
 
+    // ---- The face: which kind is this? ----
+    // Colour and size already tell the kinds apart; the face and one prop make
+    // it certain at a glance (and for players who do not see colours well).
+    // The faces are the ones of the menu's zombies (MenuArt), built here from
+    // flat discs and bars on the front of the capsule. No colliders, children
+    // of the Body, so they scale with it and die with it.
+    //   WALKER     dot eyes, flat mouth            RUNNER   wide eyes, open mouth, a red headband
+    //   RED        angry brows, a grin, a FUSE     ARMORED  a visor and a riveted chest plate (gone once broken)
+    //   SPLITTER   happy eyes, a SEAM down it      GHOST    sleepy half-shut eyes
+    //   SPITTER    crossed eyes, a spit TUBE       BRUTE    angry brows, HORNS, teeth
+    //   SHIFTER    one big eye                     SNIPER   a SCOPE over one eye, a cap
+    // While its word is being typed its pupils shrink: it knows it is the target.
+    private static readonly Color FaceInk = new Color(0.05f, 0.06f, 0.09f);
+    private static readonly Color FaceWhite = new Color(0.98f, 0.98f, 0.95f);
+    private readonly List<Transform> pupils = new List<Transform>();
+    private readonly List<Vector3> pupilSizes = new List<Vector3>();
+    private GameObject armorBand;
+    private bool faceBuilt;
+
+    private void BuildFace()
+    {
+        if (faceBuilt)
+        {
+            return;
+        }
+        faceBuilt = true;
+        const float EyeY = 0.42f, EyeX = 0.17f, MouthY = 0.12f;
+        Material ink = Palette.Lit(FaceInk);
+        Material white = Palette.Unlit(FaceWhite);   // eyes show whatever the light
+
+        switch (Kind)
+        {
+            case ZombieKind.Runner:
+                Eye(EyeX, EyeY, 0.22f, 0.08f);
+                Eye(-EyeX, EyeY, 0.22f, 0.08f);
+                FaceDisc("Mouth", 0f, MouthY, 0.15f, ink);
+                Shapes.Block(PrimitiveType.Cylinder, "Headband", body, new Vector3(0f, 0.70f, 0f), new Vector3(0.93f, 0.035f, 0.93f),
+                    Palette.Lit(new Color(0.85f, 0.15f, 0.12f)));
+                break;
+            case ZombieKind.Explosive:
+                Eye(EyeX, EyeY, 0.20f, 0.10f);
+                Eye(-EyeX, EyeY, 0.20f, 0.10f);
+                FaceBar("Brow", EyeX, EyeY + 0.14f, 0.24f, 0.05f, ink, 22f);
+                FaceBar("Brow", -EyeX, EyeY + 0.14f, 0.24f, 0.05f, ink, -22f);
+                FaceBar("Grin", 0f, MouthY, 0.34f, 0.16f, ink, 0f);
+                FaceBar("Teeth", 0f, MouthY + 0.045f, 0.28f, 0.05f, white, 0f, 0.012f);
+                // The fuse: it is a bomb.
+                Shapes.Block(PrimitiveType.Cylinder, "Fuse", body, new Vector3(0f, 1.08f, 0f), new Vector3(0.07f, 0.10f, 0.07f), ink);
+                Shapes.Block(PrimitiveType.Cube, "Spark", body, new Vector3(0f, 1.21f, 0f), Vector3.one * 0.11f,
+                    Palette.Unlit(new Color(1f, 0.75f, 0.2f)), new Vector3(45f, 45f, 0f));
+                break;
+            case ZombieKind.Armored:
+                FaceBar("Visor", 0f, EyeY, 0.62f, 0.17f, ink, 0f);
+                Material glass = Palette.Unlit(new Color(0.5f, 0.9f, 1f));
+                FaceBar("Slit", 0.13f, EyeY, 0.13f, 0.05f, glass, 0f, 0.02f);
+                FaceBar("Slit", -0.13f, EyeY, 0.13f, 0.05f, glass, 0f, 0.02f);
+                armorBand = Shapes.Block(PrimitiveType.Cylinder, "Chest Plate", body, new Vector3(0f, -0.12f, 0f), new Vector3(1.07f, 0.13f, 1.07f),
+                    Palette.Lit(new Color(0.20f, 0.25f, 0.35f)));
+                Material rivet = Palette.Lit(new Color(0.85f, 0.9f, 1f));
+                Shapes.Block(PrimitiveType.Cube, "Rivet", armorBand.transform, new Vector3(0.2f, 0f, 0.46f), new Vector3(0.06f, 0.5f, 0.06f), rivet);
+                Shapes.Block(PrimitiveType.Cube, "Rivet", armorBand.transform, new Vector3(-0.2f, 0f, 0.46f), new Vector3(0.06f, 0.5f, 0.06f), rivet);
+                break;
+            case ZombieKind.Splitter:
+            case ZombieKind.Splitling:
+                // Happy eyes: two little roofs.
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    FaceBar("Eye", side * EyeX - 0.045f, EyeY, 0.12f, 0.04f, ink, 35f);
+                    FaceBar("Eye", side * EyeX + 0.045f, EyeY, 0.12f, 0.04f, ink, -35f);
+                }
+                FaceBar("Smile", 0f, MouthY, 0.2f, 0.045f, ink, 0f);
+                if (Kind == ZombieKind.Splitter)
+                {
+                    // The seam it splits along, front and back.
+                    Shapes.Block(PrimitiveType.Cube, "Seam", body, new Vector3(0f, -0.35f, 0f), new Vector3(0.035f, 0.85f, 1.02f), ink);
+                    Shapes.Block(PrimitiveType.Cube, "Seam", body, new Vector3(0f, 0.72f, 0f), new Vector3(0.035f, 0.35f, 0.86f), ink);
+                }
+                break;
+            case ZombieKind.Ghost:
+                Eye(EyeX, EyeY, 0.20f, 0.09f);
+                Eye(-EyeX, EyeY, 0.20f, 0.09f);
+                Material lid = Palette.Lit(new Color(0.80f, 0.76f, 0.95f));
+                FaceBar("Lid", EyeX, EyeY + 0.07f, 0.24f, 0.11f, lid, 0f, 0.03f);
+                FaceBar("Lid", -EyeX, EyeY + 0.07f, 0.24f, 0.11f, lid, 0f, 0.03f);
+                FaceDisc("Mouth", 0f, MouthY, 0.07f, ink);
+                break;
+            case ZombieKind.Spitter:
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    FaceBar("Eye", side * EyeX, EyeY, 0.17f, 0.04f, ink, 45f);
+                    FaceBar("Eye", side * EyeX, EyeY, 0.17f, 0.04f, ink, -45f);
+                }
+                // The tube it spits from.
+                Shapes.Block(PrimitiveType.Cylinder, "Spit Tube", body, new Vector3(0f, MouthY, 0.5f), new Vector3(0.2f, 0.09f, 0.2f), ink, new Vector3(90f, 0f, 0f));
+                Shapes.Block(PrimitiveType.Cylinder, "Spit", body, new Vector3(0f, MouthY, 0.595f), new Vector3(0.12f, 0.005f, 0.12f),
+                    Palette.Unlit(Palette.SpitterAcid), new Vector3(90f, 0f, 0f));
+                break;
+            case ZombieKind.Brute:
+                Eye(EyeX, EyeY, 0.17f, 0.08f);
+                Eye(-EyeX, EyeY, 0.17f, 0.08f);
+                FaceBar("Brow", EyeX, EyeY + 0.12f, 0.24f, 0.07f, ink, 25f);
+                FaceBar("Brow", -EyeX, EyeY + 0.12f, 0.24f, 0.07f, ink, -25f);
+                FaceBar("Mouth", 0f, MouthY, 0.36f, 0.06f, ink, 0f);
+                FaceBar("Tusk", 0.12f, MouthY + 0.06f, 0.06f, 0.11f, white, 0f, 0.012f);
+                FaceBar("Tusk", -0.12f, MouthY + 0.06f, 0.06f, 0.11f, white, 0f, 0.012f);
+                Material horn = Palette.Lit(new Color(0.90f, 0.86f, 0.74f));
+                Shapes.Block(PrimitiveType.Cube, "Horn", body, new Vector3(0.3f, 0.95f, 0.05f), new Vector3(0.11f, 0.3f, 0.11f), horn, new Vector3(0f, 0f, -28f));
+                Shapes.Block(PrimitiveType.Cube, "Horn", body, new Vector3(-0.3f, 0.95f, 0.05f), new Vector3(0.11f, 0.3f, 0.11f), horn, new Vector3(0f, 0f, 28f));
+                break;
+            case ZombieKind.Shifter:
+                Eye(0f, EyeY, 0.34f, 0.14f);   // one big eye
+                FaceBar("Mouth", 0f, MouthY - 0.02f, 0.12f, 0.04f, ink, 0f);
+                break;
+            case ZombieKind.Sniper:
+                Eye(-EyeX, EyeY, 0.16f, 0.07f);
+                // The scope over its other eye, with a red lens.
+                Shapes.Block(PrimitiveType.Cylinder, "Scope", body, new Vector3(EyeX, EyeY, 0.52f), new Vector3(0.2f, 0.12f, 0.2f), ink, new Vector3(90f, 0f, 0f));
+                Shapes.Block(PrimitiveType.Cylinder, "Lens", body, new Vector3(EyeX, EyeY, 0.645f), new Vector3(0.13f, 0.005f, 0.13f),
+                    Palette.Unlit(new Color(1f, 0.2f, 0.15f)), new Vector3(90f, 0f, 0f));
+                FaceBar("Mouth", 0f, MouthY, 0.16f, 0.04f, ink, 0f);
+                Shapes.Block(PrimitiveType.Cube, "Cap Brim", body, new Vector3(0f, 0.66f, 0.42f), new Vector3(0.7f, 0.04f, 0.4f), ink);
+                break;
+            default: // the plain walker
+                pupils.Add(FaceDisc("Eye", EyeX, EyeY, 0.15f, ink));
+                pupils.Add(FaceDisc("Eye", -EyeX, EyeY, 0.15f, ink));
+                FaceBar("Mouth", 0f, MouthY, 0.22f, 0.045f, ink, 0f);
+                break;
+        }
+        foreach (Transform pupil in pupils)
+        {
+            pupilSizes.Add(pupil.localScale);
+        }
+    }
+
+    // A white eye with a dark pupil.
+    private void Eye(float x, float y, float size, float pupil)
+    {
+        FaceDisc("Eye", x, y, size, Palette.Unlit(FaceWhite));
+        pupils.Add(FaceDisc("Pupil", x * 0.94f, y - 0.01f, pupil, Palette.Lit(FaceInk), 0.012f));
+    }
+
+    // A flat disc lying on the front of the capsule at (x, y) of the body
+    // (the capsule is 1 wide and 2 tall, its centre at 0), turned to face outward.
+    private Transform FaceDisc(string partName, float x, float y, float diameter, Material material, float lift = 0f)
+    {
+        float turn;
+        Vector3 at = OnFace(x, y, lift, out turn);
+        return Shapes.Block(PrimitiveType.Cylinder, partName, body, at, new Vector3(diameter, 0.006f, diameter), material,
+            new Vector3(90f, turn, 0f)).transform;
+    }
+
+    // A flat bar on the front of the capsule; roll tilts it (brows, crossed eyes).
+    private Transform FaceBar(string partName, float x, float y, float width, float height, Material material, float roll, float lift = 0f)
+    {
+        float turn;
+        Vector3 at = OnFace(x, y, lift, out turn);
+        return Shapes.Block(PrimitiveType.Cube, partName, body, at, new Vector3(width, height, 0.012f), material,
+            new Vector3(0f, turn, roll)).transform;
+    }
+
+    // The point of the capsule's front surface at (x, y), a hair above it, and
+    // how far the surface is turned sideways there.
+    private static Vector3 OnFace(float x, float y, float lift, out float turn)
+    {
+        float radius = 0.5f;
+        if (Mathf.Abs(y) > 0.5f)
+        {
+            // In the round top or bottom the capsule gets narrower.
+            float into = Mathf.Abs(y) - 0.5f;
+            radius = Mathf.Sqrt(Mathf.Max(0.01f, 0.25f - into * into));
+        }
+        x = Mathf.Clamp(x, -radius * 0.95f, radius * 0.95f);
+        float z = Mathf.Sqrt(radius * radius - x * x);
+        turn = Mathf.Atan2(x, z) * Mathf.Rad2Deg;
+        return new Vector3(x, y, z) * (1f + (0.008f + lift) / radius);
+    }
+
+    private void UpdateFace()
+    {
+        if (pupils.Count == 0)
+        {
+            return;
+        }
+        float size = IsTargeted && !lookingFrozen ? 0.6f : 1f;
+        for (int i = 0; i < pupils.Count; i++)
+        {
+            Vector3 full = pupilSizes[i];
+            Vector3 wanted = new Vector3(full.x * size, full.y, full.z * size);
+            pupils[i].localScale = Vector3.MoveTowards(pupils[i].localScale, wanted, Time.deltaTime * 0.5f);
+        }
+    }
+
     // True while this zombie is the player's current target (at least one letter typed).
     public bool IsTargeted
     {
@@ -899,6 +1094,10 @@ public class Zombie : MonoBehaviour, ITypingTarget
     private void BreakArmor()
     {
         HasArmor = false;
+        if (armorBand != null)
+        {
+            armorBand.SetActive(false); // the plate is shot off
+        }
         bodyRenderer.sharedMaterial = Palette.Lit(Palette.ZombieGrey);
         normalMaterial = bodyRenderer.sharedMaterial;
         spawner.Hud.ShowFloatingText(LabelAnchor, "ARMOR BROKEN", Palette.WordArmor, true);
