@@ -1,15 +1,15 @@
 {
-  "version": "latest-2026-11-24-fb88e94",
-  "source_commit": "fb88e943e5298f489311524b5cfb5ad102a30a42",
-  "commit_message": "Leaderboard: one row per player, holding their best wave",
-  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/45476211935",
+  "version": "latest-2026-11-24-290502b",
+  "source_commit": "290502b8520cbb4cc791c62ac1bcd9c3c8ceb7b0",
+  "commit_message": "New Endless boss at wave 15: THE HYDRA - cut a head, then sear the stump in time or two grow back; ?wave=N test shortcut",
+  "build_run": "https://github.com/bunfloof/Team-Typeblasters/actions/runs/45480740291",
   "unity_version": "6000.3.22f1",
-  "published_utc": "2026-11-24T20:11:05.943739Z",
+  "published_utc": "2026-11-24T20:36:35.677442Z",
   "files": [
     {
       "path": "Build/WebGL.data",
-      "bytes": 15308745,
-      "sha256": "f3765a619b5ae3e73011f698ceb12a0b1ae109e61a852bd973c7446bb8424011"
+      "bytes": 15317098,
+      "sha256": "55e442a2c93a66a2d8d6233b1034d4267c72b50fad3ae447487bc3061a195086"
     },
     {
       "path": "Build/WebGL.framework.js",
@@ -19,12 +19,12 @@
     {
       "path": "Build/WebGL.loader.js",
       "bytes": 25779,
-      "sha256": "6f11102b8c88dbadc764f1abc19b3a1cb67083110d79a72f7086811ebeae15e6"
+      "sha256": "ac5a91badaa64abe4004db1da722712837887038a44874b77ca55b7c69ca5350"
     },
     {
       "path": "Build/WebGL.wasm",
-      "bytes": 48644141,
-      "sha256": "4849f5fbbbc56897d6edc8c30187663d769004e69b98a13a90f8678d98d5f29b"
+      "bytes": 48678648,
+      "sha256": "1c1d64e4af6364ab03880500c329e090c5c873b3d50dead51b58c34d91413f8b"
     },
     {
       "path": "TemplateData/MemoryProfiler.png",
@@ -89,7 +89,7 @@
     {
       "path": "index.html",
       "bytes": 7416,
-      "sha256": "61ac60e9a0626ff59c991c54daaa7009cfdd0c09a8d1000528b5271c2f4929d2"
+      "sha256": "5368a145ec0f4f96bbec045353f87ae0db671c781dc145a6bfb563af058a741f"
     }
   ]
 }
