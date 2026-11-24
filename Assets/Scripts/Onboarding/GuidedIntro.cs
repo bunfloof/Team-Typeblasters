@@ -173,6 +173,7 @@ public static class GuidedIntro
         Cutscene = false;
         OnlyPower = null;
         skipOffered = false;
+        Powers.AimHint = null; // a skipped intro must not leave the lure aimed at its barrel
         Powers.ActionPerformed -= OnPower;
     
         if (view != null)
@@ -300,9 +301,16 @@ public static class GuidedIntro
             view.ShowLine("Every word you finish gives +1 ENERGY.", 4f);
         }
 
-        // BARREL: a group walks past one; its word blasts them all.
+        // BARREL: a group walks past one; its word blasts them all. Only
+        // when another barrel is left for the LURE lesson (which teaches the
+        // lure by pulling a crowd into a barrel's ring); with one barrel, the
+        // lure lesson teaches the barrel too.
         int point;
         Barrel barrel = BarrelOnPath(out point);
+        if (barrel != null && LureBarrel(barrel) == null)
+        {
+            barrel = null;
+        }
         if (barrel != null)
         {
             spawner.ActivateProp(barrel);
@@ -337,23 +345,14 @@ public static class GuidedIntro
             yield return Finish(group, "Finish them off.");
         }
 
-        // [1] LURE: three zombies from two doors (two and one); the moment they
-        // are out, the world waits for the lure. It does not explode: the
-        // lesson goes on once the player has SEEN it pull them in (they walk
-        // to it instead of the player), then they are shot as usual.
+        // [1] LURE + BARREL: the lure is taught with the move it is for. A
+        // group comes out; the aim starts on a barrel ("throw it next to the
+        // barrel"); they walk to the lure, into the barrel's ring; then the
+        // barrel's word blows them all up at once. A lure that lands too far
+        // from the barrel is taken back and thrown again. No barrel in reach:
+        // the lure alone, as before.
         yield return Calm(1f);
-        int[] lureDoors = TwoNearDoors(); // two doors close together in front: one lure can pull both groups in
-        group = Group(lureDoors[0], ZombieKind.Normal, 2, GroupLanes);
-        group.AddRange(Group(lureDoors[1], ZombieKind.Normal, 1, GroupLanes));
-        BeginCutscene(); // they walk out as a cutscene: no typing their words before the power's card
-        yield return new WaitForSeconds(WalkOutSeconds);
-        yield return OfferPower(HudFeature.Lure, "lure", "throw", Powers.LureCost,
-            "LURE", touch ? "Tap Lure to throw or drag to aim. Zombies chase it, not you."
-                : "Hold 1, aim with the arrows, then release. Zombies chase it, not you.",
-            touch ? new[] { GuideStep.Text("LURE", "TAP OR DRAG") }
-                  : new[] { GuideStep.Key("1", "HOLD"), GuideStep.Arrows("AIM"), GuideStep.Key("1", "LET GO") });
-        yield return UntilLured(1.5f); // let them be seen walking to it
-        yield return Finish(group, "They chase the lure, not you. Shoot them!");
+        yield return LureLesson();
 
         // [2] FREEZE, only once the lure's group is gone and the dust settled.
         // Five come out (three from one side, two from the other): plenty to freeze.
@@ -499,6 +498,132 @@ public static class GuidedIntro
         {
             yield return null;
         }
+    }
+
+    // ---- The lure lesson ----
+
+    private const float LureNearBarrel = Barrel.BlastRadius * 0.6f;  // a lure this close to the barrel gathers them in its ring
+
+    private static IEnumerator LureLesson()
+    {
+        bool touch = TouchControls.Active;
+        Barrel trap = LureBarrel(null);
+        int[] lureDoors = TwoNearDoors(); // two doors close together in front
+        List<Zombie> group = Group(lureDoors[0], ZombieKind.Normal, 2, GroupLanes);
+        group.AddRange(Group(lureDoors[1], ZombieKind.Normal, 1, GroupLanes));
+        BeginCutscene(); // they walk out as a cutscene: no typing their words before the power's card
+        yield return new WaitForSeconds(WalkOutSeconds);
+
+        if (trap == null)
+        {
+            yield return OfferPower(HudFeature.Lure, "lure", "throw", Powers.LureCost,
+                "LURE", touch ? "Tap Lure to throw or drag to aim. Zombies chase it, not you."
+                    : "Hold 1, aim with the arrows, then release. Zombies chase it, not you.",
+                touch ? new[] { GuideStep.Text("LURE", "TAP OR DRAG") }
+                      : new[] { GuideStep.Key("1", "HOLD"), GuideStep.Arrows("AIM"), GuideStep.Key("1", "LET GO") });
+            yield return UntilLured(1.5f);
+            yield return Finish(group, "They chase the lure, not you. Shoot them!");
+            yield break;
+        }
+
+        spawner.ActivateProp(trap);
+        Powers.AimHint = trap.Position;
+        LureBomb landed = null;
+        bool retry = false;
+        while (landed == null && AnyAlive(group) && trap.IsAlive)
+        {
+            view.PointAt(trap);
+            yield return OfferPower(HudFeature.Lure, "lure", "throw", Powers.LureCost,
+                retry ? "TRY AGAIN" : "LURE",
+                retry ? "Too far from the barrel. Throw the lure right next to it."
+                    : touch ? "Drag the lure next to the RED BARREL. Zombies chase the lure, not you."
+                    : "Hold 1: the aim starts on the RED BARREL. Let go to throw. Zombies chase the lure, not you.",
+                touch ? new[] { GuideStep.Text("LURE", "DRAG TO BARREL") }
+                      : new[] { GuideStep.Key("1", "HOLD"), GuideStep.Arrows("AIM"), GuideStep.Key("1", "LET GO") });
+            BlocksLetters = true; // nothing to type until they are in the ring
+            Holding = false;      // they walk to the lure
+            // Wait for it to land.
+            float giveUp = Time.time + 3f;
+            LureBomb lure = null;
+            while (lure == null && Time.time < giveUp)
+            {
+                foreach (LureBomb bomb in LureBomb.Active)
+                {
+                    if (bomb != null && bomb.IsLuring) lure = bomb;
+                }
+                yield return null;
+            }
+            if (lure != null && Flat(lure.Position - trap.Position).magnitude <= LureNearBarrel)
+            {
+                landed = lure;
+            }
+            else
+            {
+                if (lure != null) lure.FizzleNow();
+                Holding = true; // they wait while the lure is thrown again
+                retry = true;
+            }
+        }
+        Powers.AimHint = null;
+
+        if (landed != null)
+        {
+            view.ShowLine("They chase the lure... right into the barrel's ring.", 3f);
+            float gather = Time.time + 9f;
+            while (AnyAlive(group) && trap.IsAlive && landed.IsLuring && !AllNearBarrel(group, trap) && Time.time < gather)
+            {
+                yield return null;
+            }
+            view.HideLine();
+            if (AnyAlive(group) && trap.IsAlive)
+            {
+                yield return UntilNotTyping();
+                Holding = true;
+                BeginLesson("BOOM", "They are all in the ring. Type the barrel's word: one blast for all of them.", null);
+                BlocksLetters = false;
+                OnlyTarget = trap; // only the barrel's word passes
+                view.PointAt(trap);
+                while (trap.IsAlive && AnyAlive(group))
+                {
+                    yield return null;
+                }
+                OnlyTarget = null;
+                view.HideCard();
+                Holding = false;
+            }
+        }
+        view.PointAt(null);
+        BlocksLetters = false;
+        EndCutscene();
+        yield return Finish(group, "Finish them off.");
+    }
+
+    // A barrel standing in this fight that a lure can be thrown next to (not
+    // 'except', not right by the player), or null.
+    private static Barrel LureBarrel(Barrel except)
+    {
+        Encounter fight = spawner.CurrentEncounter;
+        Powers powers = GameManager.Instance.Powers;
+        Barrel best = null;
+        float bestDistance = float.MaxValue;
+        foreach (Barrel barrel in fight.Barrels)
+        {
+            if (barrel == null || barrel == except || barrel.IsExploded)
+            {
+                continue;
+            }
+            float distance = Flat(barrel.Position - fight.StopPosition).magnitude;
+            if (distance < Barrel.BlastRadius + 3f || !powers.InThrowReach(barrel.Position))
+            {
+                continue;
+            }
+            if (distance < bestDistance)
+            {
+                bestDistance = distance;
+                best = barrel;
+            }
+        }
+        return best;
     }
 
     // ---- Steps ----

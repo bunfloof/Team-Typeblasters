@@ -48,7 +48,7 @@ public class LureBomb : MonoBehaviour
             return learning ? TutorialBlastRadius : NormalBlastRadius;
         }
     }
-    public const float LureSeconds = 6f;   // from landing until it fizzles out (unless a blast sets it off first)
+    public const float LureSeconds = 10f;   // from landing until it fizzles out (unless a blast sets it off first)
     private const float FizzleSeconds = 0.3f; // it shrinks away this long when the time is up
     public const float BossDamage = 120f;  // if it goes off next to the boss
 
@@ -227,6 +227,16 @@ public class LureBomb : MonoBehaviour
         chain.Begin(); // Explosion.Detonate calls the matching End()
         Explosion.Detonate(transform.position, BlastRadius, chain, BossDamage, null);
         Destroy(gameObject);
+    }
+
+    // Ends the lure now, quietly (the guided intro's lure landed too far
+    // from the barrel: it is taken back and thrown again).
+    public void FizzleNow()
+    {
+        if (IsLuring)
+        {
+            fuseTimer = LureSeconds;
+        }
     }
 
     // Time is up: it shrinks away quietly.

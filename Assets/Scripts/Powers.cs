@@ -646,6 +646,10 @@ public class Powers : MonoBehaviour
         aimTurn = 0f;                 // every aim starts straight ahead...
         aimDistance = EasyTutorial.Active != null ? 12f : throwDistance;
         AimAtGroup();                 // ...except in ENDLESS: at the biggest group of zombies in view
+        if (AimHint.HasValue)
+        {
+            AimAt(AimHint.Value);     // ...or where a lesson wants it (the guided intro's barrel)
+        }
         if (arc == null)
         {
             arc = ThrowArc.Create();
@@ -762,6 +766,35 @@ public class Powers : MonoBehaviour
         toGroup.y = 0f;
         aimTurn = Mathf.Clamp(Vector3.SignedAngle(ahead, toGroup, Vector3.up), -maxAimTurn, maxAimTurn);
         aimDistance = Mathf.Clamp(toGroup.magnitude, minThrowDistance, maxThrowDistance);
+    }
+
+    // A lesson can say where the aim should START (the guided intro points it
+    // at a barrel). The arrows still move it, and a quick tap throws it there.
+    public static Vector3? AimHint;
+
+    // Can a throw reach this spot (distance and turn limits)?
+    public bool InThrowReach(Vector3 spot)
+    {
+        Vector3 ahead = Camera.main != null ? Camera.main.transform.forward : player.forward;
+        ahead.y = 0f;
+        Vector3 offset = spot - player.position;
+        offset.y = 0f;
+        return offset.magnitude >= minThrowDistance + 1f && offset.magnitude <= maxThrowDistance - 1f
+            && Mathf.Abs(Vector3.SignedAngle(ahead, offset, Vector3.up)) <= maxAimTurn - 5f;
+    }
+
+    private void AimAt(Vector3 spot)
+    {
+        Vector3 ahead = Camera.main.transform.forward;
+        ahead.y = 0f;
+        if (ahead.sqrMagnitude < 0.001f)
+        {
+            return;
+        }
+        Vector3 offset = spot - player.position;
+        offset.y = 0f;
+        aimTurn = Mathf.Clamp(Vector3.SignedAngle(ahead, offset, Vector3.up), -maxAimTurn, maxAimTurn);
+        aimDistance = Mathf.Clamp(offset.magnitude, minThrowDistance, maxThrowDistance);
     }
 
     // Stops aiming without throwing (e.g. the game was paused); no charge is used.
