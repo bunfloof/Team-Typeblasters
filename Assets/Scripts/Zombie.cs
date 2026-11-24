@@ -748,7 +748,8 @@ public class Zombie : MonoBehaviour, ITypingTarget
     private static readonly Color ScanCold = new Color(0.45f, 0.70f, 0.95f);
     private const float VisorY = 0.42f;          // body space: the capsule is 1 wide and 2 tall, its centre at 0
     private const float ScanReach = 0.27f;
-    private Transform scanner, leftFoot, rightFoot;
+    private Transform head, scanner, leftFoot, rightFoot;
+    private Renderer antennaTip;
     private Renderer scannerRenderer;
     private Vector3 lastStep;
     private float walkPhase, scanPhase, scanWidth = 1f;
@@ -760,12 +761,25 @@ public class Zombie : MonoBehaviour, ITypingTarget
         {
             return;
         }
-        // The slit: a capsule lying sideways, half sunk into the head; its ends
-        // disappear into the curve of the body, so it reads as one wrapped band.
-        Shapes.Block(PrimitiveType.Capsule, "Visor", body, new Vector3(0f, VisorY, 0.43f), new Vector3(0.22f, 0.44f, 0.2f),
+        // Everything that LOOKS sits on a head pivot that always turns to the
+        // player, whichever way the body walks (the round body does not show it).
+        head = new GameObject("Head").transform;
+        head.SetParent(body, false);
+
+        // The slit: a capsule lying sideways, sunk into the face so only a thin
+        // band shows; its ends disappear into the curve of the body.
+        Shapes.Block(PrimitiveType.Capsule, "Visor", head, new Vector3(0f, VisorY, 0.39f), new Vector3(0.23f, 0.47f, 0.26f),
             Palette.Lit(VisorGlass), new Vector3(0f, 0f, 90f));
-        GameObject light = Shapes.Block(PrimitiveType.Cube, "Scanner", body, new Vector3(0f, VisorY, 0.54f), new Vector3(0.17f, 0.08f, 0.02f),
+        GameObject light = Shapes.Block(PrimitiveType.Cube, "Scanner", head, new Vector3(0f, VisorY, 0.54f), new Vector3(0.17f, 0.08f, 0.02f),
             Palette.Unlit(ScanRed));
+
+        // The antenna: a short stalk with a light on top that blinks with the
+        // scanner. Bean, slit, antenna: the silhouette that says "one of them".
+        Material stalk = Palette.Lit(VisorGlass);
+        Shapes.Block(PrimitiveType.Cylinder, "Antenna", head, new Vector3(0.12f, 1.08f, -0.05f), new Vector3(0.045f, 0.13f, 0.045f),
+            stalk, new Vector3(0f, 0f, -12f));
+        antennaTip = Shapes.Block(PrimitiveType.Cube, "Antenna Light", head, new Vector3(0.17f, 1.24f, -0.05f), Vector3.one * 0.1f,
+            Palette.Unlit(ScanRed), new Vector3(45f, 0f, 45f)).GetComponent<Renderer>();
         scanner = light.transform;
         scannerRenderer = light.GetComponent<Renderer>();
         scanPhase = Random.Range(0f, 6.28f);
@@ -803,6 +817,20 @@ public class Zombie : MonoBehaviour, ITypingTarget
         {
             scanColor = wanted;
             scannerRenderer.sharedMaterial = Palette.Unlit(wanted);
+            antennaTip.sharedMaterial = Palette.Unlit(wanted);
+        }
+        // The antenna light blinks (steady while it has you locked, dark when frozen).
+        antennaTip.enabled = !lookingFrozen && (locked || Mathf.Repeat(Time.time * 1.3f + scanPhase * 0.1f, 1f) < 0.6f);
+
+        // The head turns to the player, smoothly.
+        if (player != null)
+        {
+            Vector3 toPlayer = player.position - transform.position;
+            toPlayer.y = 0f;
+            if (toPlayer.sqrMagnitude > 0.01f)
+            {
+                head.rotation = Quaternion.RotateTowards(head.rotation, Quaternion.LookRotation(toPlayer), 360f * Time.deltaTime);
+            }
         }
 
         // The feet: one lifts, then the other, as far as it has walked.
