@@ -2665,8 +2665,11 @@ public class WaveSpawner : MonoBehaviour
             ride.AddRange(encounter.Route);
         }
 
-        Material wall = Palette.Lit(new Color(0.27f, 0.30f, 0.40f));
-        Material trim = Palette.Lit(new Color(0.20f, 0.22f, 0.30f));
+        Material wall = Palette.Lit(new Color(0.30f, 0.28f, 0.27f));    // dark stone, like the map's walls
+        Material trim = Palette.Lit(new Color(0.20f, 0.19f, 0.19f));
+        Material roof = Palette.Lit(new Color(0.34f, 0.19f, 0.15f));    // clay tile
+        Material lamp = Palette.Unlit(new Color(1.00f, 0.62f, 0.22f));  // the warning light: "they come out here"
+        Material hazard = Palette.Lit(new Color(0.62f, 0.50f, 0.14f));
         Material doorway = Palette.Lit(new Color(0.03f, 0.03f, 0.05f));
         foreach (Encounter encounter in level.Encounters)
         {
@@ -2692,13 +2695,33 @@ public class WaveSpawner : MonoBehaviour
                 tower.transform.SetPositionAndRotation(new Vector3(point.Position.x, 0f, point.Position.z), Quaternion.LookRotation(outward.normalized));
                 Shapes.Block(PrimitiveType.Cube, "Body", tower.transform, new Vector3(0f, TowerHeight * 0.5f, 0f),
                     new Vector3(TowerWidth, TowerHeight, TowerDepth), wall);
-                Shapes.Block(PrimitiveType.Cube, "Cap", tower.transform, new Vector3(0f, TowerHeight + 0.2f, 0f),
-                    new Vector3(TowerWidth + 0.5f, 0.4f, TowerDepth + 0.5f), trim);
-                Shapes.Block(PrimitiveType.Cube, "Band", tower.transform, new Vector3(0f, TowerHeight * 0.62f, 0f),
+                // A tiled roof with eaves, a stone band, and corner posts.
+                Shapes.Block(PrimitiveType.Cube, "Roof", tower.transform, new Vector3(0f, TowerHeight + 0.2f, 0f),
+                    new Vector3(TowerWidth + 0.7f, 0.4f, TowerDepth + 0.7f), roof);
+                Shapes.Block(PrimitiveType.Cube, "Roof Top", tower.transform, new Vector3(0f, TowerHeight + 0.55f, 0f),
+                    new Vector3(TowerWidth - 0.6f, 0.3f, TowerDepth - 0.6f), roof);
+                Shapes.Block(PrimitiveType.Cube, "Band", tower.transform, new Vector3(0f, TowerHeight * 0.70f, 0f),
                     new Vector3(TowerWidth + 0.12f, 0.25f, TowerDepth + 0.12f), trim);
-                // The dark doorway, wide enough for a pack walking side by side.
-                Shapes.Block(PrimitiveType.Cube, "Doorway", tower.transform, new Vector3(0f, 1.35f, TowerDepth * 0.5f + 0.01f),
-                    new Vector3(TowerWidth - 0.6f, 2.7f, 0.04f), doorway);
+                Shapes.Block(PrimitiveType.Cube, "Plinth", tower.transform, new Vector3(0f, 0.2f, 0f),
+                    new Vector3(TowerWidth + 0.16f, 0.4f, TowerDepth + 0.16f), trim);
+                // The gate: a dark opening in a stone frame, wide enough for a pack walking side by side.
+                float front = TowerDepth * 0.5f;
+                float doorWidth = TowerWidth - 0.9f;
+                Shapes.Block(PrimitiveType.Cube, "Doorway", tower.transform, new Vector3(0f, 1.4f, front + 0.01f),
+                    new Vector3(doorWidth, 2.8f, 0.04f), doorway);
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    Shapes.Block(PrimitiveType.Cube, "Gate Post", tower.transform, new Vector3(side * (doorWidth * 0.5f + 0.14f), 1.5f, front + 0.08f),
+                        new Vector3(0.28f, 3.0f, 0.2f), trim);
+                }
+                Shapes.Block(PrimitiveType.Cube, "Gate Lintel", tower.transform, new Vector3(0f, 3.0f, front + 0.1f),
+                    new Vector3(doorWidth + 0.7f, 0.3f, 0.26f), trim);
+                // The light over the gate and the worn stripe in front of it: both
+                // say "watch here" before the first zombie walks out.
+                Shapes.Block(PrimitiveType.Cube, "Gate Light", tower.transform, new Vector3(0f, 3.4f, front + 0.06f),
+                    new Vector3(doorWidth * 0.55f, 0.14f, 0.1f), lamp);
+                Shapes.Block(PrimitiveType.Cube, "Threshold", tower.transform, new Vector3(0f, 0.02f, front + 0.5f),
+                    new Vector3(doorWidth + 0.5f, 0.03f, 0.35f), hazard);
             }
         }
     }
