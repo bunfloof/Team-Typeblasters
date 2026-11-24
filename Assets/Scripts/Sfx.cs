@@ -43,19 +43,6 @@ public sealed class Sfx : MonoBehaviour
     }
 
 
-    // A clip made in code (see KillSounds). It plays on the channel that keeps
-    // going when the game pauses, so a kill's ring is never cut off by the
-    // reward screen or the end of a wave.
-    public static void PlayClip(AudioClip clip, float volume = 1f)
-    {
-        if (clip == null)
-        {
-            return;
-        }
-        Instance.uiSource.PlayOneShot(clip, Mathf.Clamp01(volume));
-    }
-
-
     public static bool PlayBossIntro(float volume = 1f)
     {
         return Play("Boss/boss_intro", volume);
