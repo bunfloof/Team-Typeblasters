@@ -130,6 +130,15 @@ public class MainMenu : MonoBehaviour
     private float levelPageOpenedAt;
     private static bool openLevelSelectionOnStart;
 
+    // The full-screen question: asked once, when the game first opens (not again
+    // when a level returns to the menu), and only where the browser can do it.
+    private static bool fullscreenAsked;
+    private GameObject fullscreenGate;
+    private RectTransform gateYes, gateNo;
+    private TMP_Text gateTitle, gateText;
+    private int gateSelected;       // 0 = GO FULL SCREEN, 1 = STAY IN WINDOW
+    private float gateClosedAt = -1f;
+
     private const string EndlessScene = "Endless";
     // Picking a level: the button pulses once, then the screen fades to black.
     private const float LaunchPulseSeconds = 0.4f;
@@ -173,7 +182,9 @@ public class MainMenu : MonoBehaviour
         else
         {
             ShowMain();
+            ShowFullscreenGate();
         }
+        fullscreenAsked = true;
         StartCoroutine(PaintMaps());
     }
 
@@ -198,6 +209,7 @@ public class MainMenu : MonoBehaviour
     private void Update()
     {
         UpdateResponsiveLayout();
+        LayoutFullscreenGate();
         UpdateFullscreenLabel();
         AnimateKeys(mainKeys);
         AnimateKeys(levelKeys);
@@ -624,6 +636,96 @@ public class MainMenu : MonoBehaviour
         rect.sizeDelta = new Vector2(word.GetPreferredValues(plainText).x + 44f, fontSize * 1.7f);
     }
 
+    // ---- The full-screen question ----
+    // The first thing a player sees: "play in full screen?" over the whole menu.
+    // Yes switches the browser to full screen (the same bridge as the FULL SCREEN
+    // button, which needs the click or key press itself), No goes on in the
+    // window. Either way the normal menu is underneath.
+    private void ShowFullscreenGate()
+    {
+        if (fullscreenAsked || !TouchFullscreenButton.IsSupported() || TouchFullscreenButton.IsFullscreen)
+        {
+            return;
+        }
+        RectTransform gate = Ui.Rect(canvasRect, "Fullscreen Gate");
+        Ui.Stretch(gate);
+        gate.SetAsLastSibling();
+        fullscreenGate = gate.gameObject;
+        Image shade = Ui.Panel(gate, "Shade", backgroundColor);   // opaque: also takes every click
+        Ui.Stretch(shade.rectTransform);
+
+        gateTitle = Ui.Label(gate, "Title", "BEST IN FULL SCREEN", 84f, FontStyles.Bold);
+        MenuArt.Style(gateTitle, 0f, Ink);
+        gateTitle.color = new Color(0.96f, 0.94f, 0.90f);
+        gateText = Ui.Label(gate, "Text", "The words are easier to read and nothing gets cut off.", 34f);
+        MenuArt.Style(gateText, 0f, Ink);
+        gateText.color = new Color(0.75f, 0.72f, 0.70f);
+
+        Button yes = CreateTerminalButton(gate, "Go Fullscreen", "GO FULL SCREEN", CloseFullscreenGate);
+        gateYes = (RectTransform)yes.transform;
+#if UNITY_WEBGL && !UNITY_EDITOR
+        // Pointer-down keeps the browser's gesture (see BuildFullscreenControl).
+        yes.gameObject.AddComponent<TouchFullscreenButton>();
+#endif
+        gateNo = (RectTransform)CreateTerminalButton(gate, "Stay In Window", "STAY IN WINDOW", CloseFullscreenGate).transform;
+        LayoutFullscreenGate();
+    }
+
+    private void LayoutFullscreenGate()
+    {
+        if (fullscreenGate == null) return;
+        bool portrait = portraitLayout;
+        float width = Mathf.Max(240f, canvasRect.rect.width - 120f);
+        PlaceText(gateTitle, width, 130f, portrait ? 260f : 190f, portrait ? 76f : 84f);
+        PlaceText(gateText, width, 90f, portrait ? 150f : 90f, portrait ? 36f : 34f);
+        Vector2 size = portrait ? new Vector2(700f, 120f) : new Vector2(495f, 93f);
+        float fontSize = portrait ? 48f : 40f;
+        LayoutButton(gateYes, portrait ? new Vector2(0f, -40f) : new Vector2(-270f, -70f), size, fontSize);
+        LayoutButton(gateNo, portrait ? new Vector2(0f, -190f) : new Vector2(270f, -70f), size, fontSize);
+        SetHighlight(gateYes, gateSelected == 0);
+        SetHighlight(gateNo, gateSelected == 1);
+    }
+
+    private void CloseFullscreenGate()
+    {
+        if (fullscreenGate == null) return;
+        Destroy(fullscreenGate);
+        fullscreenGate = null;
+        gateClosedAt = Time.unscaledTime;
+        RefreshHighlight();
+    }
+
+#if ENABLE_INPUT_SYSTEM
+    // Enter = the selected answer, F = full screen, Esc = stay in the window, A D / arrows choose.
+    private void HandleGateKeys(Keyboard keyboard)
+    {
+        if (keyboard.leftArrowKey.wasPressedThisFrame || keyboard.aKey.wasPressedThisFrame
+            || keyboard.upArrowKey.wasPressedThisFrame || keyboard.wKey.wasPressedThisFrame)
+        {
+            gateSelected = 0;
+        }
+        else if (keyboard.rightArrowKey.wasPressedThisFrame || keyboard.dKey.wasPressedThisFrame
+            || keyboard.downArrowKey.wasPressedThisFrame || keyboard.sKey.wasPressedThisFrame)
+        {
+            gateSelected = 1;
+        }
+        SetHighlight(gateYes, gateSelected == 0);
+        SetHighlight(gateNo, gateSelected == 1);
+
+        bool confirm = keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame
+            || keyboard.spaceKey.wasPressedThisFrame;
+        if (keyboard.fKey.wasPressedThisFrame || (confirm && gateSelected == 0))
+        {
+            TouchFullscreenButton.ToggleFullscreen();
+            CloseFullscreenGate();
+        }
+        else if (keyboard.escapeKey.wasPressedThisFrame || (confirm && gateSelected == 1))
+        {
+            CloseFullscreenGate();
+        }
+    }
+#endif
+
     private void BuildFullscreenControl(Transform page)
     {
 #if UNITY_WEBGL && !UNITY_EDITOR
@@ -764,6 +866,17 @@ public class MainMenu : MonoBehaviour
         {
             return;
         }
+        // The full-screen question takes every key while it is up (and the key
+        // that answered it must not also press START underneath).
+        if (fullscreenGate != null)
+        {
+            HandleGateKeys(keyboard);
+            return;
+        }
+        if (Time.unscaledTime - gateClosedAt < 0.15f)
+        {
+            return;
+        }
 
         bool previous = keyboard.upArrowKey.wasPressedThisFrame || keyboard.leftArrowKey.wasPressedThisFrame
             || keyboard.wKey.wasPressedThisFrame || keyboard.aKey.wasPressedThisFrame;
@@ -801,6 +914,12 @@ public class MainMenu : MonoBehaviour
     // The mouse moving over a button selects it, like the keys do.
     private void SelectByMouse(RectTransform button)
     {
+        if (fullscreenGate != null)
+        {
+            if (button == gateYes) gateSelected = 0;
+            else if (button == gateNo) gateSelected = 1;
+            return;
+        }
         if (loading || SettingsPanel.IsOpen || (almanac != null && almanac.IsOpen)) return;
         int index = CurrentItems().IndexOf(button);
         if (index < 0 || (index == selected && keyboardSelectionStarted)) return;
