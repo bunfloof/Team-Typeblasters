@@ -743,6 +743,56 @@ def redheavy_key(seed):
                      160, 0.012, 0.14, 1000, 8000, (0.055, 0.08), 0.38, 0.06, 8000)
 
 
+# ================================================================ measured boards
+# Tuned to MEASUREMENTS of real switches (tone balance per band, the strongest
+# resonances, and how fast a hit dies: 3-5 ms to a tenth). Nothing is copied:
+# these are the same resonator models as above with those numbers.
+
+def measured_key(seed, bank, thud_hz, thud_gain, contact, up_level, top, snap):
+    rng = np.random.default_rng(seed)
+    p = rng.uniform(0.96, 1.04)
+    bank = [(f * p * rng.uniform(0.98, 1.02), q, g * rng.uniform(0.85, 1.15)) for f, q, g in bank]
+    x = silence(0.15)
+
+    def stroke(level, shift):
+        hit = band(noise(0.002, int(rng.integers(1 << 30))), contact[0], contact[1]) * env(0.002, 0.00005, 0.0004)
+        hit = hit / (np.max(np.abs(hit)) + 1e-9)
+        pad = np.concatenate([hit, np.zeros(int(0.05 * SR))])
+        body = resonate(pad, [(f * shift, q, g) for f, q, g in bank])
+        body = body / (np.max(np.abs(body)) + 1e-9)
+        return (body + pad * snap) * level
+
+    thud = sweep(thud_hz * 1.3, thud_hz, 0.03, 5) * env(0.03, 0.0005, 0.004) * thud_gain
+    place(x, mix(stroke(1.0, 1.0), thud), 0.0)
+    place(x, stroke(up_level, 1.05), rng.uniform(0.055, 0.08))
+    x = lowpass(x, top)
+    return reverb(x, 0.06, 0.03, seed=seed + 2, brightness=9000, predelay=0.003)
+
+
+def m_alpaca(seed):
+    """Alpaca-style: crisp, snappy mid-high clack over a small low thud."""
+    return measured_key(seed, [(722, 4.5, 0.45), (1355, 6, 1.0), (2350, 7, 1.0), (3294, 7, 0.55), (5200, 6, 0.2)],
+                        122, 0.2, (1500, 9000), 0.4, 8500, 0.25)
+
+
+def m_inkblack(seed):
+    """Ink Black-style: a dense, smooth clack centred around 1-3 kHz."""
+    return measured_key(seed, [(722, 6.5, 1.0), (900, 7, 0.7), (1088, 8.5, 0.9), (1583, 8.5, 1.0), (2050, 10, 0.8), (3005, 10, 0.35), (4800, 8, 0.1)],
+                        110, 0.08, (1000, 12000), 0.4, 12000, 0.35)
+
+
+def m_k2red(seed):
+    """K2 Max Red-style: full, round low-mids with a softer top."""
+    return measured_key(seed, [(172, 1.8, 0.35), (233, 2.2, 0.45), (322, 3, 0.8), (561, 4, 1.0), (1400, 5.5, 0.6), (2600, 6, 0.1)],
+                        133, 0.07, (700, 5500), 0.45, 12000, 0.04)
+
+
+def m_void(seed):
+    """Flow 2 Void-style: deep, dark, low-profile thock."""
+    return measured_key(seed, [(172, 4.5, 0.9), (211, 5, 1.0), (311, 6.5, 0.85), (388, 7, 0.7), (900, 8, 0.08), (1800, 9, 0.015)],
+                        122, 0.4, (400, 6000), 0.35, 10000, 0.03)
+
+
 # ================================================================ cinematic sets
 # The cinematic direction, three more ways. Each takes the keyboard it is played with.
 
@@ -881,8 +931,9 @@ SETS = {
     "pulse_flow": cine(pulse_kill, pulse_multi, flow_key, 3),
 }
 KEYBOARDS = {"red": red_key, "flow": flow_key, "deep": deep_key,
-             "alpaca": alpaca_key, "black": black_key, "redheavy": redheavy_key}
-for _name in ("alpaca", "black", "redheavy"):
+             "alpaca": alpaca_key, "black": black_key, "redheavy": redheavy_key,
+             "m_alpaca": m_alpaca, "m_inkblack": m_inkblack, "m_k2red": m_k2red, "m_void": m_void}
+for _name in ("alpaca", "black", "redheavy", "m_alpaca", "m_inkblack", "m_k2red", "m_void"):
     SETS["cinematic_" + _name] = dict(key=KEYBOARDS[_name], shot=(lambda k=KEYBOARDS[_name]: heavy_shot(k)),
                                       kill=cinematic_kill, multi=cinematic_multi)
 ACTIVE_SET = "cinematic_alpaca"   # the set the game uses
