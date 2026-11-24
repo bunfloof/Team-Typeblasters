@@ -3,7 +3,8 @@
 // The ENDLESS leaderboard: the best runs on this computer, ranked by the wave
 // reached (then the score), each with who played it and how fast they typed.
 //
-//   PlayerProfile.Name           who is playing (asked once, in the menu)
+//   PlayerProfile.Name           who is playing (asked in the menu; a run
+//                                played without a name is not recorded)
 //   EndlessLeaderboard.Submit()  GameManager, when an Endless run ends
 //   EndlessLeaderboard.Entries   the board, best first (MainMenu shows it)
 //

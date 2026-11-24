@@ -675,13 +675,21 @@ public class MainMenu : MonoBehaviour
     }
 
     // ---- ENDLESS: who is playing? ----
-    // The first Endless run on this computer asks for a name (it goes on the
-    // leaderboard). Phones have no keyboard for it: they play as PLAYER.
+    // An Endless run asks for a name (it goes on the leaderboard) until one is
+    // saved. SKIP plays without one: the run is not put on the leaderboard,
+    // and the question is not asked again until the game is reloaded.
+    // Phones have no keyboard for it: they play without a name.
+    private static bool nameSkipped;
+
     private void StartEndless()
     {
-        if (!PlayerProfile.HasName && !Application.isMobilePlatform)
+        if (!PlayerProfile.HasName && !nameSkipped && !Application.isMobilePlatform)
         {
-            OpenNameEntry(() => LoadScene(EndlessScene, endlessButton));
+            OpenNameEntry(() => LoadScene(EndlessScene, endlessButton), () =>
+            {
+                nameSkipped = true;
+                LoadScene(EndlessScene, endlessButton);
+            });
             return;
         }
         LoadScene(EndlessScene, endlessButton);
@@ -858,10 +866,15 @@ public class MainMenu : MonoBehaviour
 
     // ---- The name prompt ----
 
-    private void OpenNameEntry(System.Action saved)
+    // skipped: when given (starting Endless), CANCEL becomes SKIP and plays
+    // without a name; Esc does the same.
+    private System.Action nameSkippedAction;
+
+    private void OpenNameEntry(System.Action saved, System.Action skipped = null)
     {
         if (nameEntry != null) return;
         nameSaved = saved;
+        nameSkippedAction = skipped;
         nameDraft = PlayerProfile.HasName ? PlayerProfile.Name : "";
 
         RectTransform root = Ui.Rect(canvasRect, "Name Entry");
@@ -874,7 +887,10 @@ public class MainMenu : MonoBehaviour
         nameTitle = Ui.Label(root, "Title", "WHO'S PLAYING?", 84f, FontStyles.Bold);
         MenuArt.Style(nameTitle, 0f, Ink);
         nameTitle.color = Cream;
-        nameText = Ui.Label(root, "Text", "Your name goes on the Endless leaderboard.", 34f);
+        nameText = Ui.Label(root, "Text", skipped != null
+            ? "Your name goes on the Endless leaderboard. SKIP to play without it (not on the leaderboard)."
+            : "Your name goes on the Endless leaderboard.", 34f);
+        nameText.textWrappingMode = TextWrappingModes.Normal;
         MenuArt.Style(nameText, 0f, Ink);
         nameText.color = BoardDim;
 
@@ -884,7 +900,7 @@ public class MainMenu : MonoBehaviour
         SetHighlight((RectTransform)field.transform, true);
 
         nameSave = (RectTransform)CreateTerminalButton(root, "Save", "SAVE", SaveName).transform;
-        nameCancel = (RectTransform)CreateTerminalButton(root, "Cancel", "CANCEL", CloseNameEntry).transform;
+        nameCancel = (RectTransform)CreateTerminalButton(root, "Cancel", skipped != null ? "SKIP" : "CANCEL", CancelName).transform;
         LayoutNameEntry();
         UpdateNameField();
 #if ENABLE_INPUT_SYSTEM
@@ -971,7 +987,7 @@ public class MainMenu : MonoBehaviour
         }
         if (keyboard.escapeKey.wasPressedThisFrame)
         {
-            CloseNameEntry();
+            CancelName();
             return;
         }
         UpdateNameField();
@@ -991,8 +1007,17 @@ public class MainMenu : MonoBehaviour
         if (then != null) then();
     }
 
+    // CANCEL (or SKIP, when starting Endless) / Esc.
+    private void CancelName()
+    {
+        System.Action skip = nameSkippedAction;
+        CloseNameEntry();
+        if (skip != null) skip();
+    }
+
     private void CloseNameEntry()
     {
+        nameSkippedAction = null;
         if (nameEntry == null) return;
 #if ENABLE_INPUT_SYSTEM
         if (Keyboard.current != null) Keyboard.current.onTextInput -= OnTextInput;

@@ -975,9 +975,9 @@ public class GameManager : MonoBehaviour
             return;
         }
         submittedToLeaderboard = true;
-        if (Score <= 0)
+        if (Score <= 0 || !PlayerProfile.HasName)
         {
-            return; // nothing was shot: not a run for the board
+            return; // nothing was shot, or played without a name (SKIP): not a run for the board
         }
         // The measured speed once there is enough typing to measure (before
         // that the estimate is only a first guess), else the plain average.
