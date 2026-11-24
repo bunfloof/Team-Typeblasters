@@ -27,6 +27,7 @@
 // ---------------------------------------------------------------------------
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using TMPro;
 using UnityEngine;
 
@@ -2655,6 +2656,97 @@ public class WaveSpawner : MonoBehaviour
     private const float HideMax = 24f;           // ...up to this far
 
     private readonly HashSet<SpawnPoint> exposedPoints = new HashSet<SpawnPoint>(); // no door, no tower
+    private readonly Dictionary<SpawnPoint, Vector3> spawnFrom = new Dictionary<SpawnPoint, Vector3>(); // where its zombies really appear
+
+    // Would a tower here overlap a building, a wall or a pier? (Props, doors,
+    // gates and the ground do not count.)
+    private static bool TowerBlocked(Vector3 position, Vector3 outward)
+    {
+        Collider[] hits = Physics.OverlapBox(new Vector3(position.x, TowerHeight * 0.5f + 0.3f, position.z),
+            new Vector3(TowerWidth * 0.5f, TowerHeight * 0.5f - 0.2f, TowerDepth * 0.5f), Quaternion.LookRotation(outward),
+            Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore);
+        foreach (Collider hit in hits)
+        {
+            if (IsScenery(hit)) return true;
+        }
+        return false;
+    }
+
+    private static bool IsScenery(Collider hit)
+    {
+        return hit != null && hit.attachedRigidbody == null && hit.bounds.max.y > 1f
+            && hit.GetComponentInParent<Barrel>() == null && hit.GetComponentInParent<SupplyCrate>() == null
+            && hit.GetComponentInParent<Door>() == null && hit.GetComponentInParent<Gate>() == null
+            && hit.GetComponentInParent<Zombie>() == null;
+    }
+
+    // The wall the zombies of this point come through: looking back from
+    // where they walk to, the first building in the way.
+    private static bool FindWall(SpawnPoint point, Vector3 outward, out RaycastHit wall)
+    {
+        Vector3 from = new Vector3(point.Exit.x, 1.2f, point.Exit.z) + outward * 0.5f;
+        float reach = Vector3.Distance(new Vector3(point.Exit.x, 0f, point.Exit.z), new Vector3(point.Position.x, 0f, point.Position.z)) + 4f;
+        foreach (RaycastHit hit in Physics.RaycastAll(from, -outward, reach, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore)
+                     .OrderBy(h => h.distance))
+        {
+            if (IsScenery(hit.collider))
+            {
+                wall = hit;
+                return true;
+            }
+        }
+        wall = default(RaycastHit);
+        return false;
+    }
+
+    // The direction among the nearest building's four sides closest to 'outward',
+    // so a tower stands square to the street like the buildings do.
+    private static Vector3 SquareToStreets(Vector3 position, Vector3 outward)
+    {
+        Collider nearest = null;
+        float best = float.MaxValue;
+        foreach (Collider hit in Physics.OverlapSphere(position, 25f, Physics.DefaultRaycastLayers, QueryTriggerInteraction.Ignore))
+        {
+            if (!IsScenery(hit) || hit.bounds.size.y < 3f) continue;
+            float distance = Vector3.Distance(hit.ClosestPoint(position), position);
+            if (distance < best)
+            {
+                best = distance;
+                nearest = hit;
+            }
+        }
+        if (nearest == null) return outward;
+        Vector3 bestAxis = outward;
+        float bestDot = -2f;
+        for (int i = 0; i < 4; i++)
+        {
+            Vector3 axis = Quaternion.Euler(0f, nearest.transform.eulerAngles.y + 90f * i, 0f) * Vector3.forward;
+            float dot = Vector3.Dot(axis, outward);
+            if (dot > bestDot)
+            {
+                bestDot = dot;
+                bestAxis = axis;
+            }
+        }
+        return bestDot > 0.5f ? bestAxis : outward; // never turned more than 60 degrees
+    }
+
+    // A gate set into a building's wall: a stone frame, a dark opening, the light over it.
+    private static void BuildWallGate(string name, Vector3 on, Vector3 face, Material wall, Material trim, Material lamp, Material hazard, Material doorway)
+    {
+        GameObject gate = new GameObject("Wall Gate (" + name + ")");
+        gate.transform.SetPositionAndRotation(new Vector3(on.x, 0f, on.z), Quaternion.LookRotation(face));
+        float doorWidth = TowerWidth - 0.9f;
+        Shapes.Block(PrimitiveType.Cube, "Doorway", gate.transform, new Vector3(0f, 1.4f, 0.03f), new Vector3(doorWidth, 2.8f, 0.04f), doorway);
+        for (int side = -1; side <= 1; side += 2)
+        {
+            Shapes.Block(PrimitiveType.Cube, "Gate Post", gate.transform, new Vector3(side * (doorWidth * 0.5f + 0.14f), 1.5f, 0.1f),
+                new Vector3(0.28f, 3.0f, 0.2f), trim);
+        }
+        Shapes.Block(PrimitiveType.Cube, "Gate Lintel", gate.transform, new Vector3(0f, 3.0f, 0.12f), new Vector3(doorWidth + 0.7f, 0.3f, 0.26f), trim);
+        Shapes.Block(PrimitiveType.Cube, "Gate Light", gate.transform, new Vector3(0f, 3.4f, 0.08f), new Vector3(doorWidth * 0.55f, 0.14f, 0.1f), lamp);
+        Shapes.Block(PrimitiveType.Cube, "Threshold", gate.transform, new Vector3(0f, 0.02f, 0.5f), new Vector3(doorWidth + 0.5f, 0.03f, 0.35f), hazard);
+    }
 
     private void BuildSpawnCover()
     {
@@ -2691,8 +2783,36 @@ public class WaveSpawner : MonoBehaviour
                     outward = encounter.StopPosition - point.Position;
                     outward.y = 0f;
                 }
+                outward.Normalize();
+
+                // Inside or against a building: no tower stuck into its wall.
+                // The gate goes ON the wall, facing out, and the zombies come
+                // from just behind it (out of the building, like a real door).
+                RaycastHit wallHit;
+                if (TowerBlocked(point.Position, outward) && FindWall(point, outward, out wallHit))
+                {
+                    Vector3 face = wallHit.normal;
+                    face.y = 0f;
+                    face = face.sqrMagnitude > 0.01f ? face.normalized : outward;
+                    BuildWallGate(point.name, wallHit.point, face, wall, trim, lamp, hazard, doorway);
+                    spawnFrom[point] = new Vector3(wallHit.point.x, 0f, wallHit.point.z) - face * 1.2f;
+                    continue;
+                }
+
+                // Free-standing: square to the streets (the nearest building's
+                // sides), and moved back out of anything it would overlap.
+                outward = SquareToStreets(point.Position, outward);
+                Vector3 at = new Vector3(point.Position.x, 0f, point.Position.z);
+                for (float back = 0f; back <= 4f && TowerBlocked(at, outward); back += 0.5f)
+                {
+                    at = new Vector3(point.Position.x, 0f, point.Position.z) - outward * back;
+                }
+                if (at != new Vector3(point.Position.x, 0f, point.Position.z))
+                {
+                    spawnFrom[point] = at;
+                }
                 GameObject tower = new GameObject("Spawn Tower (" + point.name + ")");
-                tower.transform.SetPositionAndRotation(new Vector3(point.Position.x, 0f, point.Position.z), Quaternion.LookRotation(outward.normalized));
+                tower.transform.SetPositionAndRotation(at, Quaternion.LookRotation(outward));
                 Shapes.Block(PrimitiveType.Cube, "Body", tower.transform, new Vector3(0f, TowerHeight * 0.5f, 0f),
                     new Vector3(TowerWidth, TowerHeight, TowerDepth), wall);
                 // A tiled roof with eaves, a stone band, and corner posts.
@@ -2731,6 +2851,11 @@ public class WaveSpawner : MonoBehaviour
     // back (away from its exit) that the camera cannot see.
     private Vector3 SpawnFrom(SpawnPoint point)
     {
+        Vector3 moved;
+        if (spawnFrom.TryGetValue(point, out moved))
+        {
+            return moved; // inside its wall gate, or its tower moved clear of a wall
+        }
         if (!exposedPoints.Contains(point) || CameraDirector.MapBlend > 0.5f)
         {
             return point.Position;
